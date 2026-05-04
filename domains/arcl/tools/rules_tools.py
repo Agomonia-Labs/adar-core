@@ -1,6 +1,6 @@
 import logging
-from db import vector_search, get_documents_by_field
-from config import ARCL_RULES_COLLECTION, ARCL_FAQ_COLLECTION
+from src.adar.db import vector_search, get_documents_by_field
+from src.adar.config import ARCL_RULES_COLLECTION, ARCL_FAQ_COLLECTION
 
 logger = logging.getLogger(__name__)
 

@@ -19,12 +19,11 @@ from datetime import datetime, timezone
 
 from google.cloud import firestore
 
-from config import settings
+from src.adar.config import settings
 
 logger = logging.getLogger(__name__)
 
 EVALS_COLLECTION = "arcl_evals"
-from config import settings
 GEMINI_MODEL = settings.ADK_MODEL  # same model as the ADK orchestrator
 GOOGLE_API_KEY   = os.environ.get("GOOGLE_API_KEY", "")
 

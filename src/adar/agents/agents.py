@@ -5,7 +5,7 @@ from pathlib import Path
 from google.adk.agents import LlmAgent, SequentialAgent
 from google.adk.tools import FunctionTool
 
-from config import settings
+from src.adar.config import settings
 from tools import TOOL_REGISTRY
 
 logger = logging.getLogger(__name__)

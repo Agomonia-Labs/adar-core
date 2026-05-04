@@ -4,7 +4,7 @@ from datetime import datetime
 import httpx
 from bs4 import BeautifulSoup
 
-from config import settings, CRICCLUBS_STANDINGS, CRICCLUBS_SCHEDULE, CRICCLUBS_RESULTS
+from src.adar.config import settings, CRICCLUBS_STANDINGS, CRICCLUBS_SCHEDULE, CRICCLUBS_RESULTS
 
 logger = logging.getLogger(__name__)
 

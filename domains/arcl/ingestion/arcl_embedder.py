@@ -11,7 +11,7 @@ from google.genai import types as genai_types
 from google.cloud import firestore
 from google.cloud.firestore_v1.vector import Vector
 
-from config import (
+from src.adar.config import (
     settings,
     ARCL_RULES_COLLECTION,
     ARCL_PLAYERS_COLLECTION,
@@ -19,7 +19,7 @@ from config import (
     ARCL_FAQ_COLLECTION,
     ARCL_PLAYER_SEASON_COLLECTION,
 )
-from ingestion.arcl_scraper import ScrapedChunk
+from domains.arcl.ingestion.arcl_scraper import ScrapedChunk
 
 logger = logging.getLogger(__name__)
 

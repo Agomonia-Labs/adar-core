@@ -10,8 +10,8 @@ import httpx
 from bs4 import BeautifulSoup
 from typing import Optional
 
-from db import vector_search, get_team_standings, direct_query
-from config import (
+from src.adar.db import vector_search, get_team_standings, direct_query
+from src.adar.config import (
     ARCL_TEAMS_COLLECTION,
     ARCL_SEASON_NAME_TO_ID,
     ARCL_SEASON_MAP,

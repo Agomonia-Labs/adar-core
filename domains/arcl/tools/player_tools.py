@@ -1,6 +1,6 @@
 import logging
-from db import vector_search, get_player_season_records
-from config import ARCL_PLAYERS_COLLECTION, ARCL_PLAYER_SEASON_COLLECTION
+from src.adar.db import vector_search, get_player_season_records
+from src.adar.config import ARCL_PLAYERS_COLLECTION, ARCL_PLAYER_SEASON_COLLECTION
 
 logger = logging.getLogger(__name__)
 

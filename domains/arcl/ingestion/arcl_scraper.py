@@ -19,7 +19,7 @@ from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 
-from config import ARCL_SCRAPE_PAGES, settings
+from src.adar.config import ARCL_SCRAPE_PAGES, settings
 
 logger = logging.getLogger(__name__)
 

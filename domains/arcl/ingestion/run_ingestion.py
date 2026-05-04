@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ingestion.arcl_scraper import (
+from domains.arcl.ingestion.arcl_scraper import (
     scrape_arcl_rules,
     scrape_arcl_players,
     scrape_arcl_teams,
@@ -40,7 +40,7 @@ from ingestion.arcl_scraper import (
     scrape_all_standings_and_stats,
     LEAGUE_IDS,
 )
-from ingestion.arcl_embedder import embed_and_store_chunks, clear_collection
+from domains.arcl.ingestion.arcl_embedder import embed_and_store_chunks, clear_collection
 from config import (
     ARCL_RULES_COLLECTION,
     ARCL_PLAYERS_COLLECTION,

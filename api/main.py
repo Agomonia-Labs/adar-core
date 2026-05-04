@@ -17,14 +17,14 @@ from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.genai.types import Content, Part
 
-from agents import build_arcl_orchestrator
-from polls import router as polls_router
-from auth import router as auth_router, get_current_team
-from admin import router as admin_router
-from payments import router as payments_router
+from src.adar.agents.agents import build_arcl_orchestrator
+from api.routes.polls import router as polls_router
+from api.routes.auth import router as auth_router, get_current_team
+from api.routes.admin import router as admin_router
+from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
-from models import ChatRequest, ChatResponse, SessionResponse
-from config import settings
+from api.schemas import ChatRequest, ChatResponse, SessionResponse
+from src.adar.config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
