@@ -1,0 +1,17 @@
+.env
+.env.local
+.env.production
+venv/
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+ui/dist/
+*.db
+*.log
+arcl_sessions.db
+.DS_Store
+.idea/
+*.egg-info/
+dist/
+build/
