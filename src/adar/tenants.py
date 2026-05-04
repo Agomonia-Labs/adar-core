@@ -11,7 +11,7 @@ Each tenant is a cricket league with its own:
 from dataclasses import dataclass, field
 from typing import Optional
 from google.cloud import firestore
-from config import settings
+from src.adar.config import settings
 
 TENANTS_COLLECTION = "adar_tenants"
 

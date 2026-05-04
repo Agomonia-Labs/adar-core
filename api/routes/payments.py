@@ -26,8 +26,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from google.cloud import firestore
 
-from config import settings
-from auth import get_current_team
+from src.adar.config import settings
+from api.routes.auth import get_current_team
 
 logger = logging.getLogger(__name__)
 

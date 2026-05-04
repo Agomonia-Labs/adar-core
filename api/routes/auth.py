@@ -21,7 +21,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from google.cloud import firestore
 
-from config import settings
+from src.adar.config import settings
 
 logger = logging.getLogger(__name__)
 

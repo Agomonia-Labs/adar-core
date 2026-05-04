@@ -41,7 +41,7 @@ from domains.arcl.ingestion.arcl_scraper import (
     LEAGUE_IDS,
 )
 from domains.arcl.ingestion.arcl_embedder import embed_and_store_chunks, clear_collection
-from config import (
+from src.adar.config import (
     ARCL_RULES_COLLECTION,
     ARCL_PLAYERS_COLLECTION,
     ARCL_TEAMS_COLLECTION,
@@ -77,7 +77,7 @@ async def run(
     # Parse season IDs — accepts both numeric IDs and season names
     season_ids = None
     if seasons:
-        from config import ARCL_SEASON_NAME_TO_ID, ARCL_SEASON_MAP
+        from src.adar.config import ARCL_SEASON_NAME_TO_ID, ARCL_SEASON_MAP
         raw_seasons = [s.strip() for s in seasons.split(",") if s.strip()]
         season_ids = []
         for s in raw_seasons:

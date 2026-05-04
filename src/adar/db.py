@@ -7,7 +7,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 
-from config import settings, ARCL_TEAMS_COLLECTION, ARCL_PLAYER_SEASON_COLLECTION
+from src.adar.config import settings, ARCL_TEAMS_COLLECTION, ARCL_PLAYER_SEASON_COLLECTION
 
 logger = logging.getLogger(__name__)
 

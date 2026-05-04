@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from google.cloud import firestore
 
-from config import settings
+from src.adar.config import settings
 
 router = APIRouter(prefix="/api/polls", tags=["polls"])
 

@@ -18,8 +18,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from google.cloud import firestore
 
-from config import settings
-from auth import get_admin
+from src.adar.config import settings
+from api.routes.auth import get_admin
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ from google.adk.agents import LlmAgent, SequentialAgent
 from google.adk.tools import FunctionTool
 
 from src.adar.config import settings
-from tools import TOOL_REGISTRY
+from domains.arcl.tools import TOOL_REGISTRY
 
 logger = logging.getLogger(__name__)
 

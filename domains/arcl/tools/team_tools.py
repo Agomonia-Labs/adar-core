@@ -486,7 +486,7 @@ async def get_team_career_stats(team_name: str) -> dict:
     Returns:
         Dict with aggregated player stats table and team strength analysis
     """
-    from config import ARCL_SEASON_MAP
+    from src.adar.config import ARCL_SEASON_MAP
 
     # Get all known season/team_id combos for this team
     cache_key = team_name.strip().lower()

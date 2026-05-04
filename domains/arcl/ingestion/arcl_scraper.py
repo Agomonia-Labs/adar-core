@@ -572,7 +572,7 @@ async def _fetch_divhome_standings(
         return [], []
 
     # Use known season map first, fall back to page heading, then generic label
-    from config import ARCL_SEASON_MAP
+    from src.adar.config import ARCL_SEASON_MAP
     season_label = ARCL_SEASON_MAP.get(season_id, "")
     if not season_label:
         for tag in ["h1", "h2", "h3"]:
