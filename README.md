@@ -4,6 +4,7 @@
 > Multi-agent system with team authentication, Stripe subscriptions, live stats,
 > community polls, and LLM-as-judge response evaluation.
 
+**Repo:** `github.com/agomonia-labs/adar-core`  
 **Live app:** `https://arcl.tigers.agomoniai.com`  
 **API:** `https://api.arcl.tigers.agomoniai.com`  
 **Admin:** log in with admin credentials at the same URL
@@ -30,7 +31,8 @@
 16. [API reference](#api-reference)
 17. [Debug scripts](#debug-scripts)
 18. [Cost estimate](#cost-estimate)
-19. [Future — adar-core repo structure](#future--adar-core-repo-structure)
+19. [Running locally — adar-core](#running-locally--adar-core)
+20. [Cost estimate](#cost-estimate)
 
 ---
 
@@ -139,77 +141,107 @@
 
 ## Project structure
 
+**Repo:** `github.com/agomonia-labs/adar-core`
+
 ```
-adar-arcl/
+adar-core/
 │
-├── main.py                  FastAPI app — chat, auth, admin, payments, polls, health
-├── agents.py                Agent factory — reads agents_config.json
-├── agents_config.json       All agent definitions, tools, and instructions
-├── auth.py                  Team registration, login, JWT issue/verify
-├── admin.py                 Admin endpoints — manage teams, approvals, quotas, evals
-├── payments.py              Stripe subscriptions — checkout, webhooks, billing, portal
-├── polls.py                 Community polls CRUD
-├── tenants.py               Multi-tenant registry (ready for future leagues)
-├── notify.py                Email notifications (SendGrid + Gmail SMTP fallback)
-├── config.py                Settings, Firestore collections, season ID map, ADK model
-├── db.py                    Firestore client, vector search, direct queries
-├── models.py                Pydantic request/response schemas (includes eval field)
+├── src/adar/                        reusable core — works for any league
+│   ├── agents/
+│   │   ├── agents.py                Agent factory — reads agents_config.json
+│   │   └── agents_config.json       All agent definitions, tools, instructions
+│   ├── tools/
+│   │   ├── __init__.py
+│   │   ├── rules_tools.py           vector_search_rules · get_rule_section · get_faq_answer
+│   │   └── live_tools.py            get_standings · get_schedule · get_recent_results
+│   ├── config.py                    Settings, Firestore collections, season ID map, ADK model
+│   ├── db.py                        Firestore client, vector search, direct queries
+│   ├── tenants.py                   Multi-tenant registry (ready for future leagues)
+│   └── notify.py                    Email notifications (SendGrid + Gmail SMTP fallback)
+│
+├── domains/arcl/                    ARCL-specific logic — cricket league domain
+│   ├── tools/
+│   │   ├── __init__.py              TOOL_REGISTRY — maps tool name to async function
+│   │   ├── team_tools.py            get_team_players_live · get_team_schedule ·
+│   │   │                            get_team_career_stats · get_match_scorecard ·
+│   │   │                            get_player_dismissals · get_teams_in_division
+│   │   └── player_tools.py          get_player_stats · get_player_season_stats ·
+│   │                                get_player_teams · get_top_performers
+│   └── ingestion/
+│       ├── arcl_scraper.py          Crawls arcl.org — rules, players, standings, TeamStats
+│       │                            Tags rules [MEN'S LEAGUE] / [WOMEN'S LEAGUE]
+│       ├── arcl_embedder.py         Embeds text chunks → Firestore vector search
+│       └── run_ingestion.py         CLI — --only, --seasons, --clear, --team flags
+│
+├── api/                             FastAPI application
+│   ├── main.py                      App entry point — chat, health, session endpoints
+│   ├── schemas.py                   Pydantic request/response models (incl. eval field)
+│   └── routes/
+│       ├── auth.py                  Team registration, login, JWT issue/verify
+│       ├── admin.py                 Admin endpoints — teams, approvals, quotas, evals
+│       ├── payments.py              Stripe subscriptions — checkout, webhooks, billing
+│       └── polls.py                 Community polls CRUD
 │
 ├── evaluation/
-│   ├── __init__.py          Exports evaluate_response, get_eval_summary
-│   └── judge.py             LLM-as-judge — Gemini scores every response (5 dimensions)
+│   ├── __init__.py                  Exports evaluate_response, get_eval_summary
+│   └── judge.py                     LLM-as-judge — Gemini scores every response (5 dims)
 │
-├── tools/
-│   ├── __init__.py          TOOL_REGISTRY — maps tool name to async function
-│   ├── rules_tools.py       vector_search_rules · get_rule_section · get_faq_answer
-│   ├── player_tools.py      get_player_stats · get_player_season_stats ·
-│   │                        get_player_teams · get_top_performers
-│   ├── team_tools.py        get_team_players_live · get_team_schedule ·
-│   │                        get_team_career_stats · get_match_scorecard ·
-│   │                        get_player_dismissals · get_teams_in_division ·
-│   │                        get_season_info · list_divisions
-│   └── live_tools.py        get_standings · get_schedule · get_recent_results
-│
-├── ingestion/
-│   ├── __init__.py
-│   ├── arcl_scraper.py      Crawls arcl.org — rules, players, standings, TeamStats
-│   │                        Tags rules with [MEN'S LEAGUE] / [WOMEN'S LEAGUE]
-│   │                        Tags umpiring rules with [UMPIRING RULE] prefix
-│   ├── arcl_embedder.py     Embeds text chunks → Firestore vector search
-│   └── run_ingestion.py     CLI entry point — --only, --seasons, --clear flags
-│
-├── arcl-chat-app/           React + MUI frontend (Vite)
+├── ui/                              React + MUI frontend (Vite)
 │   ├── src/
-│   │   ├── App.jsx          Auth routing · chat · tabs · auto-logout (30 min)
-│   │   ├── Login.jsx        Team login page
-│   │   ├── Register.jsx     Team self-registration
-│   │   ├── AdminDashboard.jsx  Approve/suspend teams · usage stats
-│   │   ├── Checkout.jsx     Stripe plan selection · 14-day trial
-│   │   ├── Billing.jsx      Subscription status · invoice history · portal
-│   │   ├── Polls.jsx        Create/vote/results · auto-refresh 15s
-│   │   ├── StatsChart.jsx   CSS bar charts (no library) — batting/bowling toggle
-│   │   ├── theme.js         Light green MUI theme (#2EB87E primary)
+│   │   ├── App.jsx                  Auth routing · chat · tabs · auto-logout (30 min)
+│   │   ├── Login.jsx                Team login + demo link
+│   │   ├── Register.jsx             Team self-registration
+│   │   ├── AdminDashboard.jsx       Approve/suspend teams · usage stats · eval scores
+│   │   ├── Checkout.jsx             Stripe plan selection · 14-day trial · branded redirect
+│   │   ├── Billing.jsx              Subscription status · invoice history · portal
+│   │   ├── Polls.jsx                Create/vote/results · auto-refresh 15s
+│   │   ├── StatsChart.jsx           CSS bar charts — batting/bowling toggle
+│   │   ├── theme.js                 Light green MUI theme (#2EB87E primary)
 │   │   └── main.jsx
-│   ├── .env.production      VITE_API_URL · VITE_API_KEY
+│   ├── public/
+│   │   ├── demo.html                Interactive product demo (auto-narrated, 14 slides)
+│   │   └── go.html                  Branded Stripe checkout redirect page
+│   ├── .env.production              VITE_API_URL · VITE_API_KEY
 │   ├── package.json
 │   └── vite.config.js
 │
 ├── tests/
-│   ├── debug_teams.py       Check adar_teams Firestore collection
-│   ├── debug_stripe.py      Check Stripe subscriptions + sync to Firestore
-│   ├── debug_eval.py        Full evaluation system debug + model discovery
-│   ├── debug_scorecard.py   Inspect Matchscorecard table structure
-│   ├── debug_teamstats_headers.py  Print exact TeamStats table headers
-│   ├── find_team_ids.py     Find team_id per season from DivHome
-│   └── test_season.py       Verify season_id resolution
+│   ├── debug_teams.py               Check adar_teams Firestore collection
+│   ├── debug_stripe.py              Check Stripe subscriptions + sync to Firestore
+│   ├── debug_eval.py                Full eval debug + model discovery
+│   ├── debug_scorecard.py           Inspect Matchscorecard table structure
+│   ├── debug_teamstats_headers.py   Print exact TeamStats table headers
+│   ├── find_team_ids.py             Find team_id per season from DivHome
+│   └── test_season.py               Verify season_id resolution
 │
-├── Dockerfile
-├── requirements.txt         fastapi · uvicorn · google-adk · stripe · bcrypt ·
-│                            python-jose · google-cloud-firestore · httpx · bs4
-├── create_indexes.sh        One-command Firestore composite index setup
-├── .env.example             Template of all environment variables
+├── infra/
+│   ├── Dockerfile                   Multi-stage build for Cloud Run
+│   ├── deploy.sh                    One-command build + push + deploy
+│   └── create_indexes.sh            One-command Firestore composite index setup
+│
+├── docs/
+│   └── architecture.md              Full system architecture reference
+│
+├── requirements.txt                 fastapi · uvicorn · google-adk · stripe · bcrypt ·
+│                                    python-jose · google-cloud-firestore · httpx · bs4
+├── pyproject.toml                   Package config — makes src/domains/api importable
+├── .env.example                     Template of all environment variables
+├── .gitignore
 └── README.md
 ```
+
+### PYTHONPATH note
+
+When running locally, always set:
+
+```bash
+export PYTHONPATH=/path/to/adar-core
+# or prefix every command:
+PYTHONPATH=/path/to/adar-core python api/main.py
+```
+
+This is required because `api/main.py` imports from `src.adar.*` and `domains.arcl.*`
+which are not installed packages — they are resolved via PYTHONPATH.
 
 ---
 
@@ -397,7 +429,7 @@ Auto-renewing monthly subscriptions with 14-day free trial. Teams enter card onc
 
 | Plan | Price | Daily quota | Env var |
 |---|---|---|---|
-| Basic | $5/month | 50 messages | `STRIPE_PRICE_BASIC` |
+| Basic | $10/month | 50 messages | `STRIPE_PRICE_BASIC` |
 | Standard | $15/month | 200 messages | `STRIPE_PRICE_STANDARD` |
 | Unlimited | $30/month | 1000 messages | `STRIPE_PRICE_UNLIMITED` |
 
@@ -603,6 +635,7 @@ git clone https://github.com/agomonia-labs/adar-core
 cd adar-core
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+export PYTHONPATH=$(pwd)   # required for src.adar.* imports
 ```
 
 ### 2 — Configure `.env`
@@ -641,11 +674,11 @@ EVAL_ENABLED=true
 
 ```bash
 # Full ingestion (first time — takes ~20 minutes)
-python -m ingestion.run_ingestion
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion
 
 # Or just the current season to get started quickly
-python -m ingestion.run_ingestion --only teamstats --seasons 69
-python -m ingestion.run_ingestion --only rules
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons 69
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only rules
 ```
 
 ### 4 — Start Stripe webhook listener (for payment testing)
@@ -660,7 +693,7 @@ stripe listen --forward-to localhost:8020/api/payments/webhook
 ### 5 — Start backend
 
 ```bash
-python main.py
+PYTHONPATH=$(pwd) python api/main.py
 # API: http://localhost:8020
 # Docs: http://localhost:8020/docs (dev only — disabled in production)
 ```
@@ -668,7 +701,7 @@ python main.py
 ### 6 — Start frontend
 
 ```bash
-cd arcl-chat-app
+cd ui
 npm install
 npm run dev
 # App: http://localhost:5173
@@ -693,27 +726,27 @@ curl -X POST http://localhost:8020/api/auth/login \
 
 ```bash
 # Full re-index everything (all seasons, rules, players)
-python -m ingestion.run_ingestion
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion
 
 # Specific phases only
-python -m ingestion.run_ingestion --only rules          # Rules + FAQ only (~2 min)
-python -m ingestion.run_ingestion --only teamstats      # Player stats all seasons (~15 min)
-python -m ingestion.run_ingestion --only standings      # W/L/pts for all teams (~2 min)
-python -m ingestion.run_ingestion --only players        # Player career overview (~5 min)
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only rules          # Rules + FAQ only (~2 min)
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats      # Player stats all seasons (~15 min)
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only standings      # W/L/pts for all teams (~2 min)
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only players        # Player career overview (~5 min)
 
 # Specific season
-python -m ingestion.run_ingestion --only teamstats --seasons 69          # Spring 2026 only
-python -m ingestion.run_ingestion --only teamstats --seasons 66,69       # Two seasons
-python -m ingestion.run_ingestion --only teamstats --seasons "Spring 2026"
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons 69          # Spring 2026 only
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons 66,69       # Two seasons
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons "Spring 2026"
 
 # Clear and re-index (wipe Firestore first)
-python -m ingestion.run_ingestion --only rules --clear
-python -m ingestion.run_ingestion --only teamstats --seasons 69 --clear
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only rules --clear
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons 69 --clear
 
 # Parallel (open 3 terminals for speed)
-python -m ingestion.run_ingestion --only teamstats --seasons 65,66,67,68,69
-python -m ingestion.run_ingestion --only teamstats --seasons 60,61,62,63,64
-python -m ingestion.run_ingestion --only teamstats --seasons 55,56,57,58,59
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons 65,66,67,68,69
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons 60,61,62,63,64
+PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons 55,56,57,58,59
 ```
 
 ### Run on GCP (triggers production job)
@@ -742,7 +775,7 @@ gcloud logging read \
 
 | Command | What it does | Time |
 |---|---|---|
-| `python -m ingestion.run_ingestion` | Everything | ~20 min |
+| `PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion` | Everything | ~20 min |
 | `--only rules` | Rules + FAQ | ~2 min |
 | `--only teamstats --seasons 69` | Current season only | ~3 min |
 | `--only standings` | W/L/pts all teams | ~2 min |
@@ -899,11 +932,14 @@ SESSION_DB_URL=postgresql+asyncpg://arcl_user:765793@/arcl_sessions?host=/clouds
 
 ```bash
 # Verify .env.production
-cat arcl-chat-app/.env.production
+cat ui/.env.production
 # VITE_API_URL=https://api.arcl.tigers.agomoniai.com
 # VITE_API_KEY=your_arcl_api_key
 
-cd arcl-chat-app
+# Copy demo to public folder before build
+cp adar-demo.html ui/public/demo.html
+
+cd ui
 npm install
 npm run build
 firebase deploy --only hosting
@@ -949,7 +985,7 @@ docker build --platform linux/amd64 \
     --region us-central1
 
 # Frontend only
-cd arcl-chat-app && npm run build && firebase deploy --only hosting
+cd ui && npm run build && firebase deploy --only hosting
 ```
 
 ---
@@ -1023,27 +1059,53 @@ At $15/month Standard plan: **~$3–8 margin per team per month.**
 
 ---
 
-## Future — adar-core repo structure
+## Running locally — adar-core
 
-Target repo organization for `agomonia-labs/adar-core`:
+### Start backend
 
-```
-adar-core/
-├── src/adar/              reusable core (agents, db, config, notify, tenants)
-├── domains/arcl/          ARCL-specific tools, ingestion, prompts, examples
-├── api/                   FastAPI routes split by domain
-├── evaluation/            LLM-as-judge (judge.py, __init__.py)
-├── ui/                    React frontend (from arcl-chat-app/)
-├── tests/                 debug and test scripts
-├── infra/                 Dockerfile, deploy.sh, create_indexes.sh
-├── docs/                  architecture.md, setup.md, deployment.md
-├── requirements.txt
-├── .env.example
-├── .gitignore
-└── README.md
+```bash
+cd adar-core
+source venv/bin/activate
+export PYTHONPATH=$(pwd)
+python api/main.py
 ```
 
-Adding a second league — just add `domains/nwcl/` with its own tools and ingestion.
+### Start frontend
+
+```bash
+cd adar-core/ui
+npm run dev
+```
+
+### Run ingestion
+
+```bash
+cd adar-core
+export PYTHONPATH=$(pwd)
+
+# Current season stats
+python -m domains.arcl.ingestion.run_ingestion --only teamstats --seasons 69
+
+# Rules only
+python -m domains.arcl.ingestion.run_ingestion --only rules
+
+# Full reindex
+python -m domains.arcl.ingestion.run_ingestion
+```
+
+### Run debug scripts
+
+```bash
+cd adar-core
+export PYTHONPATH=$(pwd)
+python tests/debug_teams.py
+python tests/debug_eval.py
+python tests/debug_stripe.py
+```
+
+### Adding a second league
+
+Add `domains/nwcl/` with its own tools and ingestion — the core `src/adar/` layer is shared.
 
 ---
 

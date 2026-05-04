@@ -15,3 +15,6 @@ arcl_sessions.db
 *.egg-info/
 dist/
 build/
+
+# Firebase cache
+ui/.firebase/

@@ -14,6 +14,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Required so src.adar.* and domains.arcl.* imports resolve
+ENV PYTHONPATH=/app
+
 EXPOSE 8020
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8040"]
+CMD ["python", "api/main.py"]
+
