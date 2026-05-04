@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
-load_dotenv(override=True)
+# Only load .env in local development — never in production
+if os.environ.get("APP_ENV") != "production":
+    load_dotenv(override=True)
 
 import uuid
 import time
@@ -190,6 +192,31 @@ async def chat(
             session_service=session_service,
         )
 
+        # ── Off-topic guard — block non-ARCL questions cheaply ──
+        OFF_TOPIC = [
+            "python","javascript","java","ruby","golang","write a program",
+            "write code","write a script","recipe","cooking","weather","stock market",
+            "crypto","bitcoin","movie","music","song","lyrics","joke","poem",
+            "write an essay","write a story","translate","machine learning tutorial",
+            "sql injection","how to hack","calculus","algebra",
+        ]
+        ARCL_HINTS = [
+            "arcl","cricket","batting","bowling","wicket","runs","overs","innings",
+            "umpire","wide","lbw","caught","bowled","dismissed","scorecard",
+            "schedule","standing","division","season","player","team","match",
+            "league","spring","summer","rule","eligible","stats","average",
+            "strike rate","economy","agomoni","tigers","spring 2026",
+        ]
+        msg_low = message.lower()
+        if any(k in msg_low for k in OFF_TOPIC) and not any(k in msg_low for k in ARCL_HINTS):
+            return ChatResponse(
+                response="I'm Adar, the ARCL cricket assistant. I can only help with ARCL cricket questions — player stats, team performance, rules, schedules and scorecards. What would you like to know about ARCL cricket?",
+                session_id=str(session.id),
+                user_id=request.user_id,
+                eval=None,
+            )
+        # ─────────────────────────────────────────────────────────
+
         user_message = Content(role="user", parts=[Part(text=message)])
 
         response_text = ""
@@ -304,7 +331,7 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "main:app",
+        "api.main:app",
         host="0.0.0.0",
         port=settings.PORT,
         reload=settings.APP_ENV == "development",

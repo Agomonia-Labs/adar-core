@@ -686,7 +686,7 @@ PYTHONPATH=$(pwd) python -m domains.arcl.ingestion.run_ingestion --only rules
 ```bash
 # Install Stripe CLI: brew install stripe/stripe-cli/stripe
 stripe login
-stripe listen --forward-to localhost:8020/api/payments/webhook
+stripe listen --forward-to localhost:8040/api/payments/webhook
 # Copy the whsec_xxx printed → add to .env as STRIPE_WEBHOOK_SECRET
 ```
 
@@ -694,8 +694,8 @@ stripe listen --forward-to localhost:8020/api/payments/webhook
 
 ```bash
 PYTHONPATH=$(pwd) python api/main.py
-# API: http://localhost:8020
-# Docs: http://localhost:8020/docs (dev only — disabled in production)
+# API: http://localhost:8040
+# Docs: http://localhost:8040/docs (dev only — disabled in production)
 ```
 
 ### 6 — Start frontend
@@ -711,7 +711,7 @@ npm run dev
 
 ```bash
 # Login as admin
-curl -X POST http://localhost:8020/api/auth/login \
+curl -X POST http://localhost:8040/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@adar.agomoniai.com","password":"YOUR_PASSWORD"}'
 
@@ -914,7 +914,7 @@ gcloud run deploy adar-arcl-api \
   --max-instances 3 \
   --memory 1Gi \
   --cpu 1 \
-  --port 8020 \
+  --port 8040 \
   --service-account adar-sa@bdas-493785.iam.gserviceaccount.com \
   --set-secrets "GOOGLE_API_KEY=google-api-key:latest,ARCL_API_KEY=arcl-api-key:latest,\
 JWT_SECRET=jwt-secret:latest,ADMIN_EMAIL=admin-email:latest,ADMIN_PASSWORD=admin-password:latest,\

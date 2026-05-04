@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     APP_NAME: str = "adar-arcl-api"
     APP_ENV: str = "development"
-    PORT: int = 8020
+    PORT: int = int(os.environ.get('PORT', 8040))
 
     GOOGLE_API_KEY: str = ""
     ADK_MODEL: str = "gemini-2.5-flash"

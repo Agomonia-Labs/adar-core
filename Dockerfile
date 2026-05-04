@@ -14,10 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Required so src.adar.* and domains.arcl.* imports resolve
-ENV PYTHONPATH=/app
+# Cloud Run injects PORT env var — must use it
+ENV PORT=8040
+EXPOSE 8040
 
-EXPOSE 8020
-
-CMD ["python", "api/main.py"]
-
+CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT}
