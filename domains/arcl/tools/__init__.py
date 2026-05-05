@@ -2,6 +2,7 @@ from domains.arcl.tools.rules_tools import vector_search_rules, get_rule_section
 from domains.arcl.tools.player_tools import (
     search_player, get_player_stats, get_player_season_stats,
     get_player_teams, get_top_performers,
+    get_top_performers_live,
 )
 from domains.arcl.tools.team_tools import (
     search_team, get_team_history, get_team_season,
@@ -22,6 +23,7 @@ TOOL_REGISTRY = {
     "get_player_season_stats": get_player_season_stats,
     "get_player_teams":        get_player_teams,
     "get_top_performers":      get_top_performers,
+    "get_top_performers_live": get_top_performers_live,
     # Team
     "search_team":             search_team,
     "get_team_history":        get_team_history,

@@ -212,16 +212,17 @@ The ARCL domain demonstrates the full platform capabilities end to end.
 | "Show Agomoni Tigers batting stats Spring 2026" | Team | arcl.org TeamStats.aspx (live) |
 | "How was Jiban dismissed this season?" | Team | arcl.org Matchscorecard.aspx (live) |
 | "What is our team strength?" | Team | arcl.org all seasons (live aggregate) |
+| "Top 5 batsmen in Div H Spring 2026?" | Player | arcl.org DivHome + TeamStats all teams (live) |
 | "Current standings in Div H?" | Live | arcl.org DivHome.aspx (live) |
 
 ### Five agents
 
 | Agent | Handles | Tools |
 |---|---|---|
-| `arcl_orchestrator` | Routes every question | — |
+| `arcl_orchestrator` | Routes every question using explicit routing rules | — |
 | `rules_agent` | Rules, umpiring, FAQ | `vector_search_rules` · `get_rule_section` · `get_faq_answer` |
-| `player_agent` | Named players across all teams | `get_player_stats` · `get_player_season_stats` · `get_top_performers` |
-| `team_agent` | Team stats, scorecards, dismissals | `get_team_players_live` · `get_match_scorecard` · `get_player_dismissals` · `get_team_career_stats` · `get_team_schedule` |
+| `player_agent` | Named players + cross-division top performers | `get_player_stats` · `get_player_season_stats` · `get_top_performers` · `get_top_performers_live` |
+| `team_agent` | Team-specific stats, scorecards, dismissals | `get_team_players_live` · `get_match_scorecard` · `get_player_dismissals` · `get_team_career_stats` · `get_team_schedule` |
 | `live_agent` | Standings, schedule, results | `get_standings` · `get_schedule` · `get_recent_results` |
 
 ### Live fetch vs Firestore cache
@@ -275,6 +276,18 @@ Judge agent scores response on 5 dimensions
 Response + scores returned to frontend
 ```
 
+### Orchestrator routing rules
+
+| Query pattern | Agent | Tool |
+|---|---|---|
+| "top batsmen in **Agomoni Tigers**" (specific team) | `team_agent` | `get_team_players_live` |
+| "top batsmen in **Div H**" (cross-team, division) | `player_agent` | `get_top_performers_live` |
+| "how many runs has **Jiban** scored" (named player) | `player_agent` | `get_player_stats` |
+| "**wide rule** in men's league" | `rules_agent` | `vector_search_rules` |
+| "current **standings** in Div H" | `live_agent` | `get_standings` |
+
+`get_top_performers_live` scrapes all teams in a division live from `DivHome.aspx` → fetches each team's `TeamStats.aspx` → aggregates all players → sorts by runs or wickets. Works for any division, any team, any season.
+
 ### Example — "How was Jiban dismissed in Spring 2026?"
 
 ```
@@ -288,6 +301,20 @@ Response + scores returned to frontend
    → ranks top dismissers
 5. Returns formatted table + eval scores
 ```
+
+---
+
+## Scope control
+
+Adar only answers domain-relevant questions. Off-topic questions (coding, math, cooking, general knowledge) are blocked by two layers:
+
+**Layer 1 — keyword pre-check** in `api/main.py` (instant, zero LLM cost)
+Blocks obvious off-topic queries before they reach the agent.
+
+**Layer 2 — orchestrator system prompt**
+The LLM itself is instructed to refuse off-topic questions and redirect.
+
+The scope is configured per domain via `agents_config.json` — swap the orchestrator instruction to change what the assistant covers.
 
 ---
 

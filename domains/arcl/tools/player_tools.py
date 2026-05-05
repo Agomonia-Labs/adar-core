@@ -6,29 +6,37 @@ logger = logging.getLogger(__name__)
 
 
 def _fmt_batting(r: dict) -> dict:
-    return {
-        "runs":         r.get("batting_runs", 0),
-        "balls_faced":  r.get("batting_balls", 0),
-        "fours":        r.get("batting_fours", 0),
-        "sixes":        r.get("batting_sixes", 0),
-        "strike_rate":  r.get("batting_sr", 0.0),
-        "highest":      r.get("batting_highest", 0),
-        "average":      r.get("batting_average", 0.0),
-        "innings":      r.get("batting_innings", 0),
-    }
+    """Only include fields that have real data (non-zero or non-empty)."""
+    out = {}
+    if r.get("batting_innings"):  out["innings"]      = r["batting_innings"]
+    if r.get("batting_runs"):     out["runs"]         = r["batting_runs"]
+    if r.get("batting_balls"):    out["balls_faced"]  = r["batting_balls"]
+    if r.get("batting_fours"):    out["fours"]        = r["batting_fours"]
+    if r.get("batting_sixes"):    out["sixes"]        = r["batting_sixes"]
+    if r.get("batting_sr"):       out["strike_rate"]  = r["batting_sr"]
+    if r.get("batting_highest"):  out["highest"]      = r["batting_highest"]
+    if r.get("batting_average"):  out["average"]      = r["batting_average"]
+    if r.get("batting_not_out"):  out["not_out"]      = r["batting_not_out"]
+    # Always include runs even if 0
+    if "runs" not in out:         out["runs"]         = r.get("batting_runs", 0)
+    return out
 
 
 def _fmt_bowling(r: dict) -> dict:
-    return {
-        "overs":        r.get("bowling_overs", 0.0),
-        "maidens":      r.get("bowling_maidens", 0),
-        "runs_given":   r.get("bowling_runs", 0),
-        "wickets":      r.get("bowling_wickets", 0),
-        "average":      r.get("bowling_average", 0.0),
-        "economy":      r.get("bowling_economy", 0.0),
-        "strike_rate":  r.get("bowling_sr", 0.0),
-        "best_figures": r.get("bowling_best", "-"),
-    }
+    """Only include fields that have real data."""
+    out = {}
+    if r.get("bowling_innings"):  out["innings"]      = r["bowling_innings"]
+    if r.get("bowling_overs"):    out["overs"]        = r["bowling_overs"]
+    if r.get("bowling_maidens") is not None: out["maidens"] = r["bowling_maidens"]
+    if r.get("bowling_runs"):     out["runs_given"]   = r["bowling_runs"]
+    if r.get("bowling_wickets") is not None: out["wickets"] = r["bowling_wickets"]
+    if r.get("bowling_average"):  out["average"]      = r["bowling_average"]
+    if r.get("bowling_economy"):  out["economy"]      = r["bowling_economy"]
+    if r.get("bowling_sr"):       out["strike_rate"]  = r["bowling_sr"]
+    if r.get("bowling_best"):     out["best_figures"] = r["bowling_best"]
+    # Always include wickets even if 0
+    if "wickets" not in out:      out["wickets"]      = r.get("bowling_wickets", 0)
+    return out
 
 
 async def search_player(name: str, top_k: int = 5) -> list[dict]:
@@ -224,3 +232,154 @@ async def get_top_performers(
     sort_key = ("batting", "runs") if category == "batting" else ("bowling", "wickets")
     performers.sort(key=lambda x: x.get(sort_key[0], {}).get(sort_key[1], 0), reverse=True)
     return performers[:limit]
+
+
+async def get_top_performers_live(
+    category: str = "batting",
+    season: str = "Spring 2026",
+    division: str = "",
+    limit: int = 10,
+) -> list[dict]:
+    """
+    Get top batting or bowling performers by scraping ALL teams in a division live.
+    Use this when a division is specified — fetches real data from arcl.org for every team.
+
+    Args:
+        category: 'batting' or 'bowling'
+        season:   Season name e.g. 'Spring 2026'
+        division: Division filter e.g. 'Div H'
+        limit:    Number of results to return
+    """
+    from domains.arcl.tools.team_tools import get_team_players_live, ARCL_BASE, _resolve_season
+    from src.adar.config import settings
+    import httpx
+    from bs4 import BeautifulSoup
+
+    # Resolve season ID
+    season_id, season_resolved = _resolve_season(season)
+    if not season_id:
+        season_id = 69  # default Spring 2026
+
+    # Division → league_id map
+    DIV_TO_LEAGUE = {
+        "H": 10, "DIV H": 10, "G": 9, "DIV G": 9,
+        "A": 7, "B": 7, "C": 7, "D": 7, "E": 8, "F": 8,
+        "WOMEN": 2, "KIDS": 4, "CHAMPIONS": 6,
+    }
+    div_key = division.strip().upper().replace("DIB","DIV").replace("DIV ","").replace("DIVISION ","")
+    league_id = DIV_TO_LEAGUE.get(div_key) or DIV_TO_LEAGUE.get(division.strip().upper(), 10)
+
+    import re as _re
+    from bs4 import BeautifulSoup
+
+    # Scrape all teams AND their team_ids directly from DivHome.aspx
+    teams_found = []
+    try:
+        url = f"{ARCL_BASE}/Pages/UI/DivHome.aspx?league_id={league_id}&season_id={season_id}"
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            soup = BeautifulSoup(r.text, "html.parser")
+            seen_ids = set()
+            for link in soup.find_all("a", href=True):
+                if "TeamStats" in link["href"]:
+                    name = link.text.strip()
+                    tid = _re.search(r"team_id=(\d+)", link["href"])
+                    if name and tid:
+                        team_id = int(tid.group(1))
+                        if team_id not in seen_ids:
+                            seen_ids.add(team_id)
+                            teams_found.append({"name": name, "team_id": team_id})
+    except Exception as e:
+        logger.warning(f"Failed to get teams from DivHome: {e}")
+
+    if not teams_found:
+        return [{"error": f"No teams found in {division} for {season}. Check division name (e.g. 'Div H')."}]
+
+    logger.info(f"Found {len(teams_found)} teams in {division}")
+
+    # Fetch TeamStats directly using team_id — no name lookup needed
+    all_players = []
+    async with httpx.AsyncClient(timeout=30) as client:
+        for team in teams_found[:14]:
+            team_name = team["name"]
+            team_id   = team["team_id"]
+            try:
+                stats_url = (f"{ARCL_BASE}/Pages/UI/TeamStats.aspx"
+                             f"?team_id={team_id}&league_id={league_id}&season_id={season_id}")
+                r = await client.get(stats_url, headers={"User-Agent": "Mozilla/5.0"})
+                soup = BeautifulSoup(r.text, "html.parser")
+                tables = soup.find_all("table")
+                # Table index 2 = batting, table index 3 = bowling (confirmed structure)
+                tbl_idx = 2 if category == "batting" else 3
+                if len(tables) <= tbl_idx:
+                    continue
+                tbl = tables[tbl_idx]
+                rows = tbl.find_all("tr")
+                if len(rows) < 2:
+                    continue
+                headers = [th.text.strip().lower() for th in rows[0].find_all(["th","td"])]
+                for row in rows[1:]:
+                    cols = [td.text.strip() for td in row.find_all("td")]
+                    if not cols or len(cols) < 3:
+                        continue
+                    try:
+                        if category == "batting":
+                            all_players.append({
+                                "player_name": cols[0] if len(cols)>0 else "",
+                                "team_name":   team_name,
+                                "innings":     int(cols[3]) if len(cols)>3 else 0,
+                                "runs":        int(cols[4]) if len(cols)>4 else 0,
+                                "balls":       int(cols[5]) if len(cols)>5 else 0,
+                                "fours":       int(cols[6]) if len(cols)>6 else 0,
+                                "sixes":       int(cols[7]) if len(cols)>7 else 0,
+                                "strike_rate": float(cols[8]) if len(cols)>8 else 0.0,
+                            })
+                        else:
+                            all_players.append({
+                                "player_name": cols[0] if len(cols)>0 else "",
+                                "team_name":   team_name,
+                                "innings":     int(cols[3]) if len(cols)>3 else 0,
+                                "overs":       float(cols[4]) if len(cols)>4 else 0.0,
+                                "wickets":     int(cols[8]) if len(cols)>8 else 0,
+                                "economy":     float(cols[9]) if len(cols)>9 else 0.0,
+                            })
+                    except (ValueError, IndexError):
+                        continue
+            except Exception as e:
+                logger.warning(f"Failed to scrape {team_name}: {e}")
+                continue
+
+    if not all_players:
+        return [{"error": f"No player data found for {division} {season}"}]
+
+    # Sort by runs or wickets
+    sort_field = "runs" if category == "batting" else "wickets"
+    all_players.sort(key=lambda x: int(x.get(sort_field, 0) or 0), reverse=True)
+
+    # Deduplicate by player name + team
+    seen = set()
+    result = []
+    for p in all_players:
+        key = (p.get("player_name", ""), p.get("team_name", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "player_name": p.get("player_name", ""),
+            "team":        p.get("team_name", ""),
+            "season":      season,
+            "division":    division,
+            "runs":        p.get("runs", 0),
+            "innings":     p.get("innings", 0),
+            "balls":       p.get("balls", 0),
+            "fours":       p.get("fours", 0),
+            "sixes":       p.get("sixes", 0),
+            "strike_rate": p.get("strike_rate", 0.0),
+            "wickets":     p.get("wickets", 0),
+            "overs":       p.get("overs", 0),
+            "economy":     p.get("economy", 0.0),
+        })
+        if len(result) >= limit:
+            break
+
+    return result
