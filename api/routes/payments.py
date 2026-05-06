@@ -27,6 +27,11 @@ from pydantic import BaseModel
 from google.cloud import firestore
 
 from src.adar.config import settings
+try:
+    from src.adar.notify import send_welcome_email, send_trial_ending_email
+    NOTIFY_ENABLED = True
+except Exception:
+    NOTIFY_ENABLED = False
 from api.routes.auth import get_current_team
 
 logger = logging.getLogger(__name__)
@@ -398,8 +403,28 @@ async def stripe_webhook(request: Request):
                 # One-time payment (no subscription)
                 update_data["subscription_status"] = "active"
 
+            # Auto-approve — team is now active without admin intervention
+            update_data["status"]       = "active"
+            update_data["approved_at"]  = datetime.now(timezone.utc).isoformat()
+            update_data["auto_approved"] = True
+
             await db.collection(TEAMS_COLLECTION).document(team_id).set(update_data, merge=True)
-            logger.info(f"Subscription created: team={team_id} plan={plan} status={update_data.get('subscription_status')}")
+            logger.info(f"Auto-approved team={team_id} plan={plan} status={update_data.get('subscription_status')}")
+
+            # Send welcome email
+            if NOTIFY_ENABLED:
+                try:
+                    team_doc = await db.collection(TEAMS_COLLECTION).document(team_id).get()
+                    td = team_doc.to_dict() or {}
+                    await send_welcome_email(
+                        to=td.get("email", ""),
+                        team_name=td.get("team_name", team_id),
+                        plan=plan,
+                        trial_ends=update_data.get("trial_ends_at", ""),
+                    )
+                    logger.info(f"Welcome email sent to {td.get('email')}")
+                except Exception as e:
+                    logger.warning(f"Welcome email failed (non-fatal): {e}")
 
         except Exception as e:
             logger.error(f"Error handling checkout.session.completed: {e}", exc_info=True)
@@ -460,7 +485,27 @@ async def stripe_webhook(request: Request):
     # ── Trial ending soon (3 days before) ────────────────────────────────────
     elif event_type == "customer.subscription.trial_will_end":
         sub     = _s(event["data"]["object"])
-        meta    = sub.get("metadata") or {}
+        meta    = sub.get("metadata")
+        # Send trial ending reminder email
+        if NOTIFY_ENABLED and meta:
+            try:
+                tid = meta.get("team_id")
+                if tid:
+                    doc = await db.collection(TEAMS_COLLECTION).document(tid).get()
+                    td = doc.to_dict() or {}
+                    import datetime
+                    trial_end = datetime.datetime.fromtimestamp(
+                        sub.get("trial_end", 0), tz=datetime.timezone.utc
+                    ).isoformat() if sub.get("trial_end") else ""
+                    await send_trial_ending_email(
+                        to=td.get("email",""),
+                        team_name=td.get("team_name", tid),
+                        trial_ends=trial_end,
+                        plan=td.get("subscription_plan","standard"),
+                    )
+                    logger.info(f"Trial ending email sent to {td.get('email')}")
+            except Exception as e:
+                logger.warning(f"Trial ending email failed (non-fatal): {e}") or {}
         team_id = meta.get("team_id")
         trial_end = datetime.fromtimestamp(sub["trial_end"], tz=timezone.utc).strftime("%Y-%m-%d") if sub.get("trial_end") else "soon"
         if team_id:

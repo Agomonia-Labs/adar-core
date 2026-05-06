@@ -213,6 +213,7 @@ The ARCL domain demonstrates the full platform capabilities end to end.
 | "How was Jiban dismissed this season?" | Team | arcl.org Matchscorecard.aspx (live) |
 | "What is our team strength?" | Team | arcl.org all seasons (live aggregate) |
 | "Top 5 batsmen in Div H Spring 2026?" | Player | arcl.org DivHome + TeamStats all teams (live) |
+| "Top 5 batsmen in Div H Spring 2026?" | Player | arcl.org — all 27 teams scraped live |
 | "Current standings in Div H?" | Live | arcl.org DivHome.aspx (live) |
 
 ### Five agents
@@ -286,7 +287,9 @@ Response + scores returned to frontend
 | "**wide rule** in men's league" | `rules_agent` | `vector_search_rules` |
 | "current **standings** in Div H" | `live_agent` | `get_standings` |
 
-`get_top_performers_live` scrapes all teams in a division live from `DivHome.aspx` → fetches each team's `TeamStats.aspx` → aggregates all players → sorts by runs or wickets. Works for any division, any team, any season.
+`get_top_performers_live` scrapes `DivHome.aspx` → gets all team names + team_ids for that division → fetches each team's `TeamStats.aspx` directly → aggregates all players → sorts by runs or wickets. Works for any division, season, or league_id.
+
+Off-topic questions (coding, cooking, math, general knowledge) are blocked by a keyword pre-check before reaching any agent — returns a cricket-only redirect message instantly with zero LLM cost.
 
 ### Example — "How was Jiban dismissed in Spring 2026?"
 
@@ -361,20 +364,60 @@ Why:      Match results and player stats change after every game
 
 JWT-based. 30-day token expiry. Admin role separate from domain users.
 
+### Self-service registration flow
+
 ```
-Team registers → status: pending
-Admin approves → status: active
-Team logs in → JWT (30 days)
-Frontend auto-logout after 30 min inactivity
+Team opens Register page
+→ Picks ARCL team from live dropdown (all teams from arcl.org)
+→ Fills email + password (strength indicator shown)
+→ POST /api/auth/register → status: pending_payment
+Team logs in → redirected to Stripe checkout immediately
+Team subscribes → Stripe webhook → status: active (auto-approved)
+Welcome email sent automatically via Gmail SMTP
+Team uses Adar immediately — zero admin involvement
 ```
+
+### Password reset flow
+
+```
+Team clicks "Forgot password?" on login page
+→ Enters email → POST /api/auth/forgot-password
+→ Reset link emailed (token stored in arcl_password_resets, 1-hour expiry)
+→ Team clicks link → ?reset_token=xxx in URL
+→ Login page shows reset form automatically
+→ POST /api/auth/reset-password → token validated → password updated
+```
+
+### Admin-created team flow
+
+```
+Admin creates team → status: active (or pending_payment)
+Plan options: Complimentary · No subscription · Basic · Standard · Unlimited
+No Stripe needed for Complimentary — admin handles billing externally
+```
+
+### Subscription gate
+
+If a team returns from Stripe via back button without paying:
+- Page load detects `pending_payment` → redirects to checkout
+- Chat is blocked — "Subscription required" screen shown
+- `?payment=cancelled` in URL → forced back to checkout
+- `?payment=success` → status set to active, enters chat
 
 | Endpoint | Description |
 |---|---|
-| `POST /api/auth/register` | Self-registration |
-| `POST /api/auth/login` | Email + password → JWT |
+| `POST /api/auth/register` | Self-registration → status: pending_payment |
+| `POST /api/auth/login` | Email + password → JWT (includes status) |
+| `POST /api/auth/forgot-password` | Send password reset link via email |
+| `POST /api/auth/reset-password` | Validate token and set new password |
 | `GET  /api/auth/me` | Current user info |
+| `GET  /api/arcl/teams` | All ARCL team names (for registration dropdown) |
 | `GET  /admin/teams` | List all teams (admin) |
-| `POST /admin/teams/{id}/approve` | Approve registration |
+| `POST /admin/teams/create` | Admin creates team directly (any plan, complimentary) |
+| `POST /admin/teams/{id}/approve` | Manually approve pending team |
+| `POST /admin/teams/{id}/suspend` | Suspend team |
+| `POST /admin/teams/{id}/activate` | Reactivate team |
+| `DELETE /admin/teams/{id}` | Delete team + cancel Stripe subscription |
 
 ---
 
@@ -388,12 +431,47 @@ Frontend auto-logout after 30 min inactivity
 | Standard | $15/month | 200 messages |
 | Unlimited | $30/month | 1000 messages |
 
+### Auto-approval on payment
+
+When `checkout.session.completed` fires:
+- Team `status` → `active`
+- `approved_at` → timestamp
+- `auto_approved` → true
+- No admin action needed
+
+### Plan types
+
+| Plan | Stripe? | Use case |
+|---|---|---|
+| Complimentary | ❌ No | Admin grants free access |
+| No subscription | ❌ No | Access without billing |
+| Basic $10 | ✅ Yes | Self-service teams |
+| Standard $15 | ✅ Yes | Self-service teams |
+| Unlimited $30 | ✅ Yes | Self-service teams |
+
 Webhook URL:
 ```
 https://api.arcl.tigers.agomoniai.com/api/payments/webhook
 ```
 
 Events: `checkout.session.completed` · `invoice.payment_succeeded` · `invoice.payment_failed` · `customer.subscription.deleted` · `customer.subscription.updated`
+
+### Email notifications (Gmail SMTP)
+
+| Event | Email sent |
+|---|---|
+| Stripe `checkout.session.completed` | Welcome email with trial end date + starter queries |
+| Stripe `customer.subscription.trial_will_end` | Trial ending reminder (3 days before) |
+| `POST /api/auth/forgot-password` | Password reset link (1-hour expiry) |
+
+Email provider: Gmail SMTP via `aiosmtplib`. Falls back gracefully if not configured.
+
+```bash
+# Required secrets in GCP Secret Manager
+GMAIL_USER=gmail-user:latest
+GMAIL_APP_PASSWORD=gmail-app-password:latest
+NOTIFY_FROM_EMAIL=from-email:latest
+```
 
 ---
 
@@ -602,6 +680,7 @@ gcloud scheduler jobs update http arcl-weekly-reindex \
 | Cloud SQL (Postgres) | $3 |
 | Firebase Hosting | Free |
 | Gemini API (chat + eval ~1500 msgs) | ~$1.13 |
+| Gmail SMTP | Free |
 | **Total per tenant** | **~$7–12** |
 
 At $15/month Standard plan → **$3–8 margin per tenant per month.**

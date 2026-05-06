@@ -122,6 +122,33 @@ app.add_middleware(
 
 app.include_router(polls_router)
 app.include_router(auth_router)
+
+@app.get("/api/arcl/teams")
+async def get_arcl_teams(season: int = 69):
+    """Return all ARCL team names for registration dropdown — scraped live from arcl.org."""
+    import httpx
+    from bs4 import BeautifulSoup
+    import re
+    teams = []
+    seen = set()
+    base = "https://www.arcl.org"
+    async with httpx.AsyncClient(timeout=20) as client:
+        for league_id in range(2, 14):
+            try:
+                url = f"{base}/Pages/UI/DivHome.aspx?league_id={league_id}&season_id={season}"
+                r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                soup = BeautifulSoup(r.text, "html.parser")
+                for link in soup.find_all("a", href=True):
+                    if "TeamStats" in link["href"]:
+                        name = link.text.strip()
+                        tid = re.search(r"team_id=(\d+)", link["href"])
+                        if name and name not in seen and tid:
+                            seen.add(name)
+                            teams.append({"name": name, "team_id": int(tid.group(1)), "league_id": league_id})
+            except Exception:
+                continue
+    teams.sort(key=lambda x: x["name"])
+    return {"teams": teams, "season_id": season}
 app.include_router(admin_router)
 app.include_router(payments_router)
 

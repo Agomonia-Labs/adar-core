@@ -31,7 +31,7 @@ TEAMS_COLLECTION = "adar_teams"
 JWT_SECRET       = os.environ.get("JWT_SECRET", "change-me-in-production-use-secret-manager")
 JWT_ALGORITHM    = "HS256"
 JWT_EXPIRE_DAYS  = 30
-ADMIN_EMAIL      = os.environ.get("ADMIN_EMAIL", "admin@arcl.org")
+ADMIN_EMAIL      = os.environ.get("ADMIN_EMAIL", "admin@adar.agomoniai.com")
 ADMIN_PASSWORD   = os.environ.get("ADMIN_PASSWORD", "")   # Set via Secret Manager
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -166,7 +166,7 @@ async def register(req: RegisterRequest):
         "email":          email,
         "password_hash":  _hash_password(req.password),
         "contact_person": req.contact_person.strip(),
-        "status":         "pending",       # admin must approve
+        "status":         "pending_payment",  # awaiting Stripe checkout
         "role":           "team",
         "quota_rpm":      20,
         "quota_daily":    500,
@@ -178,9 +178,9 @@ async def register(req: RegisterRequest):
     logger.info(f"New registration: {team_id} ({email})")
 
     return {
-        "message":  "Registration submitted. You will be notified once approved.",
+        "message":  "Registration successful! Please subscribe to start using Adar.",
         "team_id":  team_id,
-        "status":   "pending",
+        "status":   "pending_payment",
     }
 
 
@@ -233,6 +233,10 @@ async def login(req: LoginRequest):
             detail="Your registration is pending approval. Please wait for admin confirmation."
         )
 
+    if team.get("status") == "pending_payment":
+        # Allow login — frontend will redirect to checkout
+        pass
+
     if team.get("status") == "suspended":
         raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
 
@@ -251,6 +255,104 @@ async def login(req: LoginRequest):
         role=team.get("role", "team"),
         status=team["status"],
     )
+
+
+# ── Password reset ────────────────────────────────────────────────────────────
+
+class ForgotRequest(BaseModel):
+    email: str
+
+class ResetRequest(BaseModel):
+    token: str
+    new_password: str
+
+@router.post("/forgot-password")
+async def forgot_password(req: ForgotRequest):
+    """
+    Send password reset link to team email.
+    Always returns success to prevent email enumeration.
+    """
+    import secrets
+    from src.adar.notify import send_email
+
+    db = get_db()
+    email = req.email.strip().lower()
+
+    # Find team by email
+    team_id = None
+    team_name = ""
+    async for doc in db.collection(TEAMS_COLLECTION).stream():
+        d = doc.to_dict()
+        if d.get("email") == email:
+            team_id = d.get("team_id")
+            team_name = d.get("team_name", "")
+            break
+
+    if team_id:
+        token = secrets.token_urlsafe(32)
+        expires = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+        await db.collection("arcl_password_resets").document(token).set({
+            "token":      token,
+            "team_id":    team_id,
+            "email":      email,
+            "expires_at": expires,
+            "used":       False,
+        })
+        reset_url = f"{os.environ.get('FRONTEND_URL', 'https://arcl.tigers.agomoniai.com')}?reset_token={token}"
+        html = f"""
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+          <h2 style="color:#1A3326">Reset your Adar password</h2>
+          <p>Hi <strong>{team_name}</strong>,</p>
+          <p>Click the button below to reset your password. This link expires in 1 hour.</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="{reset_url}" style="background:#2EB87E;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600">
+              Reset password →
+            </a>
+          </div>
+          <p style="font-size:0.82rem;color:#5A8A70">If you didn't request this, ignore this email.</p>
+        </div>
+        """
+        try:
+            await send_email(email, "Reset your Adar password", html)
+            logger.info(f"Password reset email sent to {email}")
+        except Exception as e:
+            logger.warning(f"Reset email failed: {e}")
+
+    # Always return success to prevent enumeration
+    return {"message": "If that email is registered you will receive a reset link shortly."}
+
+
+@router.post("/reset-password")
+async def reset_password(req: ResetRequest):
+    """Validate reset token and set new password."""
+    if len(req.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    db = get_db()
+    doc = await db.collection("arcl_password_resets").document(req.token).get()
+
+    if not doc.exists:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+    reset = doc.to_dict()
+
+    if reset.get("used"):
+        raise HTTPException(status_code=400, detail="Reset link already used")
+
+    if datetime.fromisoformat(reset["expires_at"]) < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Reset link expired. Please request a new one.")
+
+    # Update password
+    team_id = reset["team_id"]
+    await db.collection(TEAMS_COLLECTION).document(team_id).update({
+        "password_hash": _hash_password(req.new_password)
+    })
+
+    # Mark token as used
+    await db.collection("arcl_password_resets").document(req.token).update({"used": True})
+    logger.info(f"Password reset for team: {team_id}")
+
+    return {"message": "Password updated successfully. You can now log in."}
 
 
 @router.get("/me", response_model=TeamInfo)

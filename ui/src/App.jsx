@@ -28,8 +28,8 @@ const API_KEY = import.meta.env.VITE_API_KEY || ''
 const SUGGESTED_QUESTIONS = [
   'What is the wide rule in ARCL?',
   'Can a player play for two teams in the same season?',
-  'Show Agomoni Tigers players in Spring 2026',
-  'Show Agomoni Tigers schedule in Spring 2026',
+  'Show my team players in Spring 2026',
+  'Show my team schedule in Spring 2026',
   'How does the points table work?',
   'Who scored the most runs in Div H?',
 ]
@@ -466,9 +466,14 @@ function ChatTab() {
 export default function App() {
   const [activeTab, setActiveTab] = useState(0)
   const [page, setPage]           = useState(() => {
-    const token = localStorage.getItem('adar_token')
-    const role  = localStorage.getItem('adar_role')
-    if (token) return role === 'admin' ? 'admin' : 'chat'
+    const token  = localStorage.getItem('adar_token')
+    const role   = localStorage.getItem('adar_role')
+    const status = localStorage.getItem('adar_status')
+    if (token) {
+      if (role === 'admin') return 'admin'
+      if (status === 'pending_payment') return 'checkout'  // gate on reload
+      return 'chat'
+    }
     return 'login'
   })
   const [token, setToken]   = useState(() => localStorage.getItem('adar_token') || '')
@@ -477,7 +482,7 @@ export default function App() {
   // Auto-logout after 30 minutes
   useEffect(() => {
     if (page !== 'chat' && page !== 'admin') return
-    const THIRTY_MIN = 30 * 60 * 1000   // 30 * 60 * 1000 for production
+    const THIRTY_MIN = 30 * 60 * 1000   //  30 * 60 * 1000 for production
     const timer = setTimeout(() => {
       handleLogout()
       alert('Your session has expired after 30 minutes. Please log in again.')
@@ -485,12 +490,30 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [page])
 
+  // Handle Stripe return — payment=success clears gate, cancelled keeps on checkout
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('payment') === 'success') {
+      localStorage.setItem('adar_status', 'active')
+      window.history.replaceState({}, '', window.location.pathname)
+      setPage('chat')
+    } else if (params.get('payment') === 'cancelled') {
+      window.history.replaceState({}, '', window.location.pathname)
+      if (localStorage.getItem('adar_status') === 'pending_payment') setPage('checkout')
+    }
+  }, [])
+
   const handleLogin = (data, redirect) => {
     if (redirect === 'register') { setPage('register'); return }
     if (!data) return
     setToken(data.access_token)
     setTeamName(data.team_name)
-    setPage(data.role === 'admin' ? 'admin' : 'chat')
+    // Gate pending_payment teams to checkout immediately
+    if (data.status === 'pending_payment') {
+      setPage('checkout')
+    } else {
+      setPage(data.role === 'admin' ? 'admin' : 'chat')
+    }
   }
 
   const handleLogout = () => {
@@ -498,14 +521,50 @@ export default function App() {
     localStorage.removeItem('adar_team_id')
     localStorage.removeItem('adar_team_name')
     localStorage.removeItem('adar_role')
+    localStorage.removeItem('adar_status')
     localStorage.removeItem('adar_login_time')
     setToken(''); setTeamName(''); setPage('login')
+  }
+
+  // Subscription wall — redirect pending_payment back to checkout
+  if (page === 'chat' && localStorage.getItem('adar_status') === 'pending_payment') {
+    return (
+      <ThemeProvider theme={theme}><CssBaseline />
+        <Box sx={{
+          minHeight:'100vh', background:'linear-gradient(145deg,#0d1f15,#060f0a)',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          flexDirection:'column', gap:2, textAlign:'center', p:3
+        }}>
+          <Box sx={{width:60,height:60,background:'#2EB87E',borderRadius:3,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:'1.3rem',fontWeight:700,color:'#fff',mb:1}}>আদর</Box>
+          <Typography variant="h6" sx={{color:'#fff',fontWeight:600}}>
+            Subscription required
+          </Typography>
+          <Typography sx={{color:'rgba(255,255,255,0.5)',fontSize:'0.9rem',maxWidth:340}}>
+            Please complete your subscription to start using Adar.
+            Your 14-day free trial begins immediately after subscribing.
+          </Typography>
+          <Button variant="contained" onClick={() => setPage('checkout')}
+            sx={{background:'#2EB87E','&:hover':{background:'#1A8A5A'},mt:1}}>
+            Subscribe now — free trial
+          </Button>
+          <Button onClick={handleLogout}
+            sx={{color:'rgba(255,255,255,0.4)',fontSize:'0.8rem'}}>
+            Sign out
+          </Button>
+        </Box>
+      </ThemeProvider>
+    )
   }
 
   if (page === 'login')    return <ThemeProvider theme={theme}><CssBaseline /><Login onLogin={handleLogin} /></ThemeProvider>
   if (page === 'register') return <ThemeProvider theme={theme}><CssBaseline /><Register onBack={() => setPage('login')} /></ThemeProvider>
   if (page === 'admin')    return <ThemeProvider theme={theme}><CssBaseline /><AdminDashboard token={token} onLogout={handleLogout} /></ThemeProvider>
-  if (page === 'checkout') return <ThemeProvider theme={theme}><CssBaseline /><Checkout token={token} onBack={() => setPage('chat')} onSuccess={() => setPage('chat')} /></ThemeProvider>
+  if (page === 'checkout') return <ThemeProvider theme={theme}><CssBaseline /><Checkout token={token} onBack={() => setPage('chat')} onSuccess={() => {
+        localStorage.setItem('adar_status', 'active')
+        setPage('chat')
+      }} /></ThemeProvider>
   if (page === 'billing')  return <ThemeProvider theme={theme}><CssBaseline /><Billing token={token} onSubscribe={() => setPage('checkout')} onBack={() => setPage('chat')} /></ThemeProvider>
 
   return (
