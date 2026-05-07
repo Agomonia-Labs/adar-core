@@ -29,3 +29,5 @@ stripe>=10.0.0
 
 # Email
 aiosmtplib>=3.0.0
+certifi>=2024.0.0
+pytz>=2024.0

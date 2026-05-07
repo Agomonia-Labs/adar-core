@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adar — AI Cricket Assistant for ARCL</title>
+<meta name="description" content="AI-powered cricket assistant for American Recreational Cricket League teams. Instant answers about player stats, rules, schedules and scorecards.">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--g:#2EB87E;--gd:#1A8A5A;--gl:#EBF7F1;--amber:#EF9F27;--bg:#F5FBF7;--text:#1A3326;--muted:#5A8A70;--border:#C8E8D8}
+body{font-family:'DM Sans',sans-serif;color:var(--text);overflow-x:hidden}
+
+/* NAV */
+nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(255,255,255,0.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  padding:14px 40px;display:flex;align-items:center;gap:16px;
+}
+.nav-logo{width:36px;height:36px;background:var(--g);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:0.8rem;font-weight:700;color:#fff;flex-shrink:0}
+.nav-name{font-weight:700;font-size:1rem;color:var(--text)}
+.nav-sub{font-size:0.72rem;color:var(--muted)}
+.nav-links{display:flex;gap:24px;margin-left:auto;align-items:center}
+.nav-links a{color:var(--muted);text-decoration:none;font-size:0.88rem;font-weight:500;transition:color 0.2s}
+.nav-links a:hover{color:var(--text)}
+.nav-cta{background:var(--g);color:#fff!important;padding:8px 18px;border-radius:10px;font-weight:600!important;transition:all 0.2s!important}
+.nav-cta:hover{background:var(--gd)!important;transform:translateY(-1px)}
+
+/* HERO */
+.hero{
+  background:linear-gradient(160deg,#0d1f15 0%,#0a1810 60%,#060f0a 100%);
+  padding:100px 40px 80px;text-align:center;position:relative;overflow:hidden;
+}
+.hero::before{content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 70% 70% at 50% 30%,rgba(46,184,126,0.15),transparent 70%)}
+.hero::after{content:'';position:absolute;inset:0;
+  background-image:radial-gradient(circle,rgba(46,184,126,0.05) 1px,transparent 1px);
+  background-size:28px 28px}
+.hero-inner{position:relative;z-index:2;max-width:780px;margin:0 auto}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  border:1px solid rgba(46,184,126,0.3);background:rgba(46,184,126,0.08);
+  color:#6ee7b7;padding:7px 16px;border-radius:100px;
+  font-size:0.76rem;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;
+  margin-bottom:24px;
+}
+.hero h1{font-family:'DM Serif Display',serif;font-size:clamp(2.4rem,6vw,4.2rem);
+  color:#fff;line-height:1.1;margin-bottom:18px}
+.hero h1 span{background:linear-gradient(135deg,#2EB87E,#6ee7b7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{color:rgba(255,255,255,0.55);font-size:1.05rem;line-height:1.7;max-width:520px;margin:0 auto 40px}
+.hero-btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:56px}
+.btn-primary{background:var(--g);color:#fff;padding:15px 32px;border-radius:13px;
+  font-size:0.95rem;font-weight:700;text-decoration:none;
+  box-shadow:0 0 40px rgba(46,184,126,0.35);transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}
+.btn-primary:hover{background:var(--gd);transform:translateY(-2px)}
+.btn-secondary{background:rgba(255,255,255,0.08);color:#fff;padding:15px 32px;border-radius:13px;
+  font-size:0.95rem;font-weight:600;text-decoration:none;
+  border:1px solid rgba(255,255,255,0.2);transition:all 0.2s;display:inline-flex;align-items:center;gap:8px}
+.btn-secondary:hover{background:rgba(255,255,255,0.14)}
+.hero-stats{display:flex;gap:40px;justify-content:center;flex-wrap:wrap}
+.hs .num{font-family:'DM Serif Display',serif;font-size:2rem;color:var(--g)}
+.hs .lbl{color:rgba(255,255,255,0.38);font-size:0.76rem;margin-top:3px}
+
+/* CHAT DEMO PREVIEW */
+.chat-preview{background:#fff;border:1px solid var(--border);border-radius:18px;
+  overflow:hidden;box-shadow:0 24px 80px rgba(26,51,38,0.12);max-width:700px;margin:0 auto}
+.cp-top{background:#fff;border-bottom:1px solid var(--border);padding:12px 18px;
+  display:flex;align-items:center;gap:9px}
+.cp-logo{width:30px;height:30px;background:var(--g);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:0.68rem;font-weight:700;color:#fff}
+.cp-body{padding:16px;display:flex;flex-direction:column;gap:10px}
+.cp-msg{display:flex;gap:8px}
+.cp-msg.u{flex-direction:row-reverse}
+.cp-bbl{max-width:85%;padding:9px 13px;border-radius:12px;font-size:0.82rem;line-height:1.55}
+.cp-msg.b .cp-bbl{background:rgba(46,184,126,0.07);border:1px solid rgba(46,184,126,0.2)}
+.cp-msg.u .cp-bbl{background:rgba(239,159,39,0.08);border:1px solid rgba(239,159,39,0.2)}
+.cp-av{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700}
+.cp-msg.b .cp-av{background:var(--gl);color:var(--gd)}
+.cp-msg.u .cp-av{background:rgba(239,159,39,0.15);color:#BA7517}
+
+/* SECTIONS */
+section{padding:80px 40px}
+.container{max-width:1080px;margin:0 auto}
+.section-label{font-size:0.72rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--g);margin-bottom:10px}
+.section-title{font-family:'DM Serif Display',serif;font-size:clamp(1.8rem,4vw,2.6rem);margin-bottom:12px}
+.section-sub{color:var(--muted);font-size:0.98rem;line-height:1.7;max-width:560px}
+
+/* FEATURES */
+#features{background:var(--bg)}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:48px}
+@media(max-width:720px){.feat-grid{grid-template-columns:1fr}}
+.fc{background:#fff;border:1px solid var(--border);border-radius:14px;padding:24px;transition:all 0.2s}
+.fc:hover{border-color:var(--g);box-shadow:0 8px 24px rgba(46,184,126,0.1);transform:translateY(-2px)}
+.fi{width:40px;height:40px;background:var(--gl);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:14px}
+.fc h3{font-size:0.92rem;font-weight:700;margin-bottom:6px}
+.fc p{color:var(--muted);font-size:0.82rem;line-height:1.6}
+
+/* QUESTIONS */
+#questions{background:#fff}
+.q-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:40px}
+@media(max-width:600px){.q-grid{grid-template-columns:1fr}}
+.q-item{background:rgba(239,159,39,0.07);border:1px solid rgba(239,159,39,0.2);
+  border-radius:10px;padding:12px 16px;font-size:0.84rem;line-height:1.5;
+  display:flex;align-items:flex-start;gap:8px}
+.q-item::before{content:'"';font-size:1.2rem;color:var(--amber);flex-shrink:0;line-height:1;margin-top:1px}
+
+/* PRICING */
+#pricing{background:var(--bg)}
+.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:48px}
+@media(max-width:720px){.price-grid{grid-template-columns:1fr}}
+.pc{background:#fff;border:1px solid var(--border);border-radius:16px;padding:28px;position:relative}
+.pc.pop{border:2px solid var(--g);background:var(--gl)}
+.pop-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);
+  background:var(--g);color:#fff;font-size:0.68rem;font-weight:700;
+  padding:3px 12px;border-radius:100px;white-space:nowrap}
+.pc h3{font-size:1rem;font-weight:700;margin-bottom:6px}
+.pc .price{font-family:'DM Serif Display',serif;font-size:2.4rem;line-height:1;margin:14px 0 4px}
+.pc .price-sub{color:var(--muted);font-size:0.8rem;margin-bottom:18px}
+.pc ul{list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
+.pc li{font-size:0.84rem;display:flex;align-items:center;gap:7px}
+.pc li::before{content:'✓';color:var(--g);font-weight:700;flex-shrink:0}
+.pc-btn{display:block;text-align:center;padding:11px;border-radius:11px;
+  font-weight:700;font-size:0.9rem;text-decoration:none;transition:all 0.2s}
+.pc-btn.primary{background:var(--g);color:#fff}
+.pc-btn.primary:hover{background:var(--gd)}
+.pc-btn.outline{border:1px solid var(--border);color:var(--text)}
+.pc-btn.outline:hover{border-color:var(--g);color:var(--g)}
+.trial-note{text-align:center;color:var(--muted);font-size:0.82rem;margin-top:20px}
+
+/* HOW IT WORKS */
+#how{background:#fff}
+.steps-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:48px;position:relative}
+@media(max-width:720px){.steps-grid{grid-template-columns:1fr 1fr}}
+.step{text-align:center;padding:20px 16px}
+.step-num{width:40px;height:40px;background:var(--gl);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;color:var(--gd);font-size:0.9rem;margin:0 auto 14px}
+.step h4{font-size:0.9rem;font-weight:700;margin-bottom:6px}
+.step p{color:var(--muted);font-size:0.8rem;line-height:1.55}
+
+/* CTA */
+.cta-section{
+  background:linear-gradient(145deg,#0d1f15,#060f0a);
+  padding:80px 40px;text-align:center;
+}
+.cta-section h2{font-family:'DM Serif Display',serif;font-size:clamp(1.8rem,4vw,2.8rem);
+  color:#fff;margin-bottom:14px}
+.cta-section p{color:rgba(255,255,255,0.5);font-size:0.98rem;margin-bottom:32px;max-width:440px;margin-left:auto;margin-right:auto}
+
+/* FOOTER */
+footer{background:#fff;border-top:1px solid var(--border);padding:28px 40px;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.footer-logo{display:flex;align-items:center;gap:9px}
+.fl{width:28px;height:28px;background:var(--g);border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:#fff}
+.footer-links{display:flex;gap:20px}
+.footer-links a{color:var(--muted);font-size:0.82rem;text-decoration:none}
+.footer-links a:hover{color:var(--text)}
+
+@media(max-width:600px){
+  nav{padding:12px 18px}
+  .nav-links .nav-link-hide{display:none}
+  .hero{padding:60px 20px 50px}
+  section{padding:56px 20px}
+  .hero-stats{gap:24px}
+  .q-grid,.steps-grid{grid-template-columns:1fr}
+  footer{flex-direction:column;text-align:center}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">আদর</div>
+  <div>
+    <div class="nav-name">Adar ARCL</div>
+    <div class="nav-sub">AI Cricket Assistant</div>
+  </div>
+  <div class="nav-links">
+    <a href="#features" class="nav-link-hide">Features</a>
+    <a href="#pricing" class="nav-link-hide">Pricing</a>
+    <a href="https://adar.agomoniai.com/demo.html" class="nav-link-hide">Demo</a>
+    <a href="https://adar.agomoniai.com">Sign in</a>
+    <a href="https://adar.agomoniai.com" class="nav-cta">Start free trial</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">🏏 American Recreational Cricket League</div>
+    <h1>Your AI Cricket Assistant<br>is <span>ready to chat</span></h1>
+    <p>Instant answers about player stats, team performance, rules, scorecards and schedules — powered by 5 specialised Gemini AI agents.</p>
+    <div class="hero-btns">
+      <a href="https://adar.agomoniai.com" class="btn-primary">🏏 Start free trial — 14 days</a>
+      <a href="https://adar.agomoniai.com/demo.html" class="btn-secondary">▶ Watch demo</a>
+    </div>
+    <div class="hero-stats">
+      <div class="hs"><div class="num">5</div><div class="lbl">AI agents</div></div>
+      <div class="hs"><div class="num">Live</div><div class="lbl">arcl.org data</div></div>
+      <div class="hs"><div class="num">4.65/5</div><div class="lbl">Quality score</div></div>
+      <div class="hs"><div class="num">$15</div><div class="lbl">Per team/month</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- CHAT PREVIEW -->
+<section style="background:#fff;padding:56px 40px">
+  <div class="container">
+    <div class="chat-preview">
+      <div class="cp-top">
+        <div class="cp-logo">আদর</div>
+        <div>
+          <div style="font-weight:600;font-size:0.86rem">Adar ARCL</div>
+          <div style="font-size:0.7rem;color:var(--muted)">Agomoni Tigers</div>
+        </div>
+        <div style="margin-left:auto;font-size:0.7rem;color:var(--g);font-weight:600">● Online</div>
+      </div>
+      <div class="cp-body">
+        <div class="cp-msg u">
+          <div class="cp-av" style="background:rgba(239,159,39,0.15);color:#BA7517">You</div>
+          <div class="cp-bbl">Show me top 5 batsmen in Div H Spring 2026</div>
+        </div>
+        <div class="cp-msg b">
+          <div class="cp-av">আদর</div>
+          <div class="cp-bbl">
+            <strong>Top 5 Batsmen — Div H Spring 2026</strong><br><br>
+            <table style="width:100%;font-size:0.78rem;border-collapse:collapse">
+              <tr style="background:rgba(46,184,126,0.08)"><th style="padding:4px 8px;text-align:left">Player</th><th style="padding:4px 8px;text-align:left">Team</th><th style="padding:4px 8px;text-align:right">Runs</th><th style="padding:4px 8px;text-align:right">SR</th></tr>
+              <tr><td style="padding:4px 8px">Jiban Adhikary</td><td style="padding:4px 8px;color:var(--muted)">Agomoni Tigers</td><td style="padding:4px 8px;text-align:right;font-weight:700">436</td><td style="padding:4px 8px;text-align:right">76.1</td></tr>
+              <tr><td style="padding:4px 8px">Anijit Roy</td><td style="padding:4px 8px;color:var(--muted)">Agomoni Tigers</td><td style="padding:4px 8px;text-align:right;font-weight:700">303</td><td style="padding:4px 8px;text-align:right">100.7</td></tr>
+              <tr><td style="padding:4px 8px">Syed Raza</td><td style="padding:4px 8px;color:var(--muted)">Vikings-Strikers</td><td style="padding:4px 8px;text-align:right;font-weight:700">284</td><td style="padding:4px 8px;text-align:right">88.4</td></tr>
+              <tr><td style="padding:4px 8px">Amit Sharma</td><td style="padding:4px 8px;color:var(--muted)">Royal Priesthood</td><td style="padding:4px 8px;text-align:right;font-weight:700">261</td><td style="padding:4px 8px;text-align:right">92.5</td></tr>
+              <tr><td style="padding:4px 8px">Madhusudan Banik</td><td style="padding:4px 8px;color:var(--muted)">Agomoni Tigers</td><td style="padding:4px 8px;text-align:right;font-weight:700">174</td><td style="padding:4px 8px;text-align:right">78.4</td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="cp-msg u">
+          <div class="cp-av" style="background:rgba(239,159,39,0.15);color:#BA7517">You</div>
+          <div class="cp-bbl">What is the wide rule for men's league?</div>
+        </div>
+        <div class="cp-msg b">
+          <div class="cp-av">আদর</div>
+          <div class="cp-bbl">
+            <strong>Men's League Wide Ball Rule</strong><br><br>
+            A white line (35 inches from middle stump) on the offside helps umpires call wides. Key rules:<br>
+            • Ball on or beyond the wide line = wide<br>
+            • Ball above striker's head = wide<br>
+            • Max 4 extras per over · Max 10 balls per over
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">What Adar does</div>
+    <h2 class="section-title">Everything your team needs to know</h2>
+    <p class="section-sub">Five specialised AI agents work together — each an expert in one domain of ARCL cricket.</p>
+    <div class="feat-grid">
+      <div class="fc"><div class="fi">📊</div><h3>Player stats</h3><p>Batting averages, strike rates, season breakdowns, career records — for your team and across all divisions.</p></div>
+      <div class="fc"><div class="fi">🏏</div><h3>Team analysis</h3><p>Strength scores, win rates, key players, bar charts — batting and bowling toggled with one click.</p></div>
+      <div class="fc"><div class="fi">📖</div><h3>Rules lookup</h3><p>Men's and women's league rules — always the right rulebook, never mixed up. Semantic search finds the right section.</p></div>
+      <div class="fc"><div class="fi">📋</div><h3>Scorecards & dismissals</h3><p>How was your player dismissed? Full scorecard breakdown with dismissal patterns across the season.</p></div>
+      <div class="fc"><div class="fi">📅</div><h3>Schedule & umpiring</h3><p>Upcoming fixtures, past results, umpiring assignments — all fetched live from arcl.org.</p></div>
+      <div class="fc"><div class="fi">⭐</div><h3>Quality scoring</h3><p>Every response is automatically graded by a second AI on accuracy, completeness, and relevance. Average: 4.65/5.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- QUESTIONS -->
+<section id="questions">
+  <div class="container">
+    <div class="section-label">Sample questions</div>
+    <h2 class="section-title">Teams ask these every week</h2>
+    <p class="section-sub">Just type in plain English — no dashboards, no filters, no exports needed.</p>
+    <div class="q-grid">
+      <div class="q-item">Show our batting stats for Spring 2026</div>
+      <div class="q-item">Who are the top 5 batsmen in Div H?</div>
+      <div class="q-item">How was Jiban dismissed this season?</div>
+      <div class="q-item">What is the wide rule in men's league?</div>
+      <div class="q-item">Show our upcoming schedule</div>
+      <div class="q-item">What is our team strength score?</div>
+      <div class="q-item">Who bowled the most wickets for us?</div>
+      <div class="q-item">Can a player play for two teams this season?</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="background:var(--bg)">
+  <div class="container">
+    <div class="section-label">How it works</div>
+    <h2 class="section-title">Live in minutes — fully self-service</h2>
+    <p class="section-sub">No admin approval. No onboarding call. Register, subscribe, and start chatting immediately.</p>
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h4>Register your team</h4>
+        <p>Pick your ARCL team from a live dropdown. Email, password — 30 seconds.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h4>Start free trial</h4>
+        <p>14 days free, no credit card needed during trial. Cancel anytime.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h4>Get welcome email</h4>
+        <p>Instant confirmation with starter questions to try. No wait, no approval.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h4>Start chatting</h4>
+        <p>Ask about your stats, your schedule, your players — live data from arcl.org.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="container">
+    <div class="section-label">Pricing</div>
+    <h2 class="section-title">Simple monthly pricing</h2>
+    <p class="section-sub">All plans include a 14-day free trial. No credit card required until trial ends.</p>
+    <div class="price-grid">
+      <div class="pc">
+        <h3>Basic</h3>
+        <div style="color:var(--muted);font-size:0.82rem">For occasional use</div>
+        <div class="price">$10</div>
+        <div class="price-sub">per team / month</div>
+        <ul>
+          <li>50 messages per day</li>
+          <li>Player & team stats</li>
+          <li>Rules lookup</li>
+          <li>Schedule & results</li>
+        </ul>
+        <a href="https://adar.agomoniai.com" class="pc-btn outline">Start free trial</a>
+      </div>
+      <div class="pc pop">
+        <div class="pop-badge">MOST POPULAR</div>
+        <h3>Standard</h3>
+        <div style="color:var(--muted);font-size:0.82rem">For active teams</div>
+        <div class="price" style="color:var(--gd)">$15</div>
+        <div class="price-sub">per team / month</div>
+        <ul>
+          <li>200 messages per day</li>
+          <li>Everything in Basic</li>
+          <li>Scorecard & dismissals</li>
+          <li>Team strength analysis</li>
+          <li>Bar charts</li>
+          <li>Community polls</li>
+        </ul>
+        <a href="https://adar.agomoniai.com" class="pc-btn primary">Start free trial</a>
+      </div>
+      <div class="pc">
+        <h3>Unlimited</h3>
+        <div style="color:var(--muted);font-size:0.82rem">For power users</div>
+        <div class="price">$30</div>
+        <div class="price-sub">per team / month</div>
+        <ul>
+          <li>1000 messages per day</li>
+          <li>Everything in Standard</li>
+          <li>Priority responses</li>
+          <li>Full season history</li>
+        </ul>
+        <a href="https://adar.agomoniai.com" class="pc-btn outline">Start free trial</a>
+      </div>
+    </div>
+    <p class="trial-note">14-day free trial on all plans · Auto-renews monthly · Cancel anytime from the Billing page · Powered by Stripe</p>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-section">
+  <h2>Ready to try Adar?</h2>
+  <p>Register your ARCL team today. First 14 days are completely free — no credit card required.</p>
+  <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+    <a href="https://adar.agomoniai.com" class="btn-primary">🏏 Start free trial</a>
+    <a href="https://adar.agomoniai.com/demo.html" class="btn-secondary">▶ Watch demo</a>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">
+    <div class="fl">আদর</div>
+    <span style="font-weight:600;font-size:0.9rem">Adar ARCL</span>
+    <span style="color:var(--muted);font-size:0.8rem">· AI Cricket Assistant</span>
+  </div>
+  <div class="footer-links">
+    <a href="https://adar.agomoniai.com/demo.html">Demo</a>
+    <a href="#pricing">Pricing</a>
+    <a href="https://adar.agomoniai.com">Sign in</a>
+    <a href="https://adar.agomoniai.com">Register</a>
+  </div>
+  <div style="color:var(--muted);font-size:0.78rem">
+    © 2026 Agomonia Labs · Powered by Google Gemini
+  </div>
+</footer>
+
+</body>
+</html>

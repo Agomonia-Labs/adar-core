@@ -301,6 +301,7 @@ function ChatTab() {
   ])
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
+  const sendingRef              = useRef(false)
   const [sessionId, setSessionId] = useState(null)
   const [userId] = useState(() => `user_${uuidv4().slice(0, 8)}`)
   const bottomRef = useRef(null)
@@ -312,7 +313,8 @@ function ChatTab() {
 
   const sendMessage = useCallback(async (text) => {
     const message = text || input.trim()
-    if (!message || loading) return
+    if (!message || loading || sendingRef.current) return
+    sendingRef.current = true
 
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: message, timestamp: Date.now() }])
@@ -335,14 +337,25 @@ function ChatTab() {
         timestamp: Date.now(),
         eval: data.eval || null,
       }])
-    } catch {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
-        timestamp: Date.now(),
-      }])
+      // Update usage locally on success only
+      setUsage(prev => prev ? { ...prev, used_today: (prev.used_today || 0) + 1 } : prev)
+    } catch (err) {
+      console.error('Chat error:', err)
+      // Only show error if no response was received
+      setMessages(prev => {
+        const last = prev[prev.length - 1]
+        if (last && last.role === 'assistant' && last.content !== 'Sorry, I encountered an error. Please try again.') {
+          return prev  // real response already added — suppress error
+        }
+        return [...prev, {
+          role: 'assistant',
+          content: 'Sorry, I encountered an error. Please try again.',
+          timestamp: Date.now(),
+        }]
+      })
     } finally {
       setLoading(false)
+      sendingRef.current = false
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }, [input, loading, sessionId, userId])
@@ -477,12 +490,13 @@ export default function App() {
     return 'login'
   })
   const [token, setToken]   = useState(() => localStorage.getItem('adar_token') || '')
+  const [usage, setUsage]   = useState(null)
   const [teamName, setTeamName] = useState(() => localStorage.getItem('adar_team_name') || '')
 
   // Auto-logout after 30 minutes
   useEffect(() => {
     if (page !== 'chat' && page !== 'admin') return
-    const THIRTY_MIN = 30 * 60 * 1000   //  30 * 60 * 1000 for production
+    const THIRTY_MIN = 30 * 60 * 1000   // TEST: 2 minutes (change to 30 * 60 * 1000 for production)
     const timer = setTimeout(() => {
       handleLogout()
       alert('Your session has expired after 30 minutes. Please log in again.')
@@ -508,11 +522,45 @@ export default function App() {
     if (!data) return
     setToken(data.access_token)
     setTeamName(data.team_name)
+    // Fetch usage after login
+    setTimeout(fetchUsage, 500)  // slight delay to let login state settle
+
     // Gate pending_payment teams to checkout immediately
     if (data.status === 'pending_payment') {
       setPage('checkout')
     } else {
       setPage(data.role === 'admin' ? 'admin' : 'chat')
+    }
+  }
+
+  // Poll usage every 2 minutes while on chat page
+  useEffect(() => {
+    const role = localStorage.getItem('adar_role')
+    if (page !== 'chat' || role === 'admin') return
+
+    fetchUsage()  // fetch immediately on page load
+    const interval = setInterval(fetchUsage, 2 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [page])
+
+  const fetchUsage = async () => {
+    // Read token from localStorage directly — avoids stale React state
+    const t = localStorage.getItem('adar_token')
+    const role = localStorage.getItem('adar_role')
+    if (!t || role === 'admin') return
+    try {
+      const headers = { Authorization: `Bearer ${t}` }
+      if (API_KEY) headers['X-API-Key'] = API_KEY
+      const res = await fetch(`${API_URL}/api/usage`, { headers })
+      if (res.ok) {
+        const data = await res.json()
+        console.log('Usage fetched:', data)
+        setUsage(data)
+      } else {
+        console.warn('Usage fetch failed:', res.status)
+      }
+    } catch (e) {
+      console.error('Usage fetch error:', e)
     }
   }
 
@@ -625,6 +673,18 @@ export default function App() {
             >
               <span style={{fontSize: '1rem'}}>💳</span> Billing
             </Box>
+            {usage !== null && (
+              <Box sx={{
+                px:1.2, py:0.3, borderRadius:2, border:'1px solid',
+                borderColor: (usage.used_today||0) >= usage.daily_quota ? 'error.main'
+                  : (usage.used_today||0) >= usage.daily_quota * 0.8 ? 'warning.main' : 'primary.main',
+                fontSize:'0.7rem', fontWeight:600, lineHeight:1.4, whiteSpace:'nowrap',
+                color: (usage.used_today||0) >= usage.daily_quota ? 'error.main'
+                  : (usage.used_today||0) >= usage.daily_quota * 0.8 ? 'warning.main' : 'primary.main',
+              }}>
+                {usage.used_today||0}/{usage.daily_quota} msgs
+              </Box>
+            )}
             <Tooltip title="Sign out">
               <IconButton
                 size="small"

@@ -56,7 +56,8 @@ async def list_teams(_: dict = Depends(get_admin)):
         if d.get("team_id") == "admin":
             continue
         teams.append({
-            "team_id":        d.get("team_id"),
+            "id":             doc.id,           # Firestore document ID (always present)
+            "team_id":        d.get("team_id") or doc.id,
             "team_name":      d.get("team_name"),
             "email":          d.get("email"),
             "contact_person": d.get("contact_person"),
@@ -66,7 +67,7 @@ async def list_teams(_: dict = Depends(get_admin)):
             "quota_rpm":      d.get("quota_rpm", 20),
             "quota_daily":    d.get("quota_daily", 500),
         })
-    teams.sort(key=lambda t: t.get("created_at", ""), reverse=True)
+    teams.sort(key=lambda t: t.get("created_at") or "", reverse=True)
     return {"teams": teams, "total": len(teams)}
 
 
@@ -208,6 +209,16 @@ async def admin_create_team(
     """
     from datetime import datetime, timezone
     import os, stripe
+
+    # Validate required fields
+    if not req.team_name or not req.team_name.strip():
+        raise HTTPException(status_code=400, detail="Team name is required")
+    if not req.email or not req.email.strip():
+        raise HTTPException(status_code=400, detail="Email address is required")
+    if not req.password or len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if "@" not in req.email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
 
     db = get_db()
     email = req.email.strip().lower()

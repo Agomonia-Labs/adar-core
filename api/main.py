@@ -20,6 +20,7 @@ from google.adk.sessions import DatabaseSessionService
 from google.genai.types import Content, Part
 
 from src.adar.agents.agents import build_arcl_orchestrator
+from google.cloud import firestore as _firestore
 from api.routes.polls import router as polls_router
 from api.routes.auth import router as auth_router, get_current_team
 from api.routes.admin import router as admin_router
@@ -102,26 +103,78 @@ app = FastAPI(
 # Register routers
 
 
+# Determine origins based on environment
+_PROD_ORIGINS = [
+    "https://arcl.tigers.agomoniai.com",
+    "https://www.arcl.tigers.agomoniai.com",
+    "https://adar.agomoniai.com",
+    "https://www.adar.agomoniai.com",
+]
+_DEV_ORIGINS = [
+    "http://localhost:5173", "http://localhost:5174",
+    "http://localhost:6001", "http://localhost:3000",
+    "http://127.0.0.1:5173", "http://127.0.0.1:6001",
+]
+_ALL_ORIGINS = _PROD_ORIGINS + (_DEV_ORIGINS if settings.APP_ENV != "production" else [])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://arcl.tigers.agomoniai.com",
-        "https://www.arcl.tigers.agomoniai.com",
-        "https://adar.agomoniai.com",
-        "https://www.adar.agomoniai.com",
-        "http://localhost:6001",
-        "http://localhost:3000",
-        "http://127.0.0.1:6001",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_ALL_ORIGINS,
     allow_credentials=True,
-    allow_methods=["POST", "GET", "DELETE", "OPTIONS", "PUT"],
-    allow_headers=["Content-Type", "X-API-Key", "X-Tenant-ID", "Authorization"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
 app.include_router(polls_router)
 app.include_router(auth_router)
+
+@app.get("/api/usage")
+async def get_usage(
+    team: dict = Depends(get_current_team),
+    _auth: bool = Depends(_verify_api_key),
+):
+    """Return today's usage and quota for the current team."""
+    from datetime import datetime, timezone
+    db = _firestore.AsyncClient(
+        project=settings.GCP_PROJECT_ID,
+        database=settings.FIRESTORE_DATABASE,
+    )
+    team_id = team["team_id"]
+    if team_id == "admin" or team.get("role") == "admin":
+        return {"used_today": 0, "daily_quota": 99999, "resets_at": "never", "plan": "admin"}
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    doc = await db.collection("adar_teams").document(team_id).get()
+    data = doc.to_dict() if doc.exists else {}
+
+    # Reset usage if it's a new day
+    last_reset = data.get("usage_reset_date", "")
+    usage_today = data.get("usage_today", 0)
+    logger.info(f"Usage read: team={team_id} today={today} last_reset={last_reset!r} count={usage_today} db={settings.FIRESTORE_DATABASE}")
+    if last_reset != today:
+        logger.info(f"Resetting usage: last_reset={last_reset!r} != today={today!r}")
+        usage_today = 0
+        await db.collection("adar_teams").document(team_id).update({
+            "usage_today": 0,
+            "usage_reset_date": today,
+        })
+
+    # Quota by plan if not explicitly set
+    PLAN_QUOTAS = {"basic": 50, "standard": 200, "unlimited": 1000, "complimentary": 200}
+    plan = data.get("subscription_plan", "standard")
+    daily_quota = (
+        data.get("daily_quota") or
+        data.get("quota_daily") or
+        PLAN_QUOTAS.get(plan, 200)
+    )
+    logger.info(f"Usage check: team={team_id} used={usage_today} quota={daily_quota}")
+    return {
+        "used_today": int(usage_today or 0),
+        "daily_quota": int(daily_quota or 200),
+        "resets_at": "midnight UTC",
+        "plan": plan,
+    }
 
 @app.get("/api/arcl/teams")
 async def get_arcl_teams(season: int = 69):
@@ -264,6 +317,41 @@ async def chat(
         logger.info(f"Chat OK — ip={client_ip} user={request.user_id} len={len(message)}")
 
         # Run evaluation and include in response (async, best-effort)
+        # Increment daily usage counter — fire and forget
+        # Increment usage directly (awaited) — skip for admin
+        try:
+            from datetime import datetime, timezone
+            from jose import jwt as _jose_jwt
+            _auth_header = http_request.headers.get("Authorization", "")
+            _token = _auth_header.replace("Bearer ", "")
+            _payload = _jose_jwt.decode(
+                _token,
+                os.environ.get('JWT_SECRET', 'change-me-in-production-use-secret-manager'),
+                algorithms=["HS256"],
+                options={"verify_exp": False},
+            )
+            _team_id = _payload.get("team_id", request.user_id)
+            if _payload.get("role") == "admin" or _team_id == "admin":
+                raise Exception("skip — admin user")
+            _today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            _cli = _firestore.AsyncClient(
+                project=settings.GCP_PROJECT_ID,
+                database=settings.FIRESTORE_DATABASE,
+            )
+            _ref = _cli.collection("adar_teams").document(_team_id)
+            _doc = await _ref.get()
+            _data = _doc.to_dict() if _doc.exists else {}
+            _current = int(_data.get("usage_today") or 0)
+            if _data.get("usage_reset_date", "") != _today:
+                _current = 0
+            await _ref.update({
+                "usage_today": _current + 1,
+                "usage_reset_date": _today,
+            })
+            logger.info(f"Usage: team={_team_id} count={_current + 1}")
+        except Exception as _e:
+            logger.error(f"Usage increment failed: {_e}", exc_info=True)
+
         eval_result = None
         try:
             eval_enabled = os.environ.get("EVAL_ENABLED", "true").lower() == "true"

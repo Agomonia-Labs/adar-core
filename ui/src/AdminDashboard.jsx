@@ -12,9 +12,12 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+const API_KEY = import.meta.env.VITE_API_KEY || ''
 
 function authHeaders(token) {
-  return { Authorization: `Bearer ${token}` }
+  const h = { Authorization: `Bearer ${token}` }
+  if (API_KEY) h['X-API-Key'] = API_KEY
+  return h
 }
 
 function StatusChip({ status }) {
@@ -81,7 +84,7 @@ export default function AdminDashboard({ token, onLogout }) {
     setEvalsLoading(true)
     try {
       const res = await fetch(`${API_URL}/admin/evals`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: authHeaders(token)
       })
       const data = await res.json()
       setEvals(data)
@@ -90,11 +93,14 @@ export default function AdminDashboard({ token, onLogout }) {
   }
 
   const handleDelete = async (team) => {
-    if (!window.confirm(`Permanently delete "${team.team_name}"? This cannot be undone.`)) return
+    const label = team.team_name || team.email || team.team_id || 'this incomplete record'
+    if (!window.confirm(`Permanently delete "${label}"? This cannot be undone.`)) return
+    const docId = team.team_id || team.id
+    if (!docId) { setError('Cannot delete: record has no ID. Delete it directly from Firestore.'); return }
     try {
       const res = await fetch(`${API_URL}/admin/teams/${team.team_id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: authHeaders(token),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Failed to delete')
@@ -104,14 +110,14 @@ export default function AdminDashboard({ token, onLogout }) {
   }
 
   const handleCreateTeam = async () => {
-    if (!newTeam.team_name || !newTeam.email || !newTeam.password) {
-      setError('Team name, email and password are required'); return
-    }
+    if (!newTeam.team_name?.trim()) { setError('Team name is required'); return }
+    if (!newTeam.email?.trim() || !newTeam.email.includes('@')) { setError('Valid email is required'); return }
+    if (!newTeam.password || newTeam.password.length < 6) { setError('Password must be at least 6 characters'); return }
     setCreating(true); setError(''); setMsg('')
     try {
       const res = await fetch(`${API_URL}/admin/teams/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
         body: JSON.stringify(newTeam),
       })
       const data = await res.json()
@@ -314,7 +320,11 @@ export default function AdminDashboard({ token, onLogout }) {
                         </Tooltip>
                       )}
                       <Tooltip title="Delete team">
-                        <IconButton size="small" sx={{ color: '#999','&:hover':{color:'#E24B4A'} }}
+                        <IconButton size="small"
+                          sx={{
+                            color: ['pending','pending_payment'].includes(team.status) ? '#E24B4A' : '#999',
+                            '&:hover':{color:'#E24B4A'}
+                          }}
                           onClick={() => handleDelete(team)}>
                           <span style={{fontSize:'0.85rem'}}>🗑</span>
                         </IconButton>

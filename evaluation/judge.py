@@ -24,6 +24,7 @@ from src.adar.config import settings
 logger = logging.getLogger(__name__)
 
 EVALS_COLLECTION = "arcl_evals"
+from src.adar.config import settings
 GEMINI_MODEL = settings.ADK_MODEL  # same model as the ADK orchestrator
 GOOGLE_API_KEY   = os.environ.get("GOOGLE_API_KEY", "")
 
@@ -53,7 +54,7 @@ async def _call_judge(question: str, response: str) -> dict:
     client = genai.Client(api_key=GOOGLE_API_KEY)
     config = types.GenerateContentConfig(
         temperature=0.1,
-        max_output_tokens=1024,
+        max_output_tokens=2048,
         response_mime_type="application/json",
     )
 
@@ -82,6 +83,12 @@ async def _call_judge(question: str, response: str) -> dict:
 
     # Strip markdown fences
     raw = raw.replace("```json", "").replace("```", "").strip()
+
+    # Extract first complete JSON object if response has extra text
+    import re as _re
+    json_match = _re.search(r"{[^{}]*}", raw, _re.DOTALL)
+    if json_match and len(json_match.group()) > 10:
+        raw = json_match.group()
 
     # Remove // comments
     raw = re.sub(r"//[^\n]*", "", raw)

@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "bdas-493785"
+  },
+  "targets": {
+    "bdas-493785": {
+      "hosting": {
+        "app":     ["bdas-493785"],
+        "landing": ["adar-landing-arcl"]
+      }
+    }
   }
 }
