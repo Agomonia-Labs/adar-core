@@ -1,5 +1,7 @@
 import logging
-from src.adar.db import vector_search, get_player_season_records
+from typing import Optional
+
+from src.adar.db import vector_search, direct_query
 from src.adar.config import ARCL_PLAYERS_COLLECTION, ARCL_PLAYER_SEASON_COLLECTION
 
 logger = logging.getLogger(__name__)
@@ -383,3 +385,17 @@ async def get_top_performers_live(
             break
 
     return result
+
+
+async def get_player_season_records(
+    player_name: str,
+    season: Optional[str] = None,
+) -> list[dict]:
+    """Direct lookup for player season stats by exact player_name."""
+    from config import ARCL_PLAYER_SEASON_COLLECTION
+    filters = {"player_name": player_name}
+    if season:
+        filters["season"] = season
+    records = await direct_query(ARCL_PLAYER_SEASON_COLLECTION, filters, limit=50)
+    records.sort(key=lambda x: x.get("season", ""), reverse=True)
+    return records

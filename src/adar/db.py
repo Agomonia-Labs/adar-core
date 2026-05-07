@@ -7,7 +7,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.vector import Vector
 from google.cloud.firestore_v1.base_vector_query import DistanceMeasure
 
-from src.adar.config import settings, ARCL_TEAMS_COLLECTION, ARCL_PLAYER_SEASON_COLLECTION
+from src.adar.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -170,36 +170,6 @@ async def get_documents_by_field(
     return await direct_query(collection, filters, limit=limit)
 
 
-async def get_team_standings(
-    team_name: str,
-    season: Optional[str] = None,
-) -> list[dict]:
-    """Direct lookup for a team's standings records by exact team_name."""
-    filters = {"team_name": team_name}
-    if season:
-        filters["season"] = season
-
-    records = await direct_query(ARCL_TEAMS_COLLECTION, filters, limit=50)
-    records = [
-        r for r in records
-        if r.get("wins", 0) > 0 or r.get("losses", 0) > 0 or r.get("points", 0) > 0
-    ]
-    records.sort(key=lambda x: x.get("season", ""), reverse=True)
-    return records
-
-
-async def get_player_season_records(
-    player_name: str,
-    season: Optional[str] = None,
-) -> list[dict]:
-    """Direct lookup for player season stats by exact player_name."""
-    filters = {"player_name": player_name}
-    if season:
-        filters["season"] = season
-
-    records = await direct_query(ARCL_PLAYER_SEASON_COLLECTION, filters, limit=50)
-    records.sort(key=lambda x: x.get("season", ""), reverse=True)
-    return records
 
 
 async def add_document(collection: str, data: dict) -> str:

@@ -10,7 +10,7 @@ import httpx
 from bs4 import BeautifulSoup
 from typing import Optional
 
-from src.adar.db import vector_search, get_team_standings, direct_query
+from src.adar.db import vector_search, direct_query
 from src.adar.config import (
     ARCL_TEAMS_COLLECTION,
     ARCL_SEASON_NAME_TO_ID,
@@ -945,3 +945,20 @@ async def get_player_dismissals(player_name: str, team_name: str, season: str = 
             "total_runs":    sum(runs_list),
         },
     }
+
+
+async def get_team_standings(
+    team_name: str,
+    season: Optional[str] = None,
+) -> list[dict]:
+    """Direct lookup for a team's standings records by exact team_name."""
+    filters = {"team_name": team_name}
+    if season:
+        filters["season"] = season
+    records = await direct_query(ARCL_TEAMS_COLLECTION, filters, limit=50)
+    records = [
+        r for r in records
+        if r.get("wins", 0) > 0 or r.get("losses", 0) > 0 or r.get("points", 0) > 0
+    ]
+    records.sort(key=lambda x: x.get("season", ""), reverse=True)
+    return records
