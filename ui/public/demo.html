@@ -329,6 +329,39 @@ tr:last-child td{border-bottom:none}
   <div id="slide-area">
 
 
+    <!-- A0: Origin & meaning of Adar -->
+    <div class="slide" id="a0">
+      <div class="slide-num">Intro · 00 — The Origin</div>
+      <h2>What is <span style="color:var(--g)">Adar</span>?</h2>
+      <p class="lead">An agentic AI platform built with care, precision, and purpose — for the communities that need it most.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px">
+        <div style="background:linear-gradient(135deg,rgba(46,184,126,0.1),rgba(46,184,126,0.03));border:1px solid rgba(46,184,126,0.25);border-radius:14px;padding:22px">
+          <div style="font-family:'DM Serif Display',serif;font-size:2.4rem;color:var(--gd);margin-bottom:4px">আদর</div>
+          <div style="font-size:0.78rem;color:var(--muted);font-style:italic;margin-bottom:10px">Bengali · noun · /aː.d̪or/</div>
+          <div style="font-size:0.88rem;color:var(--text);line-height:1.65"><strong>Affection, care, and thoughtful attention</strong> — the quality of tending to someone with warmth and precision.</div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px">
+          <div style="font-weight:700;font-size:0.82rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--g);margin-bottom:12px">ADAR stands for</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:0.88rem"><span style="font-family:'DM Serif Display',serif;font-size:1.1rem;color:var(--gd)">A</span>gentic</div>
+            <div style="font-size:0.88rem"><span style="font-family:'DM Serif Display',serif;font-size:1.1rem;color:var(--gd)">D</span>ata</div>
+            <div style="font-size:0.88rem"><span style="font-family:'DM Serif Display',serif;font-size:1.1rem;color:var(--gd)">A</span>ccess &amp;</div>
+            <div style="font-size:0.88rem"><span style="font-family:'DM Serif Display',serif;font-size:1.1rem;color:var(--gd)">R</span>easoning</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px">
+          <span style="font-size:1.1rem">🏏</span>
+          <div style="font-size:0.84rem;color:var(--text);line-height:1.6"><strong>Born from community passion</strong> — built to support recreational cricketers in Washington &amp; the Greater Seattle area with meaningful data insights.</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px">
+          <span style="font-size:1.1rem">🌐</span>
+          <div style="font-size:0.84rem;color:var(--text);line-height:1.6"><strong>General-purpose platform</strong> — ARCL cricket is the reference implementation. The same platform powers any domain, any league, any community.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- A1: What is ADAR -->
     <div class="slide" id="a1">
       <div class="slide-num">Intro · 01 — The Name</div>
@@ -896,8 +929,9 @@ tr:last-child td{border-bottom:none}
 <script>
 // ═══ SCRIPT ═══
 
-const SLIDES = ['a1','a2','a3','a4','s1','s2','s3','s4','s5','s6','s7','s8','s10','s9'];
+const SLIDES = ['a0','a1','a2','a3','a4','s1','s2','s3','s4','s5','s6','s7','s8','s10','s9'];
 const TITLES = [
+  'What is Adar?',
   'ADAR — What the name means',
   'Multi-agent architecture',
   'How agents communicate — tool calling',
@@ -917,6 +951,9 @@ const TITLES = [
 
 // Full narration script — Indian male voice, slower
 const NARRATION = [
+  // A0
+  "Adar stands for Agentic Data Access and Reasoning — a platform designed to understand user intent with care and precision. Inspired by the Bengali word আদর — pronounced Adar — meaning affection, care, and thoughtful attention, Adar brings a human-centred approach to AI systems. It transforms natural language into intelligent actions by combining reasoning, data access, and execution, ensuring that every response is not only accurate, but also context-aware, grounded, and aligned with user needs. This initiative is inspired by a passion to support community cricketers in Washington and the Greater Seattle area by providing meaningful insights through data.",
+
   // A1
   "Let us begin with the name. ADAR stands for Agentic Data Access and Reasoning. Each word carries specific meaning. Agentic means the system uses autonomous AI agents that decide for themselves which tools to call, in what order, and how to chain multiple steps together. Data means the system works with live, structured cricket data — not a static database. Access means it reaches across multiple sources — arcl dot org web pages, Firestore vector search, Cloud SQL sessions. And Reasoning means the AI does not just retrieve information — it reasons over it, computes team strength scores, aggregates multiple seasons, and interprets patterns. Together these four concepts make Adar fundamentally different from a simple search or chatbot.",
 

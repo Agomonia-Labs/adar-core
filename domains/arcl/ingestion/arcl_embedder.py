@@ -19,7 +19,7 @@ from src.adar.config import (
     ARCL_FAQ_COLLECTION,
     ARCL_PLAYER_SEASON_COLLECTION,
 )
-from domains.arcl.ingestion.arcl_scraper import ScrapedChunk
+from ingestion.arcl_scraper import ScrapedChunk
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +122,11 @@ async def embed_and_store_chunks(
 
             doc = _chunk_to_doc(chunk, embedding)
             try:
-                _, ref = await db.collection(collection).add(doc)
+                # Deterministic doc ID — prevents duplicates on re-ingest
+                import hashlib
+                _id_src = f"{chunk.page_type}:{chunk.source_url}:{chunk.content[:80]}"
+                doc_id  = hashlib.md5(_id_src.encode()).hexdigest()
+                await db.collection(collection).document(doc_id).set(doc)
                 stored_counts[collection] = stored_counts.get(collection, 0) + 1
             except Exception as e:
                 logger.error(f"Store failed: {e}")

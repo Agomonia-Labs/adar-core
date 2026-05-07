@@ -490,7 +490,8 @@ export default function App() {
     return 'login'
   })
   const [token, setToken]   = useState(() => localStorage.getItem('adar_token') || '')
-  const [usage, setUsage]   = useState(null)
+  const [usage, setUsage]       = useState(null)
+  const [ingestStatus, setIngestStatus] = useState(null)
   const [teamName, setTeamName] = useState(() => localStorage.getItem('adar_team_name') || '')
 
   // Auto-logout after 30 minutes
@@ -508,9 +509,32 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('payment') === 'success') {
-      localStorage.setItem('adar_status', 'active')
       window.history.replaceState({}, '', window.location.pathname)
-      setPage('chat')
+      // Activate via API — wait for it before entering chat
+      const activateAndEnter = async () => {
+        const t = localStorage.getItem('adar_token')
+        if (t) {
+          try {
+            const res = await fetch(`${API_URL}/api/payments/activate`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${t}`,
+                'Content-Type': 'application/json',
+                ...(API_KEY ? { 'X-API-Key': API_KEY } : {})
+              }
+            })
+            if (res.ok) {
+              const data = await res.json()
+              console.log('Activation result:', data)
+            }
+          } catch (e) {
+            console.warn('Activate call failed:', e)
+          }
+        }
+        localStorage.setItem('adar_status', 'active')
+        setPage('chat')
+      }
+      activateAndEnter()
     } else if (params.get('payment') === 'cancelled') {
       window.history.replaceState({}, '', window.location.pathname)
       if (localStorage.getItem('adar_status') === 'pending_payment') setPage('checkout')
@@ -532,6 +556,30 @@ export default function App() {
       setPage(data.role === 'admin' ? 'admin' : 'chat')
     }
   }
+
+  // Poll ingestion status until complete
+  useEffect(() => {
+    const role = localStorage.getItem('adar_role')
+    if (page !== 'chat' || role === 'admin') return
+
+    const checkIngest = async () => {
+      try {
+        const t = localStorage.getItem('adar_token')
+        if (!t) return
+        const headers = { Authorization: `Bearer ${t}` }
+        if (API_KEY) headers['X-API-Key'] = API_KEY
+        const res = await fetch(`${API_URL}/api/ingestion/status`, { headers })
+        if (res.ok) {
+          const data = await res.json()
+          setIngestStatus(data.status === 'complete' ? null : data)
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    checkIngest()
+    const interval = setInterval(checkIngest, 30 * 1000)
+    return () => clearInterval(interval)
+  }, [page])
 
   // Poll usage every 2 minutes while on chat page
   useEffect(() => {

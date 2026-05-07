@@ -412,6 +412,9 @@ If a team returns from Stripe via back button without paying:
 | `POST /api/auth/reset-password` | Validate token and set new password |
 | `GET  /api/auth/me` | Current user info |
 | `GET  /api/arcl/teams` | All ARCL team names (for registration dropdown) |
+| `POST /api/payments/activate` | Activate team after Stripe checkout (webhook fallback) |
+| `GET  /api/ingestion/status` | Team data ingestion status (pending/running/complete) |
+| `GET  /api/usage` | Today's message count and quota |
 | `GET  /admin/teams` | List all teams (admin) |
 | `POST /admin/teams/create` | Admin creates team directly (any plan, complimentary) |
 | `POST /admin/teams/{id}/approve` | Manually approve pending team |
@@ -455,6 +458,22 @@ https://api.arcl.tigers.agomoniai.com/api/payments/webhook
 ```
 
 Events: `checkout.session.completed` · `invoice.payment_succeeded` · `invoice.payment_failed` · `customer.subscription.deleted` · `customer.subscription.updated`
+
+### Auto-ingestion on signup
+
+When a team subscribes, their stats are scraped from arcl.org automatically:
+
+```
+POST /api/payments/activate
+  → _find_team_league(team_name) — scans all ARCL divisions on arcl.org
+  → run_ingestion(only="teamstats", leagues=X, seasons=69)
+  → Firestore: ingestion_status: pending → running → complete
+```
+
+Chat UI polls `/api/ingestion/status` every 30s and shows a loading banner until complete.
+
+**Deduplication:** `arcl_embedder.py` uses MD5 of `(page_type + source_url + content)`
+as the Firestore document ID. Re-ingestion overwrites existing docs — no duplicates.
 
 ### Email notifications (Gmail SMTP)
 

@@ -31,7 +31,7 @@ TEAMS_COLLECTION = "adar_teams"
 JWT_SECRET       = os.environ.get("JWT_SECRET", "change-me-in-production-use-secret-manager")
 JWT_ALGORITHM    = "HS256"
 JWT_EXPIRE_DAYS  = 30
-ADMIN_EMAIL      = os.environ.get("ADMIN_EMAIL", "admin@adar.agomoniai.com")
+ADMIN_EMAIL      = os.environ.get("ADMIN_EMAIL", "admin@arcl.org")
 ADMIN_PASSWORD   = os.environ.get("ADMIN_PASSWORD", "")   # Set via Secret Manager
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -248,12 +248,21 @@ async def login(req: LoginRequest):
         "status":    team["status"],
     })
 
+    # Re-read status from Firestore — webhook may have updated it since token was cached
+    try:
+        from src.adar.db import get_firestore as _get_fs
+        _db = _get_fs()
+        _doc = await _db.collection(TEAMS_COLLECTION).document(team["team_id"]).get()
+        _fresh_status = (_doc.to_dict() or {}).get("status", team["status"]) if _doc.exists else team["status"]
+    except Exception:
+        _fresh_status = team["status"]
+
     return TokenResponse(
         access_token=token,
         team_id=team["team_id"],
         team_name=team["team_name"],
         role=team.get("role", "team"),
-        status=team["status"],
+        status=_fresh_status,
     )
 
 

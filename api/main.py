@@ -129,6 +129,23 @@ app.add_middleware(
 app.include_router(polls_router)
 app.include_router(auth_router)
 
+@app.get("/api/ingestion/status")
+async def ingestion_status(team: dict = Depends(get_current_team)):
+    """Return ingestion status for the current team."""
+    team_id = team["team_id"]
+    if team_id == "admin" or team.get("role") == "admin":
+        return {"status": "complete", "message": ""}
+    db = _firestore.AsyncClient(
+        project=settings.GCP_PROJECT_ID,
+        database=settings.FIRESTORE_DATABASE,
+    )
+    doc = await db.collection("adar_teams").document(team_id).get()
+    data = doc.to_dict() if doc.exists else {}
+    status = data.get("ingestion_status", "complete")
+    message = data.get("ingestion_message", "")
+    return {"status": status, "message": message, "team_id": team_id}
+
+
 @app.get("/api/usage")
 async def get_usage(
     team: dict = Depends(get_current_team),

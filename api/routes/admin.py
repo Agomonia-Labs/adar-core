@@ -282,6 +282,19 @@ async def admin_create_team(
     await db.collection(TEAMS_COLLECTION).document(team_id).set(team_data)
     logger.info(f"Admin created team: {team_id} plan={req.plan} status={req.status}")
 
+    # Send welcome email if team is active (not pending payment)
+    if req.status == "active" and req.email.strip():
+        try:
+            from src.adar.notify import send_welcome_email
+            await send_welcome_email(
+                to=req.email.strip(),
+                team_name=req.team_name.strip(),
+                plan=req.plan or "complimentary",
+            )
+            logger.info(f"Welcome email sent to {req.email}")
+        except Exception as e:
+            logger.warning(f"Welcome email failed (non-fatal): {e}")
+
     return {
         "message":            f"Team '{req.team_name}' created successfully",
         "team_id":            team_id,

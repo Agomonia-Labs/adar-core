@@ -18,6 +18,7 @@ Endpoints:
 import os
 import json
 import logging
+import asyncio
 from datetime import datetime, timezone
 
 import stripe
@@ -342,6 +343,94 @@ async def create_portal(team: dict = Depends(get_current_team)):
 
 # ── Stripe Webhook ────────────────────────────────────────────────────────────
 
+@router.post("/activate")
+async def activate_after_checkout(team: dict = Depends(get_current_team)):
+    """
+    Called by frontend when returning from Stripe with ?payment=success.
+    Acts as a fallback if the webhook was delayed or missed.
+    Verifies the team has a valid Stripe subscription before activating.
+    """
+    team_id = team.get("team_id")
+    if not team_id:
+        raise HTTPException(status_code=400, detail="Invalid team")
+
+    db = get_db()
+    doc = await db.collection(TEAMS_COLLECTION).document(team_id).get()
+    data = doc.to_dict() if doc.exists else {}
+
+    # Already active — nothing to do
+    if data.get("status") == "active":
+        return {"status": "active", "message": "Already active"}
+
+    # Check Stripe for a valid subscription
+    customer_id = data.get("stripe_customer_id")
+    activated_sub = None
+    if customer_id:
+        try:
+            subs = stripe.Subscription.list(customer=customer_id, status="all", limit=5)
+            for sub in subs.auto_paging_iter():
+                if sub.status in ("active", "trialing"):
+                    activated_sub = sub
+                    break
+            if activated_sub:
+                await db.collection(TEAMS_COLLECTION).document(team_id).update({
+                    "status":                 "active",
+                    "subscription_status":    activated_sub.status,
+                    "stripe_subscription_id": activated_sub.id,
+                    "approved_at":            datetime.now(timezone.utc).isoformat(),
+                    "auto_approved":          True,
+                })
+                logger.info(f"Activated team={team_id} via /activate (Stripe sub found)")
+        except Exception as e:
+            logger.warning(f"Stripe check failed in /activate: {e}")
+
+    # Force-activate if still pending (Stripe not found or webhook delayed)
+    if not activated_sub and data.get("status") == "pending_payment":
+        await db.collection(TEAMS_COLLECTION).document(team_id).update({
+            "status":      "active",
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "auto_approved": True,
+        })
+        logger.info(f"Force-activated team={team_id} via /activate (no sub found)")
+
+    # Send welcome email (webhook may have missed it)
+    if NOTIFY_ENABLED:
+        try:
+            _fresh = await db.collection(TEAMS_COLLECTION).document(team_id).get()
+            _d = _fresh.to_dict() or {}
+            if _d.get("email") and not _d.get("welcome_email_sent"):
+                from src.adar.notify import send_welcome_email
+                await send_welcome_email(
+                    to=_d["email"],
+                    team_name=_d.get("team_name", team_id),
+                    plan=_d.get("subscription_plan", "standard"),
+                )
+                await db.collection(TEAMS_COLLECTION).document(team_id).update({
+                    "welcome_email_sent": True
+                })
+                logger.info(f"Welcome email sent from /activate to {_d['email']}")
+        except Exception as e:
+            logger.warning(f"Welcome email in /activate failed: {e}")
+
+    # Kick off background ingestion — fire and forget
+    try:
+        from domains.arcl.ingestion.ingest_team import ingest_team_data
+        _fresh2 = await db.collection(TEAMS_COLLECTION).document(team_id).get()
+        _team_name = (_fresh2.to_dict() or {}).get("team_name", team_id)
+        await db.collection(TEAMS_COLLECTION).document(team_id).update({
+            "ingestion_status":  "pending",
+            "ingestion_message": "Your team data is being loaded...",
+        })
+        asyncio.ensure_future(ingest_team_data(team_id, _team_name))
+        logger.info(f"Auto-ingest queued from /activate for team={team_id}")
+    except Exception as e:
+        logger.warning(f"Auto-ingest queue failed (non-fatal): {e}")
+
+    return {"status": "active", "message": "Activated"}
+
+    return {"status": data.get("status"), "message": "No action taken"}
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     """
@@ -415,16 +504,35 @@ async def stripe_webhook(request: Request):
             if NOTIFY_ENABLED:
                 try:
                     team_doc = await db.collection(TEAMS_COLLECTION).document(team_id).get()
-                    td = team_doc.to_dict() or {}
+                    team_doc_data = team_doc.to_dict() or {}
                     await send_welcome_email(
-                        to=td.get("email", ""),
-                        team_name=td.get("team_name", team_id),
+                        to=team_doc_data.get("email", ""),
+                        team_name=team_doc_data.get("team_name", team_id),
                         plan=plan,
                         trial_ends=update_data.get("trial_ends_at", ""),
                     )
-                    logger.info(f"Welcome email sent to {td.get('email')}")
+                    await db.collection(TEAMS_COLLECTION).document(team_id).update({"welcome_email_sent": True})
+                    logger.info(f"Welcome email sent to {team_doc_data.get('email')}")
                 except Exception as e:
                     logger.warning(f"Welcome email failed (non-fatal): {e}")
+
+            # Kick off background team data ingestion
+            try:
+                from domains.arcl.ingestion.ingest_team import ingest_team_data
+                # Safe access — team_doc_data may not exist if welcome email block failed
+                _doc2 = await db.collection(TEAMS_COLLECTION).document(team_id).get()
+                t_name = (_doc2.to_dict() or {}).get("team_name", team_id)
+                # Set status to pending immediately
+                await db.collection(TEAMS_COLLECTION).document(team_id).update({
+                    "ingestion_status":  "pending",
+                    "ingestion_message": "Your team data is being loaded...",
+                    "ingestion_updated": datetime.now(timezone.utc).isoformat(),
+                })
+                # Fire and forget — don't block webhook response
+                asyncio.ensure_future(ingest_team_data(team_id, t_name))
+                logger.info(f"Auto-ingest queued for team={team_id}")
+            except Exception as e:
+                logger.warning(f"Auto-ingest queue failed (non-fatal): {e}")
 
         except Exception as e:
             logger.error(f"Error handling checkout.session.completed: {e}", exc_info=True)
@@ -493,15 +601,14 @@ async def stripe_webhook(request: Request):
                 if tid:
                     doc = await db.collection(TEAMS_COLLECTION).document(tid).get()
                     td = doc.to_dict() or {}
-                    import datetime
-                    trial_end = datetime.datetime.fromtimestamp(
-                        sub.get("trial_end", 0), tz=datetime.timezone.utc
+                    trial_end = datetime.fromtimestamp(
+                        sub.get("trial_end", 0), tz=timezone.utc
                     ).isoformat() if sub.get("trial_end") else ""
                     await send_trial_ending_email(
-                        to=td.get("email",""),
+                        to=td.get("email", ""),
                         team_name=td.get("team_name", tid),
                         trial_ends=trial_end,
-                        plan=td.get("subscription_plan","standard"),
+                        plan=td.get("subscription_plan", "standard"),
                     )
                     logger.info(f"Trial ending email sent to {td.get('email')}")
             except Exception as e:

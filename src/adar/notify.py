@@ -1,5 +1,5 @@
 """
-notify.py — SendGrid email notifications for payment events.
+notify.py — Gmail SMTP email notifications for Adar ARCL.
 
 Sends emails for:
 - Trial started (welcome)
@@ -9,10 +9,10 @@ Sends emails for:
 - Subscription cancelled (confirmation)
 
 Setup:
-  1. Create SendGrid account at sendgrid.com (free tier: 100 emails/day)
+  1. Generate Gmail App Password: myaccount.google.com → Security → App Passwords
   2. Get API key: Dashboard → Settings → API Keys → Create API Key
   3. Verify sender email: Settings → Sender Authentication
-  4. Add to .env: SENDGRID_API_KEY=SG.xxx
+  2. Add to GCP Secrets: gmail-user, gmail-app-password, from-email, frontend-url
   5. Add to .env: NOTIFY_FROM_EMAIL=noreply@adar.agomoniai.com
 """
 import os
@@ -21,44 +21,19 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
-FROM_EMAIL       = os.environ.get("NOTIFY_FROM_EMAIL", "noreply@adar.agomoniai.com")
-FROM_NAME        = "Adar ARCL"
-APP_URL          = os.environ.get("FRONTEND_URL", "https://arcl.tigers.agomoniai.com")
-
-
+FROM_EMAIL     = os.environ.get("NOTIFY_FROM_EMAIL", "admin@agomoniai.com")
+FROM_NAME      = "Adar ARCL"
+APP_URL        = os.environ.get("FRONTEND_URL", "https://adar.agomoniai.com")
 GMAIL_USER     = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASS = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 
 async def send_email(to: str, subject: str, html: str):
-    """
-    Send email via SendGrid (production) or Gmail SMTP (dev fallback).
-    Priority: SendGrid → Gmail → log only
-    """
+    """Send email via Gmail SMTP."""
     if not to or "@" not in to:
         logger.warning(f"Invalid email address: {to}")
         return
 
-    # Try SendGrid first
-    if SENDGRID_API_KEY:
-        try:
-            import sendgrid as sg_module
-            from sendgrid.helpers.mail import Mail, Email, To, Content
-            client = sg_module.SendGridAPIClient(SENDGRID_API_KEY)
-            message = Mail(
-                from_email=Email(FROM_EMAIL, FROM_NAME),
-                to_emails=To(to),
-                subject=subject,
-                html_content=Content("text/html", html),
-            )
-            response = client.send(message)
-            logger.info(f"Email sent via SendGrid: to={to} status={response.status_code}")
-            return
-        except Exception as e:
-            logger.error(f"SendGrid error: {e} — trying Gmail fallback")
-
-    # Gmail SMTP fallback (dev/testing)
     if GMAIL_USER and GMAIL_APP_PASS:
         try:
             import aiosmtplib
@@ -69,6 +44,12 @@ async def send_email(to: str, subject: str, html: str):
             msg["From"]    = f"{FROM_NAME} <{GMAIL_USER}>"
             msg["To"]      = to
             msg.attach(MIMEText(html, "html"))
+            import ssl, certifi
+            # Use certifi certs on Mac; on Linux (Cloud Run) system certs work fine
+            try:
+                tls_context = ssl.create_default_context(cafile=certifi.where())
+            except Exception:
+                tls_context = ssl.create_default_context()
             await aiosmtplib.send(
                 msg,
                 hostname="smtp.gmail.com",
@@ -76,6 +57,7 @@ async def send_email(to: str, subject: str, html: str):
                 username=GMAIL_USER,
                 password=GMAIL_APP_PASS,
                 start_tls=True,
+                tls_context=tls_context,
             )
             logger.info(f"Email sent via Gmail: to={to} subject='{subject}'")
             return
@@ -187,7 +169,7 @@ async def email_payment_succeeded(to: str, team_name: str, amount: str, next_dat
       <strong>Plan:</strong> {plan.capitalize()}<br>
       <strong>Next billing date:</strong> {next_date}
     </div>
-    {_btn("Open Adar ARCL", APP_URL)}
+    {_btn("Open Adar ARCL", f"{APP_URL}")}
     <p style="color:#5A8A70; font-size:0.85rem;">
       View your invoice history in the <a href="{APP_URL}?page=billing" style="color:#2EB87E;">Billing section</a>.
     </p>"""
@@ -257,7 +239,7 @@ async def send_welcome_email(to: str, team_name: str, plan: str = "standard", tr
           <li>Top 5 batsmen in Div H</li>
         </ul>
         <div style="text-align:center;margin:24px 0">
-          <a href="https://arcl.tigers.agomoniai.com"
+          <a href="{APP_URL}"
             style="background:#2EB87E;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600">
             Open Adar →
           </a>
@@ -294,7 +276,7 @@ async def send_trial_ending_email(to: str, team_name: str, trial_ends: str, plan
           <li>Click Cancel subscription</li>
         </ol>
         <div style="text-align:center;margin:20px 0">
-          <a href="https://arcl.tigers.agomoniai.com"
+          <a href="{APP_URL}"
             style="background:#2EB87E;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600">
             Manage billing →
           </a>
