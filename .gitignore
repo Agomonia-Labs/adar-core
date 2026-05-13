@@ -1,6 +1,7 @@
 .env
 .env.local
 .env.production
+.env.geetabitan
 venv/
 __pycache__/
 *.pyc
