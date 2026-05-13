@@ -1,8 +1,10 @@
 import os
 from dotenv import load_dotenv
-# Only load .env in local development — never in production
+# Only load .env in local development — never in production.
+# Set DOTENV_FILE=.env.geetabitan to run as Geetabitan locally.
 if os.environ.get("APP_ENV") != "production":
-    load_dotenv(override=True)
+    _env_file = os.environ.get("DOTENV_FILE", ".env")
+    load_dotenv(_env_file, override=True)
 
 import uuid
 import time
@@ -19,7 +21,8 @@ from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.genai.types import Content, Part
 
-from src.adar.agents.agents import build_arcl_orchestrator
+# ── CHANGE 1: import build_agents (was build_arcl_orchestrator) ──────────────
+from src.adar.agents.agents import build_agents
 from google.cloud import firestore as _firestore
 from api.routes.polls import router as polls_router
 from api.routes.auth import router as auth_router, get_current_team
@@ -28,12 +31,14 @@ from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
 from api.schemas import ChatRequest, ChatResponse, SessionResponse
 from src.adar.config import settings
+from src.adar.config import DOMAIN, OFFTOPIC_GUARD
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 session_service: DatabaseSessionService = None
-arcl_orchestrator = None
+# ── CHANGE 2: generic name (was arcl_orchestrator) ───────────────────────────
+orchestrator = None
 APP_NAME = settings.APP_NAME
 
 # ── Rate limiting ────────────────────────────────────────────────────────────
@@ -47,7 +52,6 @@ def _check_rate_limit(ip: str) -> bool:
     """Returns True if request is allowed, False if rate limited."""
     now = time.time()
     window_start = now - RATE_LIMIT_WINDOW
-    # Remove old entries
     _rate_buckets[ip] = [t for t in _rate_buckets[ip] if t > window_start]
     if len(_rate_buckets[ip]) >= RATE_LIMIT_REQUESTS:
         return False
@@ -62,14 +66,14 @@ API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 def _verify_api_key(api_key: Optional[str] = Depends(API_KEY_HEADER)) -> bool:
     """
     Verify API key if one is configured.
-    If ARCL_API_KEY is not set in config, auth is skipped (dev mode).
-    Also accepts requests with no key when JWT auth will handle it separately.
+    # ── CHANGE 3: reads settings.API_KEY which resolves per DOMAIN ────────────
+    If no key is configured, auth is skipped (dev mode).
     """
-    expected = getattr(settings, "ARCL_API_KEY", None)
+    expected = getattr(settings, "API_KEY", None)
     if not expected:
-        return True  # No key configured — allow all
+        return True  # No key configured — allow all (dev mode)
     if not api_key:
-        return True  # No key sent — allow (JWT auth handles identity)
+        return True  # No key sent — JWT auth handles identity
     if api_key != expected:
         raise HTTPException(status_code=401, detail="Invalid API key")
     return True
@@ -79,36 +83,51 @@ def _verify_api_key(api_key: Optional[str] = Depends(API_KEY_HEADER)) -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global session_service, arcl_orchestrator
-    logger.info("Starting Adar ARCL API...")
+    # ── CHANGE 4: use generic orchestrator + build_agents() ──────────────────
+    global session_service, orchestrator
+    logger.info(f"Starting Adar {DOMAIN.upper()} API...")
     session_service = DatabaseSessionService(db_url=settings.SESSION_DB_URL)
-    arcl_orchestrator = build_arcl_orchestrator()
-    logger.info(f"ARCL orchestrator ready — model: {settings.ADK_MODEL}")
+    orchestrator, _ = build_agents()
+    logger.info(f"Orchestrator ready — domain: {DOMAIN}  model: {settings.ADK_MODEL}")
     yield
-    logger.info("Shutting down Adar ARCL API...")
+    logger.info(f"Shutting down Adar {DOMAIN.upper()} API...")
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
+# ── CHANGE 5: title/description are domain-aware ─────────────────────────────
+_DOMAIN_META = {
+    "arcl": {
+        "title":       "Adar ARCL API",
+        "description": "Multi-agent AI assistant for the American Recreational Cricket League",
+    },
+    "geetabitan": {
+        "title":       "Adar Geetabitan API",
+        "description": "Multi-agent AI assistant for Geetabitan — Rabindranath Tagore's complete songs",
+    },
+}
+_meta = _DOMAIN_META.get(DOMAIN, _DOMAIN_META["arcl"])
+
 app = FastAPI(
-    title="Adar ARCL API",
-    description="Multi-agent AI assistant for the American Recreational Cricket League",
-    version="1.0.0",
-    lifespan=lifespan,
-    # Disable docs in production to avoid exposing schema
-    docs_url="/docs" if getattr(settings, "APP_ENV", "production") != "production" else None,
-    redoc_url=None,
+    title       = _meta["title"],
+    description = _meta["description"],
+    version     = "1.0.0",
+    lifespan    = lifespan,
+    docs_url    = "/docs" if getattr(settings, "APP_ENV", "production") != "production" else None,
+    redoc_url   = None,
 )
 
-# Register routers
-
-
-# Determine origins based on environment
+# ── CHANGE 6: CORS origins include geetabitan domain ─────────────────────────
 _PROD_ORIGINS = [
     "https://arcl.tigers.agomoniai.com",
     "https://www.arcl.tigers.agomoniai.com",
     "https://adar.agomoniai.com",
     "https://www.adar.agomoniai.com",
+    "https://geetabitan.adar.agomoniai.com",
+    "https://www.geetabitan.adar.agomoniai.com",
+    # Firebase default URLs
+    "https://geetabitan-adar.web.app",
+    "https://geetabitan-adar.firebaseapp.com",
 ]
 _DEV_ORIGINS = [
     "http://localhost:5173", "http://localhost:5174",
@@ -124,7 +143,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 app.include_router(polls_router)
 app.include_router(auth_router)
@@ -165,7 +183,6 @@ async def get_usage(
     doc = await db.collection("adar_teams").document(team_id).get()
     data = doc.to_dict() if doc.exists else {}
 
-    # Reset usage if it's a new day
     last_reset = data.get("usage_reset_date", "")
     usage_today = data.get("usage_today", 0)
     logger.info(f"Usage read: team={team_id} today={today} last_reset={last_reset!r} count={usage_today} db={settings.FIRESTORE_DATABASE}")
@@ -177,7 +194,6 @@ async def get_usage(
             "usage_reset_date": today,
         })
 
-    # Quota by plan if not explicitly set
     PLAN_QUOTAS = {"basic": 50, "standard": 200, "unlimited": 1000, "complimentary": 200}
     plan = data.get("subscription_plan", "standard")
     daily_quota = (
@@ -187,11 +203,12 @@ async def get_usage(
     )
     logger.info(f"Usage check: team={team_id} used={usage_today} quota={daily_quota}")
     return {
-        "used_today": int(usage_today or 0),
+        "used_today":  int(usage_today or 0),
         "daily_quota": int(daily_quota or 200),
-        "resets_at": "midnight UTC",
-        "plan": plan,
+        "resets_at":   "midnight UTC",
+        "plan":        plan,
     }
+
 
 @app.get("/api/arcl/teams")
 async def get_arcl_teams(season: int = 69):
@@ -219,6 +236,8 @@ async def get_arcl_teams(season: int = 69):
                 continue
     teams.sort(key=lambda x: x["name"])
     return {"teams": teams, "season_id": season}
+
+
 app.include_router(admin_router)
 app.include_router(payments_router)
 
@@ -275,7 +294,6 @@ async def chat(
     if len(message) > 2000:
         raise HTTPException(status_code=400, detail="Message too long (max 2000 characters)")
 
-    # Sanitise user_id — only allow alphanumeric + underscore/dash
     import re
     if not re.match(r'^[a-zA-Z0-9_\-]{1,64}$', request.user_id):
         raise HTTPException(status_code=400, detail="Invalid user_id format")
@@ -283,36 +301,31 @@ async def chat(
     try:
         session = await get_or_create_session(request.user_id, request.session_id)
 
+        # ── CHANGE 7: use generic orchestrator (was arcl_orchestrator) ────────
         runner = Runner(
-            agent=arcl_orchestrator,
+            agent=orchestrator,
             app_name=APP_NAME,
             session_service=session_service,
         )
 
-        # ── Off-topic guard — block non-ARCL questions cheaply ──
-        OFF_TOPIC = [
-            "python","javascript","java","ruby","golang","write a program",
-            "write code","write a script","recipe","cooking","weather","stock market",
-            "crypto","bitcoin","movie","music","song","lyrics","joke","poem",
-            "write an essay","write a story","translate","machine learning tutorial",
-            "sql injection","how to hack","calculus","algebra",
-        ]
-        ARCL_HINTS = [
-            "arcl","cricket","batting","bowling","wicket","runs","overs","innings",
-            "umpire","wide","lbw","caught","bowled","dismissed","scorecard",
-            "schedule","standing","division","season","player","team","match",
-            "league","spring","summer","rule","eligible","stats","average",
-            "strike rate","economy","agomoni","tigers","spring 2026",
-        ]
+        # ── CHANGE 8: domain-aware off-topic guard ────────────────────────────
+        # Reads OFF_TOPIC blocklist and domain hint allowlist from OFFTOPIC_GUARD
+        # config so this block works for both ARCL and Geetabitan with zero
+        # code duplication.
+        _guard      = OFFTOPIC_GUARD.get(DOMAIN, {})
+        _off_topic  = _guard.get("off_topic",  [])   # denylist (always blocked)
+        _hints      = _guard.get("hints",      [])   # allowlist (domain context)
+        _reject_msg = _guard.get("reject_msg", "")
         msg_low = message.lower()
-        if any(k in msg_low for k in OFF_TOPIC) and not any(k in msg_low for k in ARCL_HINTS):
-            return ChatResponse(
-                response="I'm Adar, the ARCL cricket assistant. I can only help with ARCL cricket questions — player stats, team performance, rules, schedules and scorecards. What would you like to know about ARCL cricket?",
-                session_id=str(session.id),
-                user_id=request.user_id,
-                eval=None,
-            )
-        # ─────────────────────────────────────────────────────────
+        if _off_topic and _hints:
+            if any(k in msg_low for k in _off_topic) and not any(k in msg_low for k in _hints):
+                return ChatResponse(
+                    response=_reject_msg,
+                    session_id=str(session.id),
+                    user_id=request.user_id,
+                    eval=None,
+                )
+        # ─────────────────────────────────────────────────────────────────────
 
         user_message = Content(role="user", parts=[Part(text=message)])
 
@@ -333,9 +346,7 @@ async def chat(
 
         logger.info(f"Chat OK — ip={client_ip} user={request.user_id} len={len(message)}")
 
-        # Run evaluation and include in response (async, best-effort)
-        # Increment daily usage counter — fire and forget
-        # Increment usage directly (awaited) — skip for admin
+        # Increment daily usage counter
         try:
             from datetime import datetime, timezone
             from jose import jwt as _jose_jwt
@@ -362,7 +373,7 @@ async def chat(
             if _data.get("usage_reset_date", "") != _today:
                 _current = 0
             await _ref.update({
-                "usage_today": _current + 1,
+                "usage_today":      _current + 1,
                 "usage_reset_date": _today,
             })
             logger.info(f"Usage: team={_team_id} count={_current + 1}")
@@ -376,7 +387,8 @@ async def chat(
                 eval_result = await evaluate_response(
                     question=message,
                     response=response_text,
-                    team_id="arcl",
+                    # ── CHANGE 9: team_id uses DOMAIN (was hardcoded "arcl") ──
+                    team_id=DOMAIN,
                     session_id=str(session.id),
                     user_id=request.user_id,
                     enabled=True,
@@ -437,26 +449,217 @@ async def delete_session_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/api/tenant")
-async def get_tenant_info():
-    """Return branding info for the frontend."""
-    return {
+# ── CHANGE 10: /api/tenant is domain-aware ───────────────────────────────────
+_TENANT_INFO = {
+    "arcl": {
         "tenant_id":     "arcl",
         "name":          "American Recreational Cricket League",
         "short_name":    "ARCL",
         "logo_url":      "",
         "primary_color": "#2EB87E",
         "accent_color":  "#EF9F27",
+    },
+    "geetabitan": {
+        "tenant_id":     "geetabitan",
+        "name":          "গীতবিতান — রবীন্দ্রনাথ ঠাকুরের গান",
+        "short_name":    "Geetabitan",
+        "logo_url":      "",
+        "primary_color": "#8B1A1A",
+        "accent_color":  "#D4A017",
+    },
+}
+
+@app.get("/api/tenant")
+async def get_tenant_info():
+    """Return branding info for the frontend — resolved from DOMAIN env var."""
+    return _TENANT_INFO.get(DOMAIN, _TENANT_INFO["arcl"])
+
+
+
+@app.options("/api/demo/tts")
+async def demo_tts_options():
+    """CORS preflight for demo TTS — allow any origin."""
+    from fastapi.responses import Response as _R
+    r = _R()
+    r.headers["Access-Control-Allow-Origin"]  = "*"
+    r.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    r.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return r
+
+
+@app.post("/api/demo/tts")
+async def demo_tts(request: Request):
+    """
+    Text-to-speech for the Geetabitan demo.
+    Uses GEETABITAN_TTS_API_KEY (restricted to texttospeech.googleapis.com).
+    Voice: bn-BD-Standard-B (Bangladeshi male).
+    Returns base64-encoded MP3. Cached in memory.
+    """
+    import base64, hashlib
+    import httpx
+
+    body = await request.json()
+    text = (body.get("text") or "")[:500].strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+
+    if not hasattr(app.state, "tts_cache"):
+        app.state.tts_cache = {}
+    cache_key = hashlib.md5(text.encode()).hexdigest()
+    if cache_key in app.state.tts_cache:
+        from fastapi.responses import JSONResponse as _JR
+        return _JR(
+            content={"audio": app.state.tts_cache[cache_key], "cached": True},
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    # Use dedicated TTS key (restricted only to texttospeech.googleapis.com)
+    api_key = os.environ.get("GEETABITAN_TTS_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="TTS API key not configured")
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"https://texttospeech.googleapis.com/v1/text:synthesize?key={api_key}",
+                json={
+                    "input": {"text": text},
+                    "voice": {
+                        "languageCode": "bn-IN",
+                        "name":         "bn-IN-Chirp3-HD-Fenrir",  # best quality Bengali male
+                    },
+                    "audioConfig": {
+                        "audioEncoding": "MP3",
+                        # speakingRate and pitch not supported by Chirp3-HD
+                    },
+                },
+            )
+        if resp.status_code != 200:
+            logger.error(f"TTS API {resp.status_code}: {resp.text[:200]}")
+            raise HTTPException(status_code=502, detail=f"TTS error: {resp.text[:200]}")
+        audio = resp.json().get("audioContent", "")
+        app.state.tts_cache[cache_key] = audio
+        from fastapi.responses import JSONResponse as _JR
+        return _JR(
+            content={"audio": audio, "cached": False},
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"TTS error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@app.post("/api/stt")
+async def speech_to_text(
+    request: Request,
+    team: dict = Depends(get_current_team),
+):
+    """
+    Speech-to-text using Google Cloud Speech-to-Text v2 (Chirp 2 model).
+    Accepts base64 WebM audio, returns Bengali transcription.
+    Used as fallback when Web Speech API is unavailable (Firefox, iOS Safari).
+    """
+    import base64
+    import httpx
+
+    body  = await request.json()
+    audio = body.get("audio", "")
+    lang  = body.get("lang", "bn-IN")
+    mime  = body.get("mime", "audio/webm")   # Firefox sends audio/ogg
+
+    if not audio:
+        raise HTTPException(status_code=400, detail="audio is required")
+
+    logger.info(f"STT request: lang={lang} mime={mime} audio_len={len(audio)}")
+
+    # Convert Safari's audio/mp4 (AAC) to FLAC for Google STT
+    # Safari MediaRecorder only produces audio/mp4 which Google STT doesn't support
+    if "mp4" in mime or "aac" in mime:
+        try:
+            import base64 as _b64
+            import io
+            from pydub import AudioSegment
+
+            raw_bytes = _b64.b64decode(audio)
+            seg       = AudioSegment.from_file(io.BytesIO(raw_bytes), format="mp4")
+            seg       = seg.set_channels(1).set_frame_rate(16000)
+            out_buf   = io.BytesIO()
+            seg.export(out_buf, format="flac")
+            audio     = _b64.b64encode(out_buf.getvalue()).decode()
+            encoding  = "FLAC"
+            logger.info(f"Converted mp4→flac, new audio_len={len(audio)}")
+        except Exception as e:
+            logger.error(f"Audio conversion failed: {e}")
+            raise HTTPException(status_code=400, detail="Audio format not supported. Try Chrome or Firefox.")
+
+    # Map MIME to Google STT encoding
+    encoding_map = {
+        "audio/webm":              "WEBM_OPUS",
+        "audio/webm;codecs=opus":  "WEBM_OPUS",
+        "audio/ogg":               "OGG_OPUS",
+        "audio/ogg;codecs=opus":   "OGG_OPUS",
     }
+    encoding = encoding_map.get(mime.split(";")[0].strip(), "WEBM_OPUS")
+
+    # Use dedicated Speech key (has speech.googleapis.com allowed)
+    api_key = (
+        os.environ.get("GEETABITAN_SPEECH_API_KEY")
+        or os.environ.get("GEETABITAN_TTS_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY", "")
+    )
+    if not api_key:
+        raise HTTPException(status_code=500, detail="API key not configured")
+
+    # Google Cloud Speech-to-Text v1 REST API
+    payload = {
+        "config": {
+            "encoding":                   encoding,
+            "languageCode":               lang,
+            "enableAutomaticPunctuation": True,
+        },
+        "audio": {
+            "content": audio,
+        },
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"https://speech.googleapis.com/v1/speech:recognize?key={api_key}",
+                json=payload,
+            )
+        if resp.status_code != 200:
+            logger.error(f"STT API error {resp.status_code}: {resp.text[:500]}")
+            raise HTTPException(status_code=502, detail=resp.text[:300])
+
+        data        = resp.json()
+        results     = data.get("results", [])
+        transcript  = " ".join(
+            r["alternatives"][0]["transcript"]
+            for r in results
+            if r.get("alternatives")
+        )
+        return {"text": transcript.strip()}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"STT error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")
 async def health():
     return {
         "status": "ok",
-        "app": settings.APP_NAME,
-        "env": settings.APP_ENV,
-        "model": settings.ADK_MODEL,
+        "app":    settings.APP_NAME,
+        "env":    settings.APP_ENV,
+        "model":  settings.ADK_MODEL,
+        "domain": DOMAIN,
     }
 
 

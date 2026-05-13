@@ -12,7 +12,7 @@ Endpoints:
   GET  /admin/polls              — all polls across all teams
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -341,26 +341,132 @@ async def delete_team(team_id: str, _: dict = Depends(get_admin)):
 # ── Evaluation endpoints ──────────────────────────────────────────────────────
 
 @router.get("/evals")
-async def list_evals(_: dict = Depends(get_admin)):
-    """Get evaluation summary across all teams."""
-    from evaluation.judge import get_eval_summary
-    return await get_eval_summary()
+async def list_evals(
+    team_id:   str   = "",
+    min_score: float = 0.0,
+    max_score: float = 5.0,
+    date_from: str   = "",
+    date_to:   str   = "",
+    limit:     int   = 200,
+    _: dict = Depends(get_admin),
+):
+    """Get evaluation data with filters, trend, and flagged responses."""
+    from evaluation.judge import EVALS_COLLECTION
+    from google.cloud import firestore as _fs
 
+    db = get_db()
+    # Note: filtering by team_id + order_by created_at requires a composite index
+    # Fallback: fetch all and filter in Python if index missing
+    query = db.collection(EVALS_COLLECTION)
 
-@router.get("/evals/{team_id}")
-async def team_evals(team_id: str, _: dict = Depends(get_admin)):
-    """Get evaluation summary for a specific team."""
-    from evaluation.judge import get_eval_summary
-    return await get_eval_summary(team_id=team_id)
+    logger.info(f"Evals filter: team={team_id!r} min={min_score} max={max_score} from={date_from!r} to={date_to!r}")
+    docs = []
+    try:
+        q = query
+        if team_id:
+            q = q.where("team_id", "==", team_id)
+        async for doc in q.order_by("created_at", direction=_fs.Query.DESCENDING).limit(limit).stream():
+            _d = doc.to_dict()
+            _d["_doc_id"] = doc.id
+            docs.append((_d, doc))
+    except Exception as _idx_err:
+        logger.warning(f"Index missing — fetching all evals and filtering in Python: {_idx_err}")
+        async for doc in query.order_by("created_at", direction=_fs.Query.DESCENDING).limit(500).stream():
+            _d = doc.to_dict()
+            _d["_doc_id"] = doc.id
+            if team_id and _d.get("team_id") != team_id:
+                continue
+            docs.append((_d, doc))
 
+    raw_docs = docs
+    docs = []
+    for _pair in raw_docs:
+        doc_dict, doc = _pair
+        d = doc_dict
+        scores = d.get("scores", {})
+        overall = scores.get("overall", 0)
+        created = d.get("created_at", "")[:10]
+        if min_score > 0.0 and overall < min_score: continue
+        if max_score < 5.0 and overall > max_score: continue
+        if date_from and created < date_from[:10]: continue
+        if date_to   and created > date_to[:10]:   continue
+        docs.append({
+            "eval_id":     d.get("eval_id", doc.id),
+            "team_id":     d.get("team_id", ""),
+            "question":    d.get("question", "")[:120],
+            "response":    d.get("response", "")[:200],
+            "scores":      scores,
+            "overall":     overall,
+            "explanation": d.get("explanation", ""),
+            "created_at":  created,
+            "flagged":     d.get("flagged", False),
+            "flag_reason": d.get("flag_reason", ""),
+        })
 
-@router.get("/evals/recent/low")
-async def low_scoring_evals(_: dict = Depends(get_admin)):
-    """Get recent low-scoring responses (overall < 3.0) for review."""
-    from evaluation.judge import get_eval_summary
-    summary = await get_eval_summary(limit=200)
+    # Skip old loop
+    if False:
+        async for doc in query.limit(0).stream():
+            pass
+        pass  # processed above
+
+    # Averages
+    def avg(key):
+        vals = [d["scores"].get(key, 0) for d in docs if d["scores"].get(key)]
+        return round(sum(vals) / len(vals), 2) if vals else 0.0
+
+    # Trend — group by date
+    from collections import defaultdict
+    by_date = defaultdict(list)
+    for d in docs:
+        by_date[d["created_at"]].append(d["overall"])
+    trend = sorted([
+        {"date": date, "avg_overall": round(sum(vals)/len(vals), 2), "count": len(vals)}
+        for date, vals in by_date.items()
+    ], key=lambda x: x["date"])
+
+    # Score distribution
+    dist = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
+    for d in docs:
+        bucket = str(min(5, max(1, round(d["overall"]))))
+        dist[bucket] += 1
+
+    low_scoring = [d for d in docs if d["overall"] < 3.0]
+
     return {
-        "low_scoring": summary.get("low_scoring", []),
-        "total_low":   len(summary.get("low_scoring", [])),
-        "total_evals": summary.get("total", 0),
+        "total":        len(docs),
+        "averages":     {k: avg(k) for k in ["overall","accuracy","completeness","relevance","format"]},
+        "trend":        trend,
+        "distribution": dist,
+        "low_scoring":  low_scoring[:20],
+        "flagged":      [d for d in docs if d.get("flagged")],
+        "recent":       docs[:50],
     }
+
+
+@router.post("/evals/{eval_id}/flag")
+async def flag_eval(
+    eval_id: str,
+    reason:  str = "",
+    _: dict = Depends(get_admin),
+):
+    """Flag a response for review."""
+    from evaluation.judge import EVALS_COLLECTION
+    db = get_db()
+    await db.collection(EVALS_COLLECTION).document(eval_id).update({
+        "flagged":    True,
+        "flag_reason": reason,
+        "flagged_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"message": "Flagged", "eval_id": eval_id}
+
+
+@router.post("/evals/{eval_id}/unflag")
+async def unflag_eval(eval_id: str, _: dict = Depends(get_admin)):
+    """Remove flag from a response."""
+    from evaluation.judge import EVALS_COLLECTION
+    db = get_db()
+    await db.collection(EVALS_COLLECTION).document(eval_id).update({
+        "flagged":    False,
+        "flag_reason": "",
+    })
+    return {"message": "Unflagged", "eval_id": eval_id}

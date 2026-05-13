@@ -1,0 +1,37 @@
+# Dockerfile.geetabitan
+# Identical to the existing Dockerfile except ENV DOMAIN=geetabitan.
+# That single env var switches the agent config, Firestore database,
+# keyword guard, and API key — everything else is shared framework.
+#
+# Build:
+#   docker build --platform linux/amd64 -f Dockerfile.geetabitan -t geetabitan-api .
+# Run locally:
+#   docker run -p 8040:8040 --env-file .env.geetabitan geetabitan-api
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python deps (same requirements.txt as ARCL — no separate file needed)
+COPY requirements.txt .
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Application code
+COPY . .
+
+# ── Domain selector — the only line different from Dockerfile ──────────────
+ENV DOMAIN=geetabitan
+
+ENV PYTHONPATH=/app
+ENV PORT=8040
+
+EXPOSE 8040
+
+CMD ["python", "api/main.py"]

@@ -23,18 +23,24 @@ from src.adar.config import settings
 
 logger = logging.getLogger(__name__)
 
-EVALS_COLLECTION = "arcl_evals"
+from src.adar.config import DOMAIN
+EVALS_COLLECTION = f"{DOMAIN}_evals"
 from src.adar.config import settings
 GEMINI_MODEL = settings.ADK_MODEL  # same model as the ADK orchestrator
 GOOGLE_API_KEY   = os.environ.get("GOOGLE_API_KEY", "")
 
-JUDGE_PROMPT = """Score this cricket assistant Q&A. Output ONLY raw JSON, no markdown.
+_DOMAIN_CONTEXT = {
+    "geetabitan": "Rabindra Sangeet (Bengali songs by Rabindranath Tagore) assistant",
+    "arcl":       "cricket assistant for the Agomonia Recreation Cricket League",
+}
+_ASSISTANT_DESC = _DOMAIN_CONTEXT.get(DOMAIN, "AI assistant")
 
-Q: {question}
-A: {response}
-
-JSON format (integers 0-5, explanation max 20 words):
-{{"accuracy":4,"completeness":4,"relevance":4,"format":4,"explanation":"short reason here"}}"""
+JUDGE_PROMPT = (
+    f"Score this {_ASSISTANT_DESC} Q&A. Output ONLY raw JSON, no markdown.\n\n"
+    "Q: {question}\nA: {response}\n\n"
+    "JSON format (integers 0-5, explanation max 20 words):\n"
+    '{"accuracy":4,"completeness":4,"relevance":4,"format":4,"explanation":"short reason here"}'
+)
 
 
 def _calc_overall(scores: dict) -> float:

@@ -5,9 +5,18 @@
   "targets": {
     "bdas-493785": {
       "hosting": {
-        "app":     ["bdas-493785"],
-        "landing": ["adar-landing-arcl"]
+        "landing": [
+          "adar-landing-arcl"
+        ],
+        "geetabitan": [
+          "geetabitan-adar"
+        ],
+        "arcl": [
+          "adar-arcl",
+          "bdas-493785"
+        ]
       }
     }
-  }
+  },
+  "etags": {}
 }

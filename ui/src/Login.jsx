@@ -4,6 +4,7 @@ import {
   Alert, CircularProgress, Stack, Divider,
 } from '@mui/material'
 import axios from 'axios'
+import tenant from './tenant'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 
@@ -14,19 +15,17 @@ export default function Login({ onLogin }) {
   const [error, setError]       = useState('')
   const [message, setMessage]   = useState('')
 
-  // Forgot / reset password state
-  const [mode, setMode]               = useState(() => {
+  const [mode, setMode] = useState(() => {
     const p = new URLSearchParams(window.location.search)
     return p.get('reset_token') ? 'reset' : 'login'
   })
-  const [resetToken]                  = useState(() =>
+  const [resetToken] = useState(() =>
     new URLSearchParams(window.location.search).get('reset_token') || ''
   )
-  const [forgotEmail, setForgotEmail]       = useState('')
-  const [newPassword, setNewPassword]       = useState('')
+  const [forgotEmail, setForgotEmail]         = useState('')
+  const [newPassword, setNewPassword]         = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
-  // ── Login ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -34,8 +33,7 @@ export default function Login({ onLogin }) {
     setLoading(true)
     try {
       const { data } = await axios.post(`${API_URL}/api/auth/login`, {
-        email: email.trim().toLowerCase(),
-        password,
+        email: email.trim().toLowerCase(), password,
       })
       localStorage.setItem('adar_token',     data.access_token)
       localStorage.setItem('adar_team_id',   data.team_id)
@@ -50,19 +48,17 @@ export default function Login({ onLogin }) {
     }
   }
 
-  // ── Forgot password ────────────────────────────────────────────────────────
   const handleForgot = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
       await axios.post(`${API_URL}/api/auth/forgot-password`, { email: forgotEmail })
-    } catch { /* always show success to prevent enumeration */ }
+    } catch { /* always show success */ }
     setMessage('If that email is registered you will receive a reset link shortly.')
     setLoading(false)
   }
 
-  // ── Reset password ─────────────────────────────────────────────────────────
   const handleReset = async (e) => {
     e.preventDefault()
     setError('')
@@ -71,8 +67,7 @@ export default function Login({ onLogin }) {
     setLoading(true)
     try {
       await axios.post(`${API_URL}/api/auth/reset-password`, {
-        token: resetToken,
-        new_password: newPassword,
+        token: resetToken, new_password: newPassword,
       })
       setMessage('Password updated! You can now sign in.')
       window.history.replaceState({}, '', window.location.pathname)
@@ -89,10 +84,10 @@ export default function Login({ onLogin }) {
       width:52, height:52, borderRadius:'14px', bgcolor:'primary.main',
       display:'flex', alignItems:'center', justifyContent:'center',
       fontSize:'1.1rem', fontWeight:700, color:'#fff',
-    }}>আদর</Box>
+    }}>{tenant.logoText}</Box>
   )
 
-  // ── Forgot password screen ─────────────────────────────────────────────────
+  // ── Forgot password ─────────────────────────────────────────────────────────
   if (mode === 'forgot') return (
     <Box sx={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', bgcolor:'background.default', p:2 }}>
       <Box sx={{ width:'100%', maxWidth:400 }}>
@@ -109,11 +104,8 @@ export default function Login({ onLogin }) {
           {message && <Alert severity="success" sx={{ mb:2 }}>{message}</Alert>}
           {!message && (
             <Stack spacing={2}>
-              <TextField
-                label="Email address" type="email"
-                value={forgotEmail} onChange={e => setForgotEmail(e.target.value)}
-                fullWidth size="small" required autoFocus
-              />
+              <TextField label="Email address" type="email" value={forgotEmail}
+                onChange={e => setForgotEmail(e.target.value)} fullWidth size="small" required autoFocus />
               <Button type="submit" variant="contained" fullWidth disabled={loading} sx={{ py:1.2 }}>
                 {loading ? <CircularProgress size={20} sx={{ color:'inherit' }} /> : 'Send reset link'}
               </Button>
@@ -130,7 +122,7 @@ export default function Login({ onLogin }) {
     </Box>
   )
 
-  // ── Reset password screen ──────────────────────────────────────────────────
+  // ── Reset password ──────────────────────────────────────────────────────────
   if (mode === 'reset') return (
     <Box sx={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', bgcolor:'background.default', p:2 }}>
       <Box sx={{ width:'100%', maxWidth:400 }}>
@@ -144,18 +136,13 @@ export default function Login({ onLogin }) {
           {message && <Alert severity="success" sx={{ mb:2 }}>{message}</Alert>}
           {!message && (
             <Stack spacing={2}>
-              <TextField
-                label="New password" type="password"
-                value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                fullWidth size="small" required autoFocus helperText="Minimum 8 characters"
-              />
-              <TextField
-                label="Confirm password" type="password"
-                value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                fullWidth size="small" required
+              <TextField label="New password" type="password" value={newPassword}
+                onChange={e => setNewPassword(e.target.value)} fullWidth size="small" required autoFocus
+                helperText="Minimum 8 characters" />
+              <TextField label="Confirm password" type="password" value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)} fullWidth size="small" required
                 error={!!confirmPassword && confirmPassword !== newPassword}
-                helperText={confirmPassword && confirmPassword !== newPassword ? "Passwords don't match" : ''}
-              />
+                helperText={confirmPassword && confirmPassword !== newPassword ? "Passwords don't match" : ''} />
               <Button type="submit" variant="contained" fullWidth disabled={loading} sx={{ py:1.2 }}>
                 {loading ? <CircularProgress size={20} sx={{ color:'inherit' }} /> : 'Update password'}
               </Button>
@@ -166,18 +153,16 @@ export default function Login({ onLogin }) {
     </Box>
   )
 
-  // ── Main login screen ──────────────────────────────────────────────────────
+  // ── Main login ──────────────────────────────────────────────────────────────
   return (
-    <Box sx={{
-      minHeight:'100dvh', display:'flex', alignItems:'center',
-      justifyContent:'center', bgcolor:'background.default', p:2,
-    }}>
+    <Box sx={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', bgcolor:'background.default', p:2 }}>
       <Box sx={{ width:'100%', maxWidth:400 }}>
         <Stack alignItems="center" spacing={1} mb={4}>
           <Logo />
-          <Typography variant="h5" fontWeight={600}>Adar ARCL</Typography>
+          {/* CHANGE: tenant.loginTitle instead of hardcoded "Adar ARCL" */}
+          <Typography variant="h5" fontWeight={600}>{tenant.loginTitle}</Typography>
           <Typography variant="body2" sx={{ color:'text.secondary' }}>
-            Sign in to your team account
+            Sign in to your account
           </Typography>
         </Stack>
 
@@ -187,21 +172,14 @@ export default function Login({ onLogin }) {
           {error && <Alert severity="error" sx={{ mb:2 }}>{error}</Alert>}
 
           <Stack spacing={2}>
-            <TextField
-              label="Email address" type="email"
-              value={email} onChange={e => setEmail(e.target.value)}
-              fullWidth size="small" autoComplete="email" autoFocus required
-            />
-            <TextField
-              label="Password" type="password"
-              value={password} onChange={e => setPassword(e.target.value)}
-              fullWidth size="small" autoComplete="current-password" required
-            />
-            <Button
-              type="submit" variant="contained" fullWidth
-              disabled={loading || !email.trim() || !password}
-              sx={{ py:1.2 }}
-            >
+            <TextField label="Email address" type="email" value={email}
+              onChange={e => setEmail(e.target.value)} fullWidth size="small"
+              autoComplete="email" autoFocus required />
+            <TextField label="Password" type="password" value={password}
+              onChange={e => setPassword(e.target.value)} fullWidth size="small"
+              autoComplete="current-password" required />
+            <Button type="submit" variant="contained" fullWidth
+              disabled={loading || !email.trim() || !password} sx={{ py:1.2 }}>
               {loading ? <CircularProgress size={20} sx={{ color:'inherit' }} /> : 'Sign in'}
             </Button>
 
@@ -215,16 +193,18 @@ export default function Login({ onLogin }) {
           </Stack>
 
           <Divider sx={{ my:2 }}>
-            <Box component="a" href="/demo.html" target="_blank" rel="noopener noreferrer"
+            <Box component="a"
+              href={tenant.id === 'geetabitan' ? '/demo.geetabitan.html' : '/demo.html'}
+              target="_blank" rel="noopener noreferrer"
               sx={{
                 display:'inline-flex', alignItems:'center', gap:0.75,
-                bgcolor:'rgba(46,184,126,0.08)', border:'1px solid',
+                bgcolor:`${tenant.primaryColor}14`, border:'1px solid',
                 borderColor:'primary.main', borderRadius:2,
                 px:2, py:0.6, fontSize:'0.8rem', fontWeight:600,
                 color:'primary.main', textDecoration:'none',
-                '&:hover':{ bgcolor:'rgba(46,184,126,0.15)' },
+                '&:hover':{ bgcolor:`${tenant.primaryColor}28` },
               }}>
-              ▶ Watch demo
+              ▶ {tenant.id === 'geetabitan' ? 'পরিচিতি দেখুন' : 'Watch demo'}
             </Box>
           </Divider>
 
@@ -232,13 +212,14 @@ export default function Login({ onLogin }) {
             No account?{' '}
             <Box component="span" onClick={() => onLogin(null, 'register')}
               sx={{ color:'primary.main', cursor:'pointer', '&:hover':{ textDecoration:'underline' } }}>
-              Register your team
+              {tenant.id === 'geetabitan' ? 'সংগঠন নিবন্ধন করুন' : 'Register your team'}
             </Box>
           </Typography>
         </Paper>
 
+        {/* CHANGE: tenant.loginCaption instead of hardcoded ARCL text */}
         <Typography variant="caption" sx={{ color:'text.secondary', display:'block', textAlign:'center', mt:2 }}>
-          Powered by Adar · American Recreational Cricket League
+          {tenant.loginCaption}
         </Typography>
       </Box>
     </Box>

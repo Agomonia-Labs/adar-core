@@ -1,30 +1,31 @@
 import { createTheme } from '@mui/material/styles'
+import tenant from './tenant'
 
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#2EB87E',
-      light: '#5DCAA5',
-      dark: '#1A8A5A',
+      main:  tenant.primaryColor,
+      light: tenant.primaryLight,
+      dark:  tenant.primaryDark,
     },
     secondary: {
-      main: '#EF9F27',     // cricket amber
-      light: '#FAC775',
-      dark: '#BA7517',
+      main:  tenant.accentColor,
+      light: tenant.accentLight,
+      dark:  tenant.accentDark,
     },
     background: {
-      default: '#F5FBF7',
-      paper: '#FFFFFF',
+      default: tenant.bgDefault,
+      paper:   tenant.bgPaper,
     },
     text: {
-      primary: '#1A3326',
-      secondary: '#5A8A70',
+      primary:   tenant.textPrimary,
+      secondary: tenant.textSecondary,
     },
-    divider: '#C8E8D8',
+    divider: tenant.divider,
   },
   typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica Neue", sans-serif',
+    fontFamily: tenant.fontFamily,
     h6: { fontWeight: 500 },
   },
   shape: {
@@ -35,7 +36,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          border: '1px solid #C8E8D8',
+          border: `1px solid ${tenant.divider}`,
         },
       },
     },
@@ -51,30 +52,30 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 6,
-          backgroundColor: '#EBF7F1',
-          color: '#2E7A54',
-          border: '1px solid #C8E8D8',
+          backgroundColor: tenant.bgDefault,
+          color: tenant.primaryDark,
+          border: `1px solid ${tenant.divider}`,
         },
       },
     },
     MuiInputBase: {
       styleOverrides: {
         root: {
-          backgroundColor: '#F5FBF7',
+          backgroundColor: tenant.bgDefault,
         },
       },
     },
     MuiOutlinedInput: {
       styleOverrides: {
         notchedOutline: {
-          borderColor: '#C8E8D8',
+          borderColor: tenant.divider,
         },
       },
     },
     MuiDivider: {
       styleOverrides: {
         root: {
-          borderColor: '#C8E8D8',
+          borderColor: tenant.divider,
         },
       },
     },
