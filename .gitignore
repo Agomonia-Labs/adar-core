@@ -20,3 +20,4 @@ build/
 # Firebase cache
 ui/.firebase/
 .env.geetabitan
+.env.geetabitan
