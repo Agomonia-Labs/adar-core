@@ -91,8 +91,8 @@ async def get_songs_by_taal(taal: str, paryay: str = None) -> str:
 
 
 async def describe_raag(raag: str) -> str:
-    """Return musical description of a raag — family, time of day, mood,
-    common taals, and count of Tagore songs that use it."""
+    """Return full musical description of a raag including arohi, aborohi,
+    vadi, samvadi, komal notes, family, time, mood and song count."""
     meta = RAAG_DATA.get(raag)
     if not meta:
         return (
@@ -104,17 +104,36 @@ async def describe_raag(raag: str) -> str:
         filters={"raag": raag},
         limit=500,
     )
-    count = len(all_results)
-    return (
-        f"## {raag}\n\n"
-        f"**পরিবার:** {meta['family']}\n"
-        f"**পরিবেশনের সময়:** {meta['time']}\n"
-        f"**মেজাজ:** {meta['mood']}\n"
-        f"**প্রচলিত তাল:** {', '.join(meta.get('beats_common', []))}\n"
-        f"**গীতবিতানে গান:** {count}টি\n\n"
-        f"{meta.get('description', '')}\n\n"
-        f"এই রাগের গান দেখতে চাইলে বলুন।"
-    )
+    count  = len(all_results)
+    arohi   = meta.get("arohi",   "")
+    aborohi = meta.get("aborohi", "")
+    vadi    = meta.get("vadi",    "")
+    samvadi = meta.get("samvadi", "")
+    komal   = meta.get("komal",   "")
+
+    lines = [
+        f"## {raag}\n",
+        f"**পরিবার (ঠাট):** {meta.get('family', '—')}",
+        f"**পরিবেশনের সময়:** {meta.get('time', '—')}",
+        f"**মেজাজ:** {meta.get('mood', '—')}",
+    ]
+    if arohi:
+        lines.append(f"**আরোহী:** {arohi}")
+    if aborohi:
+        lines.append(f"**অবরোহী:** {aborohi}")
+    if vadi:
+        lines.append(f"**বাদী স্বর:** {vadi}")
+    if samvadi:
+        lines.append(f"**সমবাদী স্বর:** {samvadi}")
+    if komal and komal != "—":
+        lines.append(f"**কোমল স্বর:** {komal}")
+    lines += [
+        f"**প্রচলিত তাল:** {', '.join(meta.get('beats_common', []))}",
+        f"**গীতবিতানে গান:** {count}টি\n",
+        meta.get("description", ""),
+        "\nএই রাগের গান দেখতে চাইলে বলুন।",
+    ]
+    return "\n".join(lines)
 
 
 async def describe_taal(taal: str) -> str:

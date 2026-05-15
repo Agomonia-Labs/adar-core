@@ -11,9 +11,11 @@ Uses Gemini Flash to score every agent response on 5 dimensions:
 Results stored in Firestore arcl_evals collection and returned
 alongside the chat response for frontend display.
 """
+import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -39,7 +41,7 @@ JUDGE_PROMPT = (
     f"Score this {_ASSISTANT_DESC} Q&A. Output ONLY raw JSON, no markdown.\n\n"
     "Q: {question}\nA: {response}\n\n"
     "JSON format (integers 0-5, explanation max 20 words):\n"
-    '{"accuracy":4,"completeness":4,"relevance":4,"format":4,"explanation":"short reason here"}'
+    '{{"accuracy":4,"completeness":4,"relevance":4,"format":4,"explanation":"short reason here"}}'
 )
 
 
@@ -58,14 +60,13 @@ async def _call_judge(question: str, response: str) -> dict:
     from google.genai import types
 
     client = genai.Client(api_key=GOOGLE_API_KEY)
+
+    # Use plain text — JSON mode not supported on all model versions
     config = types.GenerateContentConfig(
         temperature=0.1,
-        max_output_tokens=2048,
-        response_mime_type="application/json",
+        max_output_tokens=512,
     )
 
-    # Run synchronous Gemini call in thread pool to avoid blocking async loop
-    import asyncio
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
         None,
@@ -75,56 +76,49 @@ async def _call_judge(question: str, response: str) -> dict:
             config=config,
         )
     )
-    # result.text can be None with some models — fall back to candidates
+
+    raw = ""
     if result.text:
         raw = result.text.strip()
     elif result.candidates and result.candidates[0].content.parts:
-        raw = result.candidates[0].content.parts[0].text or ""
-        raw = raw.strip()
-    else:
-        raise ValueError(f"Empty response from judge model. candidates={result.candidates}")
-    logger.info(f"Judge raw response: {repr(raw[:200])}")
+        raw = (result.candidates[0].content.parts[0].text or "").strip()
 
-    import re
+    if not raw:
+        raise ValueError("Empty response from judge model")
 
-    # Strip markdown fences
+    logger.info(f"Judge raw: {repr(raw[:200])}")
+
+    # Strip markdown fences and comments
     raw = raw.replace("```json", "").replace("```", "").strip()
-
-    # Extract first complete JSON object if response has extra text
-    import re as _re
-    json_match = _re.search(r"{[^{}]*}", raw, _re.DOTALL)
-    if json_match and len(json_match.group()) > 10:
-        raw = json_match.group()
-
-    # Remove // comments
     raw = re.sub(r"//[^\n]*", "", raw)
+    raw = re.sub(r",(\s*[}\]])", r"\1", raw)
 
-    # Remove trailing commas
-    raw = re.sub(",(" + r"\s*[}\]]" + ")", r"\1", raw)
-
-    # Extract JSON object — greedy to capture full object
-    match = re.search(r"\{.+\}", raw, re.DOTALL)
+    # Extract first JSON object
+    match = re.search(r"\{[^{}]*\}", raw, re.DOTALL)
     if match:
         raw = match.group(0).strip()
 
     try:
         scores = json.loads(raw)
     except json.JSONDecodeError as e:
-        logger.error(f"Judge JSON parse error: {e}\nRaw: {repr(raw[:300])}")
-        # Return safe defaults so chat still works
+        logger.error(f"Judge JSON parse error: {e} | raw={repr(raw[:200])}")
         scores = {
             "accuracy": 3, "completeness": 3,
             "relevance": 3, "format": 3,
-            "explanation": "Evaluation parsing failed"
+            "explanation": "parse error"
         }
 
     return scores
 
 
 def get_db():
+    # Use AUTH_FIRESTORE_DATABASE so geetabitan uses geetabitan-db
+    db_name = os.environ.get("AUTH_FIRESTORE_DATABASE",
+              os.environ.get("FIRESTORE_DATABASE",
+              getattr(settings, "FIRESTORE_DATABASE", "(default)")))
     return firestore.AsyncClient(
         project=settings.GCP_PROJECT_ID,
-        database=settings.FIRESTORE_DATABASE,
+        database=db_name,
     )
 
 
@@ -139,16 +133,7 @@ async def evaluate_response(
     """
     Evaluate an agent response using LLM-as-judge.
     Stores result in Firestore and returns the eval dict.
-
-    Returns None if evaluation is disabled or fails.
-
-    Usage in main.py:
-        eval_result = await evaluate_response(
-            question=message,
-            response=response_text,
-            team_id=team_id,
-            session_id=session.id,
-        )
+    Always returns scores even if Firestore write fails.
     """
     if not enabled or not GOOGLE_API_KEY:
         return None
@@ -158,9 +143,10 @@ async def evaluate_response(
         return None
 
     try:
+        logger.info(f"Judge: evaluating response ({len(response)} chars) for team={team_id}")
         scores = await _call_judge(question, response)
+        logger.info(f"Judge scores: {scores}")
 
-        # Validate scores are in range 0-5
         for key in ["accuracy", "completeness", "relevance", "format"]:
             scores[key] = max(0, min(5, int(scores.get(key, 3))))
 
@@ -186,18 +172,24 @@ async def evaluate_response(
             "model":        GEMINI_MODEL,
         }
 
-        # Store in Firestore async (don't wait — don't block the chat response)
-        db = get_db()
-        await db.collection(EVALS_COLLECTION).document(eval_doc["eval_id"]).set(eval_doc)
-        logger.info(
-            f"Eval stored: overall={overall} accuracy={scores['accuracy']} "
-            f"completeness={scores['completeness']} team={team_id}"
-        )
+        # Fire-and-forget Firestore write
+        async def _store():
+            try:
+                db = get_db()
+                await db.collection(EVALS_COLLECTION).document(eval_doc["eval_id"]).set(eval_doc)
+                logger.info(f"Eval stored: overall={overall} team={team_id}")
+            except Exception as store_err:
+                logger.warning(f"Eval Firestore write failed: {store_err}")
+
+        try:
+            asyncio.create_task(_store())
+        except RuntimeError:
+            pass  # No running loop in test context
 
         return eval_doc
 
     except Exception as e:
-        logger.warning(f"Evaluation failed (non-fatal): {e}")
+        logger.warning(f"Evaluation failed (non-fatal): {e}", exc_info=True)
         return None
 
 

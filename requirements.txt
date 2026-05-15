@@ -33,3 +33,4 @@ certifi>=2024.0.0
 pytz>=2024.0
 google-cloud-texttospeech
 pydub
+requests

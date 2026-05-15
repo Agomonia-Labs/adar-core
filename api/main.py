@@ -25,7 +25,8 @@ from google.genai.types import Content, Part
 from src.adar.agents.agents import build_agents
 from google.cloud import firestore as _firestore
 from api.routes.polls import router as polls_router
-from api.routes.auth import router as auth_router, get_current_team
+from api.routes.auth  import router as auth_router, get_current_team
+from api.routes.music import router as music_router
 from api.routes.admin import router as admin_router
 from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
@@ -146,6 +147,7 @@ app.add_middleware(
 
 app.include_router(polls_router)
 app.include_router(auth_router)
+app.include_router(music_router)
 
 @app.get("/api/ingestion/status")
 async def ingestion_status(team: dict = Depends(get_current_team)):
@@ -400,8 +402,10 @@ async def chat(
             response=response_text,
             session_id=session.id,
             user_id=request.user_id,
-            eval={"scores": eval_result["scores"], "explanation": eval_result["explanation"]}
-                 if eval_result else None,
+            eval={
+                "scores":      eval_result["scores"],
+                "explanation": eval_result.get("explanation", ""),
+            } if eval_result else None,
         )
 
     except HTTPException:

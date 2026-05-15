@@ -49,54 +49,62 @@ def _first_letter(slug: str) -> str:
 
 async def get_notation_link(song_id: str) -> str:
     """
-    Return the geetabitan.com swaralipi (notation) links for a song.
-    Provides both the notation page URL and the direct PNG image URL.
-    These are served by geetabitan.com — no local storage needed.
+    Return swaralipi links for a song.
+    Checks for NLTR-scraped notation first, then falls back to geetabitan.com links.
     """
     db  = get_db()
     doc = await db.collection(FIRESTORE_COLLECTION).document(song_id).get()
     if not doc.exists:
         return "গান পাওয়া যায়নি। song_id টি সঠিক কিনা যাচাই করুন।"
 
-    data       = doc.to_dict()
-    title      = data.get("title", "")
-    source_url = data.get("source_url", "")
+    data  = doc.to_dict()
+    title = data.get("title", "")
 
-    # Get slug from source URL (most reliable)
-    slug = _source_url_to_slug(source_url) or _title_to_slug(title)
-    if not slug:
-        return f"'{title}' গানের স্বরলিপির লিংক তৈরি করা সম্ভব হয়নি।"
+    result = [f"## {title} — স্বরলিপি", ""]
 
-    letter = _first_letter(slug)
-
-    # geetabitan.com notation URLs
-    notation_page = f"https://www.geetabitan.com/lyrics/rs-{letter.lower()}/{slug}-notation-download.html"
-    notation_png  = f"https://www.geetabitan.com/lyrics/baani-pdf-{letter.lower()}/{slug}.png"
-
-    # Check if we have locally OCR'd notation text
-    local_notation = data.get("notation_text", "")
-
-    result = [
-        f"## {title} — স্বরলিপি",
-        "",
-    ]
-
-    if local_notation:
+    # If OCR'd or scraped notation text exists — show it first
+    local = data.get("notation_text", "")
+    if local:
+        src  = data.get("notation_source", "")
+        page = data.get("notation_page", "")
         result += [
-            "### স্বরলিপি (OCR থেকে সংগৃহীত):",
+            f"### স্বরলিপি ({src})" + (f" · পৃষ্ঠা {page}" if page else ""),
             "",
-            local_notation,
+            local,
             "",
             "---",
         ]
 
-    result += [
-        "### গীতবিতান.কম থেকে:",
-        f"📄 **নোটেশন পেজ:** {notation_page}",
-        f"🖼 **স্বরলিপি ছবি:** {notation_png}",
-        "",
-        "_উপরের লিংকে ক্লিক করে PDF বা PNG ডাউনলোড করুন।_",
-    ]
+    # NLTR link if available
+    nltr_url = data.get("nltr_url", "")
+    if nltr_url:
+        result += [
+            "### রবীন্দ্র রচনাবলী (NLTR) থেকে:",
+            f"🔗 {nltr_url}",
+            "",
+        ]
+
+    # geetabitan.com fallback links
+    source_url = data.get("source_url", "")
+    slug = _source_url_to_slug(source_url) or _title_to_slug(title)
+    if slug:
+        letter = _first_letter(slug)
+        notation_page = (
+            f"https://www.geetabitan.com/lyrics/rs-{letter.lower()}/"
+            f"{slug}-notation-download.html"
+        )
+        notation_png = (
+            f"https://www.geetabitan.com/lyrics/baani-pdf-{letter.lower()}/"
+            f"{slug}.png"
+        )
+        result += [
+            "### গীতবিতান.কম থেকে:",
+            f"📄 **নোটেশন পেজ:** {notation_page}",
+            f"🖼 **স্বরলিপি ছবি:** {notation_png}",
+        ]
+
+    if len(result) <= 2:
+        result.append("এই গানের স্বরলিপি এখনো সংগ্রহ করা হয়নি।")
 
     return "\n".join(result)
 

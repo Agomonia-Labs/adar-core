@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   ThemeProvider, CssBaseline, Box, Paper, Typography,
-  TextField, IconButton, Chip, Avatar, Divider,
+  TextField, IconButton, Chip, Avatar, Divider, Button,
   CircularProgress, Tooltip, Stack, Tab, Tabs,
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
@@ -178,7 +178,17 @@ function MessageBubble({ msg, prevContent = '' }) {
           '& ul, & ol': { pl:2.5, my:0.5 },
           '& li': { mb:0.25 },
         }}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: ({ href, children }) => (
+                <a href={href} target="_blank" rel="noopener noreferrer"
+                   style={{ color: tenant.primaryDark }}>
+                  {children}
+                </a>
+              )
+            }}
+          >{msg.content}</ReactMarkdown>
         </Box>
 
         <StatsCharts content={msg.content} autoShow={/chart|graph|bar|visual|plot/i.test(prevContent)} hint={prevContent} />
@@ -186,10 +196,10 @@ function MessageBubble({ msg, prevContent = '' }) {
         {msg.eval && (
           <Box sx={{ mt:0.75, display:'flex', alignItems:'center', gap:0.75, flexWrap:'wrap' }}>
             {[
-              { label:'Accuracy',  val: msg.eval.scores?.accuracy },
-              { label:'Complete',  val: msg.eval.scores?.completeness },
-              { label:'Relevance', val: msg.eval.scores?.relevance },
-              { label:'Format',    val: msg.eval.scores?.format },
+              { label:'যথার্থতা',  val: msg.eval.scores?.accuracy },
+              { label:'সম্পূর্ণতা', val: msg.eval.scores?.completeness },
+              { label:'প্রাসঙ্গিক', val: msg.eval.scores?.relevance },
+              { label:'বিন্যাস',    val: msg.eval.scores?.format },
             ].map(({ label, val }) => (
               <Box key={label} sx={{
                 px:0.75, py:0.2, borderRadius:0.75, fontSize:'0.62rem', fontWeight:600,
@@ -198,13 +208,13 @@ function MessageBubble({ msg, prevContent = '' }) {
                 border:'1px solid',
                 borderColor: val>=4?`${tenant.primaryColor}50`:val>=3?`${tenant.accentColor}50`:'rgba(226,75,74,0.3)',
               }}>
-                {label} {val}/5
+                {label} {val}/৫
               </Box>
             ))}
             <Box sx={{ px:0.75, py:0.2, borderRadius:0.75, fontSize:'0.62rem', fontWeight:700,
                        bgcolor:`${tenant.primaryColor}25`, color:tenant.primaryDark,
                        border:`1px solid ${tenant.primaryColor}60` }}>
-              Overall {msg.eval.scores?.overall}/5
+              সামগ্রিক {msg.eval.scores?.overall}/৫
             </Box>
             {msg.eval.explanation && (
               <Box component="span" sx={{ fontSize:'0.62rem', color:'text.secondary', ml:0.5 }}>
