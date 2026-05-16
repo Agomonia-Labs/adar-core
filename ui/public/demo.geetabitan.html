@@ -3,526 +3,1397 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>গীতবিতান আদর — পরিচিতি</title>
-<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Noto+Serif+Bengali:wght@400;600;700&display=swap" rel="stylesheet"/>
+<title>গীতবিতান — পণ্য পরিচিতি</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Noto+Serif+Bengali:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
 :root{
-  --primary:#8B1A1A;--primary-dk:#5C0F0F;--primary-lt:#B24444;
-  --accent:#D4A017;--accent-lt:#E8C55A;--accent-dk:#A07810;
-  --bg:#FDF6F0;--paper:#FFFFFF;--ink:#2C1A0E;--ink-mid:#7A5C3A;
-  --divider:#E8D5C0;--shadow:rgba(44,26,14,.08);
+  --p:#8B1A1A;--pd:#5C0F0F;--pl:#B24444;
+  --a:#D4A017;--al:#E8C55A;--ad:#A07810;
+  --bg:#FDF6F0;--paper:#FFFFFF;--ink:#2C1A0E;--mid:#7A5C3A;
+  --div:#E8D5C0;--sh:rgba(44,26,14,.08);
+  --green:#2E7D32;--blue:#1565C0;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden}
 body{font-family:'Hind Siliguri',sans-serif;background:var(--bg);color:var(--ink);cursor:pointer;user-select:none}
 
-/* splash */
-#splash{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:200;transition:opacity .5s;background-image:radial-gradient(ellipse 70% 50% at 50% 0%,rgba(139,26,26,.07),transparent 60%)}
+/* ── Splash ─────────────────────────────────────────────────── */
+#splash{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:200;transition:opacity .6s;background-image:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(139,26,26,.08),transparent 65%)}
 #splash.hide{opacity:0;pointer-events:none}
-.sp-logo{width:80px;height:80px;border-radius:22px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:700;box-shadow:0 8px 32px rgba(139,26,26,.3);animation:float 3s ease-in-out infinite}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-.sp-title{font-family:'Noto Serif Bengali',serif;font-size:clamp(1.6rem,5vw,2.4rem);font-weight:700;color:var(--ink);text-align:center;line-height:1.3}
-.sp-title span{color:var(--primary)}
-.sp-sub{font-size:.85rem;color:var(--ink-mid);text-align:center}
-.sp-meta{display:flex;gap:28px}
-.sp-badge .val{font-size:1.5rem;font-weight:700;color:var(--primary);text-align:center}
-.sp-badge .lbl{font-size:.7rem;color:var(--ink-mid);text-align:center}
-.sp-tap{margin-top:8px;font-size:.83rem;color:var(--ink-mid);border:1px solid var(--divider);border-radius:999px;padding:8px 22px;background:var(--paper);box-shadow:0 2px 8px var(--shadow);animation:pulse 1.8s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+.sp-logo{width:88px;height:88px;border-radius:24px;background:linear-gradient(145deg,var(--p),var(--pd));color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Noto Serif Bengali',serif;font-size:2rem;font-weight:700;box-shadow:0 12px 40px rgba(139,26,26,.35);animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.sp-bn{font-family:'Noto Serif Bengali',serif;font-size:clamp(1.8rem,5vw,2.6rem);font-weight:700;color:var(--ink);text-align:center;line-height:1.3}
+.sp-bn span{color:var(--p)}
+.sp-en{font-size:.88rem;color:var(--mid);letter-spacing:1px}
+.sp-stats{display:flex;gap:32px;margin-top:4px}
+.sp-s .v{font-size:1.6rem;font-weight:700;color:var(--p);text-align:center}
+.sp-s .l{font-size:.68rem;color:var(--mid);text-align:center}
+.sp-tap{font-size:.82rem;color:var(--mid);border:1px solid var(--div);border-radius:999px;padding:9px 24px;background:var(--paper);box-shadow:0 2px 10px var(--sh);animation:pulse 1.8s ease-in-out infinite;margin-top:8px}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
 
-/* deck */
+/* ── Deck ───────────────────────────────────────────────────── */
 #deck{position:fixed;inset:0;display:flex;flex-direction:column}
 .slide{position:absolute;inset:0;display:none;flex-direction:column;background:var(--bg)}
 .slide.active{display:flex}
 
 /* topbar */
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--paper);border-bottom:1px solid var(--divider);box-shadow:0 1px 4px var(--shadow);flex-shrink:0}
-.tb-left{display:flex;align-items:center;gap:12px}
-.tb-badge{width:36px;height:36px;border-radius:10px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700}
-.tb-name{font-size:.9rem;font-weight:600;color:var(--ink)}
-.tb-subtitle{font-size:.72rem;color:var(--ink-mid)}
-.tb-right{display:flex;align-items:center;gap:10px}
-.tb-prog{font-size:.72rem;color:var(--ink-mid);background:var(--bg);border:1px solid var(--divider);padding:3px 10px;border-radius:999px}
-.tb-voice{width:32px;height:32px;border-radius:50%;border:1px solid var(--divider);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:.9rem;cursor:pointer;transition:all .2s;color:var(--ink-mid)}
-.tb-voice:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
-.tb-voice.on{background:var(--primary);color:#fff;border-color:var(--primary)}
-
-/* progress */
-.prog-bar{height:3px;background:var(--divider);flex-shrink:0}
-.prog-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));transition:width .4s}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:var(--paper);border-bottom:1px solid var(--div);box-shadow:0 1px 6px var(--sh);flex-shrink:0}
+.tb-l{display:flex;align-items:center;gap:10px}
+.tb-badge{width:34px;height:34px;border-radius:9px;background:linear-gradient(145deg,var(--p),var(--pd));color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Noto Serif Bengali',serif;font-size:.82rem;font-weight:700}
+.tb-name{font-size:.9rem;font-weight:700;color:var(--ink)}
+.tb-sub{font-size:.68rem;color:var(--mid)}
+.tb-r{display:flex;align-items:center;gap:8px}
+.tb-prog{font-size:.68rem;color:var(--mid);background:var(--bg);border:1px solid var(--div);padding:3px 10px;border-radius:999px}
+.tb-vc{width:30px;height:30px;border-radius:50%;border:1px solid var(--div);background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:.85rem;transition:all .2s;color:var(--mid)}
+.tb-vc:hover,.tb-vc.on{background:var(--p);color:#fff;border-color:var(--p)}
+.pbar{height:3px;background:var(--div);flex-shrink:0}
+.pfill{height:100%;background:linear-gradient(90deg,var(--p),var(--a));transition:width .5s}
 
 /* slide body */
-.slide-body{flex:1;overflow-y:auto;padding:24px 20px 60px;display:flex;flex-direction:column;gap:18px}
+.sb{flex:1;overflow-y:auto;padding:20px 18px 70px;display:flex;flex-direction:column;gap:16px}
+
+/* nav */
+.nav{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:var(--paper);border-top:1px solid var(--div);z-index:10}
+.nav-btn{padding:8px 22px;border-radius:999px;font-size:.82rem;font-weight:600;font-family:'Hind Siliguri',sans-serif;cursor:pointer;border:1px solid var(--div);background:var(--bg);color:var(--mid);transition:all .2s}
+.nav-btn.pri{background:var(--p);color:#fff;border-color:var(--p)}
+.nav-btn:hover{box-shadow:0 2px 8px var(--sh)}
+.nav-dots{display:flex;gap:5px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--div);transition:all .3s}
+.dot.active{background:var(--p);width:20px;border-radius:4px}
 
 /* typography */
-.s-label{font-size:.68rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--primary);margin-bottom:6px}
-.s-title{font-family:'Noto Serif Bengali',serif;font-size:clamp(1.3rem,4vw,2rem);font-weight:700;color:var(--ink);line-height:1.3}
-.s-title span{color:var(--primary)}
-.s-desc{font-size:.9rem;color:var(--ink-mid);line-height:1.85;max-width:640px}
+.s-label{font-size:.65rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--p);margin-bottom:6px}
+.s-title{font-family:'Noto Serif Bengali',serif;font-size:clamp(1.2rem,3.5vw,1.8rem);font-weight:700;color:var(--ink);line-height:1.35}
+.s-title span{color:var(--p)}
+.s-desc{font-size:.88rem;color:var(--mid);line-height:1.9}
 
-/* cards */
-.card{background:var(--paper);border:1px solid var(--divider);border-radius:12px;padding:16px 18px;box-shadow:0 2px 8px var(--shadow)}
-.highlight{background:rgba(139,26,26,.05);border:1px solid rgba(139,26,26,.15);border-radius:12px;padding:14px 16px}
-.gold-box{background:rgba(212,160,23,.06);border:1px solid rgba(212,160,23,.2);border-radius:12px;padding:14px 16px}
+/* card primitives */
+.card{background:var(--paper);border:1px solid var(--div);border-radius:12px;padding:14px 16px;box-shadow:0 2px 8px var(--sh)}
+.hl{background:rgba(139,26,26,.05);border:1px solid rgba(139,26,26,.15);border-radius:10px;padding:12px 14px}
+.gold{background:rgba(212,160,23,.06);border:1px solid rgba(212,160,23,.22);border-radius:10px;padding:12px 14px}
+.green-box{background:rgba(46,125,50,.05);border:1px solid rgba(46,125,50,.2);border-radius:10px;padding:12px 14px}
 
-/* ADAR */
-.adar-grid{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;align-items:start}
-.adar-letter{font-family:'Noto Serif Bengali',serif;font-size:2.6rem;font-weight:700;color:var(--primary);line-height:1.1}
-.adar-word{font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:3px}
-.adar-desc{font-size:.82rem;color:var(--ink-mid);line-height:1.7}
+/* stat grid */
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat-c{text-align:center;padding:12px 8px;background:var(--paper);border:1px solid var(--div);border-radius:10px;box-shadow:0 1px 4px var(--sh)}
+.stat-v{font-size:1.5rem;font-weight:700;color:var(--p);line-height:1}
+.stat-l{font-size:.67rem;color:var(--mid);margin-top:3px}
 
-/* agent */
-.agent-box{background:var(--paper);border:1px solid var(--divider);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 4px var(--shadow)}
-.agent-box.orch{border-color:var(--accent);background:rgba(212,160,23,.04)}
-.agent-name{font-weight:600;font-size:.86rem;color:var(--ink);margin-bottom:2px}
-.agent-role{font-size:.73rem;color:var(--ink-mid);line-height:1.5}
+/* feature pills */
+.feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.feat{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--paper);border:1px solid var(--div);border-radius:10px;box-shadow:0 1px 4px var(--sh)}
+.feat-ico{font-size:1.4rem;line-height:1;flex-shrink:0}
+.feat-t{font-size:.82rem;font-weight:600;color:var(--ink);margin-bottom:2px}
+.feat-d{font-size:.72rem;color:var(--mid);line-height:1.6}
 
-/* chat */
-.chat-wrap{background:var(--paper);border:1px solid var(--divider);border-radius:14px;overflow:hidden;box-shadow:0 4px 16px var(--shadow)}
-.chat-hdr{background:var(--primary);padding:11px 16px;display:flex;align-items:center;gap:8px}
-.chat-hdr-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3)}
-.chat-hdr-ttl{font-size:.84rem;font-weight:600;color:#fff}
-.chat-body{padding:14px;display:flex;flex-direction:column;gap:12px;background:var(--bg)}
-.msg{display:flex;gap:8px;align-items:flex-start}
-.msg.u{flex-direction:row-reverse}
-.av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0}
-.av.b{background:var(--primary);color:#fff}
-.av.u{background:var(--accent);color:#fff}
-.bub{max-width:80%;padding:10px 14px;border-radius:14px;font-size:.83rem;line-height:1.8}
-.msg.b .bub{background:rgba(139,26,26,.07);border:1px solid rgba(139,26,26,.15);border-radius:4px 14px 14px 14px;color:var(--ink)}
-.msg.u .bub{background:rgba(212,160,23,.1);border:1px solid rgba(212,160,23,.2);border-radius:14px 4px 14px 14px;color:var(--ink)}
+/* ── CHAT UI ──────────────────────────────────────────────────── */
+.chat-wrap{display:flex;flex-direction:column;gap:12px}
+.bubble-row{display:flex;align-items:flex-start;gap:10px}
+.bubble-row.user{flex-direction:row-reverse}
+.avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0}
+.av-bot{background:linear-gradient(145deg,var(--p),var(--pd));color:#fff}
+.av-usr{background:rgba(212,160,23,.2);color:var(--ad)}
+.bubble{max-width:82%;padding:10px 14px;border-radius:12px;font-size:.85rem;line-height:1.75}
+.bubble.bot{background:rgba(139,26,26,.08);border:1px solid rgba(139,26,26,.15);border-radius:4px 12px 12px 12px;color:var(--ink)}
+.bubble.usr{background:rgba(212,160,23,.1);border:1px solid rgba(212,160,23,.25);border-radius:12px 4px 12px 12px;color:var(--ink)}
+.bubble strong{color:var(--p)}
+.bubble em{color:var(--mid);font-style:normal;font-size:.8rem}
+.ts{font-size:.63rem;color:var(--mid);margin-top:5px;display:block}
+
+/* eval badges */
+.eval-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.ebadge{padding:2px 7px;border-radius:6px;font-size:.62rem;font-weight:700}
+.eb-good{background:rgba(139,26,26,.1);color:var(--p);border:1px solid rgba(139,26,26,.25)}
+.eb-ok{background:rgba(212,160,23,.1);color:var(--ad);border:1px solid rgba(212,160,23,.3)}
+.eb-total{background:rgba(139,26,26,.15);color:var(--pd);border:1px solid rgba(139,26,26,.3);font-weight:800}
+
+/* yt link row */
+.yt-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.yt-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid rgba(196,0,0,.25);border-radius:999px;color:#c00;font-size:.72rem;font-weight:600;background:rgba(196,0,0,.04)}
+.sp-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid rgba(30,215,96,.35);border-radius:999px;color:#1db954;font-size:.72rem;font-weight:600;background:rgba(30,215,96,.06)}
+
+/* raag table */
+.raag-table{width:100%;border-collapse:collapse;font-size:.78rem}
+.raag-table th{background:rgba(139,26,26,.1);color:var(--p);font-weight:700;padding:7px 10px;text-align:left;border-bottom:1px solid var(--div)}
+.raag-table td{padding:6px 10px;border-bottom:1px solid rgba(232,213,192,.5);color:var(--ink)}
+.raag-table tr:last-child td{border-bottom:none}
+
+/* notation box */
+.notation{font-family:'JetBrains Mono',monospace;background:#1e1e1e;color:#d4d4d4;border-radius:10px;padding:14px 16px;font-size:.76rem;line-height:2;letter-spacing:.3px}
+.notation .n-sa{color:#ff9999}.notation .n-re{color:#ffcc66}.notation .n-ga{color:#99ff99}
+.notation .n-ma{color:#66ccff}.notation .n-pa{color:#ff99cc}.notation .n-dha{color:#ffaa44}
+.notation .n-ni{color:#cc99ff}.notation .n-bar{color:#888}
+
+/* voice indicator */
+.voice-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(139,26,26,.1);border:1px solid rgba(139,26,26,.2);border-radius:999px;font-size:.78rem;color:var(--p);font-weight:600}
+.v-dot{width:8px;height:8px;border-radius:50%;background:var(--p);animation:vdot 1s ease-in-out infinite}
+@keyframes vdot{0%,100%{transform:scale(.6);opacity:.4}50%{transform:scale(1.2);opacity:1}}
+
+/* paryay badge */
+.p-badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.72rem;font-weight:600;background:rgba(139,26,26,.1);color:var(--p);border:1px solid rgba(139,26,26,.2)}
 
 /* song card */
-.song-card{background:var(--paper);border-left:3px solid var(--primary);border-radius:0 10px 10px 0;padding:12px 14px;margin-top:8px;box-shadow:0 1px 4px var(--shadow)}
-.sc-title{font-family:'Noto Serif Bengali',serif;font-weight:700;color:var(--primary);font-size:.95rem;margin-bottom:6px}
-.sc-pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px}
-.pill{font-size:.68rem;font-weight:600;padding:2px 8px;border-radius:999px}
-.p-r{background:rgba(139,26,26,.1);color:var(--primary-dk)}
-.p-t{background:rgba(212,160,23,.12);color:var(--accent-dk)}
-.sc-lyrics{font-size:.8rem;color:var(--ink-mid);line-height:2;white-space:pre-line;border-top:1px solid var(--divider);padding-top:8px;margin-top:4px}
-.sc-lyrics .ref{padding-left:1.4em;opacity:.7}
-.evals{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
-.eval-b{font-size:.63rem;font-weight:600;padding:2px 8px;border-radius:4px;background:rgba(139,26,26,.08);color:var(--primary-dk);border:1px solid rgba(139,26,26,.15)}
+.song-card{background:var(--paper);border:1px solid var(--div);border-radius:10px;overflow:hidden;box-shadow:0 2px 8px var(--sh)}
+.sc-head{background:linear-gradient(135deg,rgba(139,26,26,.08),rgba(212,160,23,.06));padding:10px 14px;border-bottom:1px solid var(--div);display:flex;justify-content:space-between;align-items:center}
+.sc-title{font-family:'Noto Serif Bengali',serif;font-size:.95rem;font-weight:700;color:var(--ink)}
+.sc-body{padding:10px 14px}
+.sc-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:5px}
+.sc-m{font-size:.72rem;color:var(--mid)}
+.sc-m span{color:var(--ink);font-weight:600}
 
-/* table */
-.r-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-top:8px}
-.r-table th{background:rgba(139,26,26,.06);color:var(--primary-dk);font-weight:600;padding:7px 10px;text-align:left;border-bottom:1px solid var(--divider)}
-.r-table td{padding:6px 10px;border-bottom:1px solid var(--divider);color:var(--ink-mid)}
-.r-table tr:last-child td{border-bottom:none}
+/* stanza box */
+.stanza{background:rgba(139,26,26,.04);border-left:3px solid var(--p);padding:10px 14px;border-radius:0 8px 8px 0;font-size:.85rem;line-height:2;color:var(--ink)}
 
-/* summary */
-.sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.sum-card{background:var(--paper);border:1px solid var(--divider);border-radius:12px;padding:14px;box-shadow:0 1px 4px var(--shadow)}
-.sum-card .emoji{font-size:1.3rem;margin-bottom:6px;display:block}
-.sum-card .lbl{font-family:'Noto Serif Bengali',serif;font-weight:700;color:var(--primary);font-size:.85rem;margin-bottom:4px}
-.sum-card .txt{font-size:.77rem;color:var(--ink-mid);line-height:1.75}
+/* two-col */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:480px){.two-col{grid-template-columns:1fr}.stat-grid{grid-template-columns:1fr 1fr}.feat-grid{grid-template-columns:1fr}}
 
-/* poll */
-.poll-card{background:var(--paper);border:1px solid var(--divider);border-radius:12px;padding:16px;box-shadow:0 2px 8px var(--shadow)}
-.poll-q{font-family:'Noto Serif Bengali',serif;font-weight:700;font-size:.92rem;color:var(--ink);margin-bottom:12px}
-.poll-opt{margin-bottom:8px}
-.poll-lbl{display:flex;justify-content:space-between;font-size:.78rem;color:var(--ink-mid);margin-bottom:3px}
-.poll-bar-bg{height:6px;border-radius:3px;background:var(--divider)}
-.poll-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--primary),var(--primary-lt))}
+/* section header */
+.sec-h{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.sec-h-line{flex:1;height:1px;background:var(--div)}
+.sec-h-text{font-size:.68rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid)}
 
-/* plans */
-.plan-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.plan{background:var(--paper);border:1px solid var(--divider);border-radius:12px;padding:14px;text-align:center;position:relative;box-shadow:0 2px 8px var(--shadow)}
-.plan.pop{border-color:var(--primary);box-shadow:0 4px 16px rgba(139,26,26,.15)}
-.plan-pop{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--primary);color:#fff;font-size:.62rem;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap}
-.plan-name{font-weight:700;font-size:.88rem;color:var(--ink);margin-bottom:4px}
-.plan-price{font-size:1.4rem;font-weight:700;color:var(--primary);margin:6px 0}
-.plan-feat{font-size:.72rem;color:var(--ink-mid);line-height:1.8}
+/* singer category */
+.singer-cat{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--mid);margin:8px 0 5px}
 
-/* quality */
-.qual-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.q-card{background:var(--paper);border:1px solid var(--divider);border-radius:10px;padding:14px;text-align:center;box-shadow:0 1px 4px var(--shadow)}
-.q-val{font-size:1.7rem;font-weight:700;color:var(--primary)}
-.q-lbl{font-size:.72rem;color:var(--ink-mid);margin-top:4px}
+/* scroll hint */
+.scroll-hint{position:fixed;bottom:55px;left:50%;transform:translateX(-50%);font-size:.65rem;color:var(--mid);background:var(--paper);border:1px solid var(--div);padding:3px 10px;border-radius:999px;pointer-events:none;opacity:0;transition:opacity .3s}
+.scroll-hint.show{opacity:1}
 
-/* chip */
-.chip{display:inline-block;font-size:.7rem;background:rgba(139,26,26,.07);border:1px solid rgba(139,26,26,.15);color:var(--primary-dk);padding:2px 8px;border-radius:4px}
+.subtitle-bar{
+  position:fixed;bottom:55px;left:0;right:0;
+  background:rgba(0,0,0,.72);color:#fff;
+  font-size:.82rem;line-height:1.5;
+  padding:8px 16px;text-align:center;
+  display:none;z-index:20;
+  font-family:'Hind Siliguri',sans-serif;
+}
 
-/* step */
-.step{display:flex;gap:10px;align-items:flex-start;font-size:.82rem}
-.step-num{width:22px;height:22px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;flex-shrink:0;margin-top:1px}
-.step-head{font-weight:600;color:var(--ink);margin-bottom:2px}
-.step-body{color:var(--ink-mid);line-height:1.6}
-
-/* login */
-.login-card{background:var(--paper);border:1px solid var(--divider);border-radius:14px;padding:24px 20px;max-width:340px;margin:0 auto;box-shadow:0 4px 16px var(--shadow)}
-.login-field{background:var(--bg);border:1px solid var(--divider);border-radius:8px;padding:10px 12px;font-size:.82rem;color:var(--ink-mid);margin-bottom:10px}
-.login-btn{background:var(--primary);color:#fff;border-radius:8px;padding:11px;text-align:center;font-size:.85rem;font-weight:600}
-
-.scope-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.scope-card{background:var(--paper);border:1px solid var(--divider);border-radius:12px;padding:14px;box-shadow:0 1px 4px var(--shadow)}
-.scope-card .sc-head{font-weight:700;font-size:.82rem;color:var(--primary);margin-bottom:8px}
-.scope-card .sc-list{font-size:.75rem;color:var(--ink-mid);line-height:1.9}
-.browser-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.browser-card{background:var(--paper);border:1px solid var(--divider);border-radius:12px;padding:14px;text-align:center;box-shadow:0 1px 4px var(--shadow)}
-.browser-card .icon{font-size:1.5rem;margin-bottom:6px}
-.browser-card .name{font-weight:700;font-size:.82rem;color:var(--ink);margin-bottom:4px}
-.browser-card .detail{font-size:.71rem;color:var(--ink-mid);line-height:1.7}
-/* nav */
-.nav-prev,.nav-next{position:fixed;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;background:var(--paper);border:1px solid var(--divider);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1rem;z-index:50;box-shadow:0 2px 8px var(--shadow);color:var(--ink-mid);transition:all .2s}
-.nav-prev{left:8px}.nav-next{right:8px}
-.nav-prev:hover,.nav-next:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
-
-/* subtitle */
-.subtitle-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(44,26,14,.92);backdrop-filter:blur(8px);padding:10px 24px;font-size:.85rem;color:rgba(255,255,255,.9);line-height:1.5;text-align:center;min-height:44px;display:none;z-index:60;border-top:1px solid rgba(139,26,26,.4);font-family:'Hind Siliguri',sans-serif}
-.subtitle-bar.visible{display:block}
-
-@media(max-width:480px){.sum-grid,.qual-grid,.plan-grid{grid-template-columns:1fr}.adar-letter{font-size:2rem}}
 </style>
 </head>
 <body>
 
-<div id="splash">
-  <div class="sp-logo">আদর</div>
-  <h1 class="sp-title">গীতবিতান <span>আদর</span></h1>
-  <p class="sp-sub">রবীন্দ্রনাথ ঠাকুরের সমগ্র গানের এআই সহায়ক</p>
-  <div class="sp-meta">
-    <div class="sp-badge"><div class="val">২</div><div class="lbl">এআই এজেন্ট</div></div>
-    <div class="sp-badge"><div class="val">২০০০+</div><div class="lbl">রবীন্দ্র গান</div></div>
-    <div class="sp-badge"><div class="val">৪.৬৫/৫</div><div class="lbl">মান স্কোর</div></div>
+<!-- ═══════════════════════════════════════════════════════ SPLASH -->
+<div id="splash" onclick="startDemo()">
+  <div class="sp-logo">গী</div>
+  <div class="sp-bn"><span>গীতবিতান</span> সহায়ক</div>
+  <div class="sp-en">Rabindra Sangeet AI Assistant</div>
+  <div class="sp-stats">
+    <div class="sp-s"><div class="v">২,০০০+</div><div class="l">রবীন্দ্রসঙ্গীত</div></div>
+    <div class="sp-s"><div class="v">৯</div><div class="l">পর্যায়</div></div>
+    <div class="sp-s"><div class="v">২৬+</div><div class="l">রাগ</div></div>
+    <div class="sp-s"><div class="v">১৩</div><div class="l">শিল্পী</div></div>
   </div>
-  <p class="sp-sub" style="font-size:.75rem">বাংলা পুরুষ কণ্ঠ · স্বয়ংক্রিয় অগ্রগতি · ১১টি স্লাইড</p>
-  <div class="sp-tap">▶ যেকোনো জায়গায় ট্যাপ করুন</div>
+  <div class="sp-tap">ট্যাপ করে শুরু করুন →</div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════ DECK -->
 <div id="deck">
-  <div class="nav-prev" id="prevBtn">&#8249;</div>
-  <div class="nav-next" id="nextBtn">&#8250;</div>
 
-  <!-- 0: Origin -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">পরিচয় · ০০</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:9%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">উৎপত্তি</div><h1 class="s-title">আদর <span>কী?</span></h1></div>
-      <p class="s-desc">একটি এজেন্টিক কৃত্রিম বুদ্ধিমত্তা প্ল্যাটফর্ম — যত্ন, নিষ্ঠা ও উদ্দেশ্যের সাথে নির্মিত।</p>
-      <div class="gold-box" style="display:flex;gap:14px;align-items:center"><span style="font-size:2rem">আদর</span><div><div style="font-size:.72rem;font-weight:700;color:var(--accent-dk);margin-bottom:4px">বাংলা বিশেষ্য</div><div style="font-size:.88rem;color:var(--ink);line-height:1.7"><strong>স্নেহ, যত্ন ও মনোযোগ</strong> — উষ্ণতা ও নিষ্ঠার সাথে কাউকে সেবা করার গুণ।</div></div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="card"><div style="font-size:1.2rem;margin-bottom:6px">🎵</div><div style="font-weight:600;font-size:.84rem;color:var(--ink);margin-bottom:4px">সঙ্গীতের প্রতি ভালোবাসা</div><div style="font-size:.77rem;color:var(--ink-mid);line-height:1.7">রবীন্দ্রনাথের গান ও বাংলার সংস্কৃতির প্রতি শ্রদ্ধা থেকে তৈরি।</div></div>
-        <div class="card"><div style="font-size:1.2rem;margin-bottom:6px">🌐</div><div style="font-weight:600;font-size:.84rem;color:var(--ink);margin-bottom:4px">সর্বজনীন প্ল্যাটফর্ম</div><div style="font-size:.77rem;color:var(--ink-mid);line-height:1.7">গীতবিতান প্রথম বাস্তবায়ন। একই প্ল্যাটফর্ম যেকোনো ডোমেইনে কাজ করে।</div></div>
+<!-- ════ SLIDE 01: OVERVIEW ════ -->
+<div class="slide active" data-idx="0">
+  <div class="topbar">
+    <div class="tb-l">
+      <div class="tb-badge">গী</div>
+      <div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">Rabindra Sangeet AI</div></div>
+    </div>
+    <div class="tb-r"><div class="tb-prog">১/২০</div><div class="tb-vc" id="vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:5%"></div></div>
+  <div class="sb">
+    <div class="s-label">পরিচিতি</div>
+    <div class="s-title">রবীন্দ্রসঙ্গীতের<br/><span>বুদ্ধিমান সহায়ক</span></div>
+
+    <!-- ADAR platform intro -->
+    <div class="hl" style="display:flex;align-items:center;gap:12px;padding:12px 16px">
+      <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(145deg,var(--p),var(--pd));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1rem;flex-shrink:0;font-family:'Noto Serif Bengali',serif">আদর</div>
+      <div>
+        <div style="font-size:.82rem;font-weight:700;color:var(--ink)">Powered by ADAR — Agomonia AI Platform</div>
+        <div style="font-size:.74rem;color:var(--mid);margin-top:2px">ADAR is a domain-specific AI assistant platform by Agomonia Labs. <strong>গীতবিতান</strong> is ADAR's Rabindra Sangeet vertical — purpose-built for Bengali music heritage.</div>
+      </div>
+    </div>
+
+    <div class="s-desc">গীতবিতানের ২,০০০+ রবীন্দ্রসঙ্গীতের তথ্য, রাগ-তাল বিশ্লেষণ, স্বরলিপি ও শ্রোতার সংযোগ — একটি AI সহায়কে।</div>
+    <div class="stat-grid">
+      <div class="stat-c"><div class="stat-v">২,০৪৮</div><div class="stat-l">গান</div></div>
+      <div class="stat-c"><div class="stat-v">২৬</div><div class="stat-l">রাগ</div></div>
+      <div class="stat-c"><div class="stat-v">৮</div><div class="stat-l">তাল</div></div>
+    </div>
+    <div class="feat-grid">
+      <div class="feat"><div class="feat-ico">🔍</div><div><div class="feat-t">গান অনুসন্ধান</div><div class="feat-d">শিরোনাম, পর্যায়, রাগ বা তাল দিয়ে খুঁজুন</div></div></div>
+      <div class="feat"><div class="feat-ico">🎼</div><div><div class="feat-t">রাগ-তাল বিশ্লেষণ</div><div class="feat-d">আরোহী, অবরোহী, পকড়, বাদী, সমবাদী</div></div></div>
+      <div class="feat"><div class="feat-ico">📜</div><div><div class="feat-t">স্বরলিপি</div><div class="feat-d">স্বরবিতান ও NLTR থেকে OCR করা নোটেশন</div></div></div>
+      <div class="feat"><div class="feat-ico">▶</div><div><div class="feat-t">শুনুন</div><div class="feat-d">১৩ জন শিল্পীর YouTube ও Spotify লিংক</div></div></div>
+      <div class="feat"><div class="feat-ico">🎙</div><div><div class="feat-t">বাংলায় কথা বলুন</div><div class="feat-d">ভয়েস ইনপুট — বাংলা STT সরাসরি</div></div></div>
+      <div class="feat"><div class="feat-ico">⭐</div><div><div class="feat-t">AI মূল্যায়ন</div><div class="feat-d">প্রতিটি উত্তরে যথার্থতা স্কোর</div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 02: গান অনুসন্ধান — শিরোনাম দিয়ে ════ -->
+<div class="slide" data-idx="1">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">গান অনুসন্ধান</div></div></div>
+    <div class="tb-r"><div class="tb-prog">২/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:10%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১ — গান খোঁজা</div>
+    <div class="s-title">শিরোনাম দিয়ে <span>গান খুঁজুন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">আমার সোনার বাংলা গানটি দেখাও</div><span class="ts">৬:৩০ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <div class="song-card">
+              <div class="sc-head">
+                <div class="sc-title">আমার সোনার বাংলা, আমি তোমায় ভালোবাসি</div>
+                <div class="p-badge">স্বদেশ</div>
+              </div>
+              <div class="sc-body">
+                <div class="stanza">আমার সোনার বাংলা, আমি তোমায় ভালোবাসি।<br/>চিরদিন তোমার আকাশ, তোমার বাতাস, আমার প্রাণে বাজায় বাঁশি॥<br/>ও মা, ফাগুনে তোর আমের বনে ঘ্রাণে পাগল করে,<br/>মরি হায়, হায় রে—</div>
+                <div class="sc-meta">
+                  <div class="sc-m">রাগ: <span>বাউল</span></div>
+                  <div class="sc-m">তাল: <span>দাদরা</span></div>
+                  <div class="sc-m">স্তবক: <span>৩টি</span></div>
+                </div>
+              </div>
+            </div>
+            <em>বাংলাদেশের জাতীয় সংগীত। বাউল রাগে রচিত, দাদরা তালে নিবদ্ধ।</em>
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-ok">বিন্যাস ৪/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৪.৮৫/৫</div>
+          </div>
+          <span class="ts">৬:৩১ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="gold"><strong>💡 এভাবেও জিজ্ঞেস করুন:</strong><br/>
+    <em>"Amar Sonar Bangla show me" · "একলা চলো রে গানটি দেখাও" · "আনন্দধারা বহিছে ভুবনে"</em></div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 03: পর্যায় অনুযায়ী গান ════ -->
+<div class="slide" data-idx="2">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">পর্যায় অনুসন্ধান</div></div></div>
+    <div class="tb-r"><div class="tb-prog">৩/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:15%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ২ — পর্যায় ভিত্তিক</div>
+    <div class="s-title">পর্যায় দিয়ে <span>গান দেখুন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">স্বদেশ পর্যায়ের গানের তালিকা দাও</div><span class="ts">৬:৩৩ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>স্বদেশ পর্যায়ের গানসমূহ</strong> (মোট ৪৬টি)<br/><br/>
+            🎵 আমার সোনার বাংলা, আমি তোমায় ভালোবাসি — <em>বাউল · দাদরা</em><br/>
+            🎵 ও আমার দেশের মাটি — <em>ভৈরবী · কাহারবা</em><br/>
+            🎵 যদি তোর ডাক শুনে কেউ না আসে — <em>ভৈরবী · কাহারবা</em><br/>
+            🎵 বাংলার মাটি বাংলার জল — <em>মিশ্র · কাহারবা</em><br/>
+            🎵 আমার মাথা নত করে দাও হে — <em>পিলু · দাদরা</em><br/>
+            <em>…আরও ৪১টি গান</em>
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৪/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৪.৮/৫</div>
+          </div>
+          <span class="ts">৬:৩৩ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="card"><div class="s-label" style="margin-bottom:8px">৯টি পর্যায়</div>
+        <div style="font-size:.8rem;color:var(--ink);line-height:1.9">পূজা (৬১৭) · প্রেম (২০৯) · স্বদেশ (৪৬) · প্রকৃতি (২৫৪) · বিচিত্র (১৬২) · নাট্যগীতি · আনুষ্ঠানিক · প্রেম ও প্রকৃতি · পূজা ও প্রার্থনা</div>
+      </div>
+      <div class="gold"><div class="s-label" style="margin-bottom:8px">💡 প্রশ্নের ধরন</div>
+        <div style="font-size:.8rem;color:var(--ink);line-height:1.9">"পূজা পর্যায়ের কিছু গান দেখাও" · "প্রেম পর্যায়ের সেরা গান" · "বিচিত্র পর্যায়ে কতটি গান আছে"</div>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- 1: ADAR -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">পরিচয় · ০১</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:18%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">নামের অর্থ</div><h1 class="s-title">ADAR — <span>চারটি শব্দের শক্তি</span></h1></div>
-      <div class="card"><div class="adar-grid">
-        <div class="adar-letter">A</div><div><div class="adar-word">Agentic — এজেন্টিক</div><div class="adar-desc">স্বায়ত্তশাসিত এজেন্ট — কোন টুল ব্যবহার করবে নিজেই সিদ্ধান্ত নেয়।</div></div>
-        <div class="adar-letter">D</div><div><div class="adar-word">Data — ডেটা</div><div class="adar-desc">গীতবিতানের লাইভ ডেটা — গানের কথা, রাগ, তাল, পর্যায়।</div></div>
-        <div class="adar-letter">A</div><div><div class="adar-word">Access — অ্যাক্সেস</div><div class="adar-desc">বহু-উৎস অ্যাক্সেস — Firestore ভেক্টর সার্চ একটি ইন্টারফেসে।</div></div>
-        <div class="adar-letter">R</div><div><div class="adar-word">Reasoning — রিজনিং</div><div class="adar-desc">Gemini যুক্তি দিয়ে উত্তর তৈরি করে — গানের অর্থ ব্যাখ্যা করে।</div></div>
-      </div></div>
-      <div class="highlight"><div style="font-size:.78rem;color:var(--ink-mid);margin-bottom:8px">আদর কোনো সার্চ ইঞ্জিন নয়</div><div style="display:flex;flex-direction:column;gap:6px;font-size:.8rem"><div style="display:flex;gap:8px"><span style="color:#c44;font-weight:700">✗</span><span style="color:var(--ink-mid)">সার্চ: "ভৈরবী" → একটি পেজ</span></div><div style="display:flex;gap:8px"><span style="color:green;font-weight:700">✓</span><span style="color:var(--ink)">আদর: সব গান খোঁজে, রাগের ইতিহাস বলে, মেজাজ বিশ্লেষণ করে</span></div></div></div>
-    </div>
+<!-- ════ SLIDE 04: রাগ অনুযায়ী গান ════ -->
+<div class="slide" data-idx="3">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">রাগ ভিত্তিক অনুসন্ধান</div></div></div>
+    <div class="tb-r"><div class="tb-prog">৪/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
   </div>
-
-  <!-- 2: Architecture -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">পরিচয় · ০২</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:27%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">আর্কিটেকচার</div><h1 class="s-title">দুটি এজেন্ট, <span>একটি অর্কেস্ট্রেটর</span></h1></div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <div class="agent-box orch"><span style="font-size:1.3rem">🧭</span><div><div class="agent-name">গীতবিতান অর্কেস্ট্রেটর</div><div class="agent-role">প্রশ্ন বিশ্লেষণ করে সঠিক এজেন্টে পাঠায় · gemini-2.5-flash</div></div></div>
-        <div style="text-align:center;color:var(--ink-mid);font-size:.8rem">↕</div>
-        <div class="agent-box"><span style="font-size:1.3rem">🎵</span><div><div class="agent-name">সং এজেন্ট</div><div class="agent-role">গান খোঁজা · রাগ/তাল · পর্যায় · স্তবক · সারসংক্ষেপ</div></div></div>
+  <div class="pbar"><div class="pfill" style="width:20%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ৩ — রাগ ভিত্তিক</div>
+    <div class="s-title">রাগ দিয়ে <span>গান খুঁজুন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">ভৈরবী রাগের গান দেখাও</div><span class="ts">৬:৩৫ PM</span></div>
       </div>
-      <div class="card"><div style="font-size:.72rem;color:var(--ink-mid);margin-bottom:7px">সং এজেন্টের টুলস</div><div style="display:flex;flex-wrap:wrap;gap:5px"><span class="chip">vector_search_songs</span><span class="chip">get_full_song</span><span class="chip">get_songs_by_raag</span><span class="chip">get_songs_by_taal</span><span class="chip">get_songs_by_paryay</span><span class="chip">summarize_aspect</span></div></div>
-    </div>
-  </div>
-
-  <!-- 3: Login -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০১/০৮ · লগইন</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:36%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">শুরু</div><h1 class="s-title"><span>সহজ লগইন</span></h1></div>
-      <div class="login-card">
-        <div style="text-align:center;margin-bottom:18px"><div style="width:46px;height:46px;border-radius:13px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;margin:0 auto 10px">আদর</div><div style="font-family:'Noto Serif Bengali',serif;font-weight:700;font-size:1rem;color:var(--ink)">আদর · গীতবিতান</div><div style="font-size:.75rem;color:var(--ink-mid);margin-top:3px">আপনার অ্যাকাউন্টে প্রবেশ করুন</div></div>
-        <div class="login-field">ইমেইল ঠিকানা</div>
-        <div class="login-field">পাসওয়ার্ড</div>
-        <div class="login-btn">প্রবেশ করুন</div>
-        <div style="text-align:center;margin-top:10px;font-size:.75rem;color:var(--ink-mid)">অ্যাকাউন্ট নেই? <span style="color:var(--primary);font-weight:600">নিবন্ধন করুন</span></div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div class="step"><div class="step-num">১</div><div><div class="step-head">নিবন্ধন করুন</div><div class="step-body">নাম, ইমেইল, পাসওয়ার্ড দিন</div></div></div>
-        <div class="step"><div class="step-num">২</div><div><div class="step-head">Stripe চেকআউট — ১৪ দিন বিনামূল্যে</div><div class="step-body">ট্রায়াল পিরিয়ডে কোনো চার্জ নেই</div></div></div>
-        <div class="step"><div class="step-num">৩</div><div><div class="step-head">স্বয়ংক্রিয় সক্রিয়করণ</div><div class="step-body">সাথে সাথে চ্যাট শুরু করুন</div></div></div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>ভৈরবী রাগের গানসমূহ</strong> (মোট ৪৭টি)<br/><br/>
+            🎵 ভালোবেসে সখী নিভৃতে যতনে — <em>পূজা · কাহারবা</em><br/>
+            🎵 আমার সোনার বাংলা — <em>স্বদেশ · দাদরা</em><br/>
+            🎵 যদি তোর ডাক শুনে কেউ না আসে — <em>স্বদেশ · কাহারবা</em><br/>
+            🎵 পুরানো সেই দিনের কথা — <em>প্রেম · কাহারবা</em><br/>
+            🎵 আমার মাথা নত করে দাও — <em>পূজা · কাহারবা</em><br/>
+            <em>…আরও ৪২টি গান</em>
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৫/৫</div>
+          </div>
+          <span class="ts">৬:৩৫ PM</span>
+        </div>
       </div>
     </div>
+    <div class="hl"><strong>💡 এভাবেও জিজ্ঞেস করুন:</strong><br/>
+    "ইমন রাগের গান" · "কাফি রাগে কতটি গান আছে" · "বেহাগ রাগের পূজা পর্যায়ের গান"</div>
   </div>
+</div>
 
-  <!-- 4: Core chat -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০২/০৮ · চ্যাট</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:45%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">মূল অভিজ্ঞতা</div><h1 class="s-title">যেকোনো প্রশ্ন, <span>তাৎক্ষণিক উত্তর</span></h1></div>
-      <div class="chat-wrap">
-        <div class="chat-hdr"><div class="chat-hdr-dot"></div><div class="chat-hdr-dot"></div><div class="chat-hdr-dot"></div><span class="chat-hdr-ttl">আদর · গীতবিতান</span></div>
-        <div class="chat-body">
-          <div class="msg b"><div class="av b">আ</div><div class="bub">নমস্কার! আমি আদর। রবীন্দ্রনাথ ঠাকুরের যেকোনো গান, রাগ, তাল বা গানের অর্থ সম্পর্কে প্রশ্ন করুন।</div></div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;padding-left:36px">
-            <span style="font-size:.72rem;background:var(--paper);border:1px solid var(--divider);border-radius:999px;padding:4px 10px;color:var(--ink-mid)">আমার সোনার বাংলা খুঁজুন</span>
-            <span style="font-size:.72rem;background:var(--paper);border:1px solid var(--divider);border-radius:999px;padding:4px 10px;color:var(--ink-mid)">ভৈরবী রাগের গান দেখাও</span>
-            <span style="font-size:.72rem;background:var(--paper);border:1px solid var(--divider);border-radius:999px;padding:4px 10px;color:var(--ink-mid)">দাদরা তালের গান কী কী?</span>
+<!-- ════ SLIDE 05: রাগের বিস্তারিত ════ -->
+<div class="slide" data-idx="4">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">রাগ বিশ্লেষণ</div></div></div>
+    <div class="tb-r"><div class="tb-prog">৫/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:25%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ৪ — রাগ বিশ্লেষণ</div>
+    <div class="s-title">রাগের <span>সম্পূর্ণ পরিচিতি</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">ভৈরবী রাগের বিস্তারিত বলো</div><span class="ts">৬:৩৮ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>ভৈরবী</strong><br/><br/>
+            <table class="raag-table">
+              <tr><th>বিষয়</th><th>তথ্য</th></tr>
+              <tr><td>ঠাট</td><td>ভৈরবী</td></tr>
+              <tr><td>সময়</td><td>প্রভাতী (ভোর)</td></tr>
+              <tr><td>ঋতু</td><td>শীতকাল</td></tr>
+              <tr><td>জাতি</td><td>সম্পূর্ণ-সম্পূর্ণ</td></tr>
+              <tr><td>আরোহী</td><td>সা রে॒ গ॒ মা পা ধ॒ নি॒ সাঁ</td></tr>
+              <tr><td>অবরোহী</td><td>সাঁ নি॒ ধ॒ পা মা গ॒ রে॒ সা</td></tr>
+              <tr><td>পকড়</td><td>গ॒ রে॒ সা নি॒ ধ॒ নি॒ সা</td></tr>
+              <tr><td>বাদী</td><td>মা</td></tr>
+              <tr><td>সমবাদী</td><td>সা</td></tr>
+              <tr><td>কোমল স্বর</td><td>রে গ ধ নি</td></tr>
+            </table>
+            <br/><em>সমজাতীয়: আসাবরী, মালকোষ</em><br/><br/>
+            <strong>রবীন্দ্র ব্যবহার:</strong> গীতবিতানে সর্বাধিক ব্যবহৃত রাগ। বিদায়, করুণ রস ও ভোরের আবেগের প্রধান বাহন।
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৫/৫</div>
+          </div>
+          <span class="ts">৬:৩৮ PM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 06: রাগের তালিকা ════ -->
+<div class="slide" data-idx="5">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">রাগ তালিকা</div></div></div>
+    <div class="tb-r"><div class="tb-prog">৬/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:30%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ৫ — রাগের তালিকা</div>
+    <div class="s-title">গীতবিতানে <span>কোন কোন রাগ</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">গীতবিতানে কোন কোন রাগ আছে?</div><span class="ts">৬:৪০ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>গীতবিতানে প্রচলিত রাগসমূহ</strong> (মোট ২৬টি)<br/><br/>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+              <span class="p-badge">ভৈরবী</span><span class="p-badge">ইমন</span><span class="p-badge">কাফি</span>
+              <span class="p-badge">বেহাগ</span><span class="p-badge">খাম্বাজ</span><span class="p-badge">ভূপালি</span>
+              <span class="p-badge">দরবারি</span><span class="p-badge">মালকোষ</span><span class="p-badge">তোড়ি</span>
+              <span class="p-badge">ললিত</span><span class="p-badge">পূরবী</span><span class="p-badge">শ্রী</span>
+              <span class="p-badge">বসন্ত</span><span class="p-badge">সারঙ্গ</span><span class="p-badge">কেদার</span>
+              <span class="p-badge">হামির</span><span class="p-badge">ভৈরব</span><span class="p-badge">বিভাস</span>
+              <span class="p-badge">আসাবরী</span><span class="p-badge">দেশ</span><span class="p-badge">পহাড়ি</span>
+              <span class="p-badge">জয়জয়ন্তী</span><span class="p-badge">বাউল</span><span class="p-badge">পিলু</span>
+              <span class="p-badge">কীর্তন</span><span class="p-badge">মিশ্র</span>
+            </div><br/>
+            প্রতিটি রাগের আরোহী, অবরোহী, পকড়, বাদী ও রবীন্দ্র ব্যবহারের বিস্তারিত জানতে নাম বলুন।
+          </div>
+          <span class="ts">৬:৪০ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="gold"><strong>💡 রাগ সম্পর্কিত প্রশ্ন:</strong><br/>
+    "ইমন রাগের আরোহী-অবরোহী কী" · "রাতের রাগ কোনগুলো" · "ভোরের রাগ দেখাও" · "বর্ষার রাগ কোনটি"</div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 07: তাল বিশ্লেষণ ════ -->
+<div class="slide" data-idx="6">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">তাল বিশ্লেষণ</div></div></div>
+    <div class="tb-r"><div class="tb-prog">৭/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:35%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ৬ — তাল</div>
+    <div class="s-title">তাল দিয়ে <span>গান ও বিশ্লেষণ</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">দাদরা তাল সম্পর্কে বিস্তারিত বলো</div><span class="ts">৬:৪২ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>দাদরা</strong><br/><br/>
+            <table class="raag-table">
+              <tr><th>বিষয়</th><th>তথ্য</th></tr>
+              <tr><td>মাত্রা</td><td>৬</td></tr>
+              <tr><td>বিভাগ</td><td>৩+৩</td></tr>
+              <tr><td>গতি</td><td>মধ্য–দ্রুত</td></tr>
+              <tr><td>মেজাজ</td><td>হালকা, চপল</td></tr>
+              <tr><td>বোল</td><td>ধিন্ না | ধিন্ ধিন্ না</td></tr>
+            </table>
+            <br/>৬ মাত্রার তাল। দুই সমান ভাগে বিভক্ত। লোকসংগীত ও হালকা গানে সবচেয়ে বেশি ব্যবহৃত।<br/><br/>
+            <em>গীতবিতানে দাদরা তালে ৩০টি গান আছে।</em>
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৫/৫</div>
+          </div>
+          <span class="ts">৬:৪২ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="s-label" style="margin-bottom:8px">৮টি তাল</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <span class="p-badge">দাদরা (৬)</span><span class="p-badge">কাহারবা (৮)</span>
+        <span class="p-badge">তিনতাল (১৬)</span><span class="p-badge">একতাল (১২)</span>
+        <span class="p-badge">ঝাঁপতাল (১০)</span><span class="p-badge">রূপকড়া (৭)</span>
+        <span class="p-badge">ঝুমরা (১৪)</span><span class="p-badge">চৌতাল (১২)</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 08: তালের গান ════ -->
+<div class="slide" data-idx="7">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">তাল অনুসন্ধান</div></div></div>
+    <div class="tb-r"><div class="tb-prog">৮/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:40%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ৭ — তাল অনুযায়ী গান</div>
+    <div class="s-title">তাল দিয়ে <span>গান খুঁজুন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">কাহারবা তালের গান দেখাও</div><span class="ts">৬:৪৫ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>কাহারবা তালের গান</strong> (মোট ৮৯৫টি)<br/><br/>
+            🎵 যদি তোর ডাক শুনে কেউ না আসে — <em>ভৈরবী · স্বদেশ</em><br/>
+            🎵 ও আমার দেশের মাটি — <em>ভৈরবী · স্বদেশ</em><br/>
+            🎵 আজি বাংলাদেশের হৃদয় হতে — <em>মিশ্র · স্বদেশ</em><br/>
+            🎵 পুরানো সেই দিনের কথা — <em>ভৈরবী · প্রেম</em><br/>
+            🎵 আমার মাথা নত করে দাও — <em>পিলু · পূজা</em><br/>
+            <em>…আরও ৮৯০টি গান</em>
+          </div>
+          <span class="ts">৬:৪৫ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="hl">কাহারবা গীতবিতানের সবচেয়ে প্রচলিত তাল — মোট ৮৯৫টি গানে ব্যবহৃত, যা সমগ্র সংগ্রহের ৪৪%।</div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 09: গানের সারাংশ ════ -->
+<div class="slide" data-idx="8">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">গান বিশ্লেষণ</div></div></div>
+    <div class="tb-r"><div class="tb-prog">৯/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:45%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ৮ — গান বিশ্লেষণ</div>
+    <div class="s-title">গানের <span>অর্থ ও আবেগ</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">আনন্দধারা বহিছে ভুবনে গানটির মূল বার্তা কী?</div><span class="ts">৬:৪৮ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>আনন্দধারা বহিছে ভুবনে</strong> — পূজা পর্যায়<br/><br/>
+            এই গানের মূল বার্তা হলো বিশ্বব্রহ্মাণ্ডের অনন্ত আনন্দের প্রবাহে নিজেকে মিলিয়ে দেওয়ার আকাঙ্ক্ষা।<br/><br/>
+            <strong>মূল ভাব:</strong> ঈশ্বরের সৃষ্টিতে আনন্দের যে অবিরাম ধারা বহমান, তার সাথে নিজের প্রাণের সুর মেলানোর চেষ্টা।<br/><br/>
+            <strong>রাগ:</strong> ভৈরবী — করুণ ও ভক্তিমিশ্রিত আবেগ প্রকাশে উপযুক্ত।<br/><br/>
+            <strong>বিশেষত্ব:</strong> "কোথায় লুকালে তুমি" — এই জিজ্ঞাসায় ঈশ্বরানুসন্ধান ও মানবিক একাকীত্বের দ্বন্দ্ব একসাথে প্রকাশিত।
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৫/৫</div>
+          </div>
+          <span class="ts">৬:৪৮ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="gold"><strong>💡 বিশ্লেষণমূলক প্রশ্ন:</strong><br/>
+    "গীতাঞ্জলির প্রধান রাগ কোনটি" · "প্রেম পর্যায়ের গানে মেজাজ কেমন" · "একলা চলো রে গানের দার্শনিক অর্থ"</div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 10: নির্দিষ্ট স্তবক ════ -->
+<div class="slide" data-idx="9">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">স্তবক</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১০/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:50%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ৯ — স্তবক</div>
+    <div class="s-title">নির্দিষ্ট <span>স্তবক দেখুন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">একলা চলো রে গানের দ্বিতীয় স্তবক দেখাও</div><span class="ts">৬:৫০ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>একলা চলো রে — স্তবক ২</strong><br/><br/>
+            <div class="stanza">
+              যদি কেউ কথা না কয়, ওরে ওরে ও অভাগা,<br/>
+              যদি সবাই থাকে মুখ ফিরায়ে সবাই করে ভয়—<br/>
+              তবে পরান খুলে<br/>
+              ও তুই মুখ ফুটে তোর মনের কথা একলা বলো রে॥
+            </div>
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৫/৫</div>
+          </div>
+          <span class="ts">৬:৫১ PM</span>
+        </div>
+      </div>
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">তৃতীয় স্তবকটি?</div><span class="ts">৬:৫১ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>স্তবক ৩:</strong><br/><br/>
+            <div class="stanza">
+              যদি আলো না ধরে, ওরে ওরে ও অভাগা,<br/>
+              যদি ঝড়-বাদলে আঁধার রাতে দুয়ার দেয় ঘরে—<br/>
+              তবে বজ্রানলে<br/>
+              আপন বুকের পাঁজর জ্বালিয়ে নিয়ে একলা জ্বলো রে॥
+            </div>
+          </div>
+          <span class="ts">৬:৫১ PM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 11: স্বরলিপি ════ -->
+<div class="slide" data-idx="10">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">স্বরলিপি</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১১/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:55%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১০ — স্বরলিপি</div>
+    <div class="s-title">গানের <span>স্বরলিপি দেখুন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">আমার সোনার বাংলা গানের স্বরলিপি দাও</div><span class="ts">৬:৫৩ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>আমার সোনার বাংলা — স্বরলিপি</strong><br/>
+            রাগ: বাউল | তাল: দাদরা | মাত্রা: ৬<br/><br/>
+            <div class="notation">
+<span class="n-sa">সা</span> <span class="n-re">রে</span> <span class="n-ma">মা</span> <span class="n-pa">পা</span> <span class="n-bar">|</span> <span class="n-ni">নি</span> <span class="n-pa">পা</span> <span class="n-ma">মা</span> <span class="n-re">রে</span> <span class="n-bar">|</span><br/>
+<span class="n-sa">সা</span> — — — <span class="n-bar">|</span> <span class="n-re">রে</span> <span class="n-ma">মা</span> <span class="n-pa">পা</span> — <span class="n-bar">|</span><br/>
+<span class="n-ni">নি</span> <span class="n-pa">পা</span> <span class="n-ma">মা</span> <span class="n-re">রে</span> <span class="n-bar">|</span> <span class="n-ga">গা</span> <span class="n-re">রে</span> <span class="n-sa">সা</span> — <span class="n-bar">|</span>
+            </div>
+            <br/>
+            📜 <a style="color:var(--p)">স্বরবিতান PDF (NLTR)</a><br/>
+            🖼 <a style="color:var(--p)">গীতবিতান.com নোটেশন PNG</a>
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৪/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৪.৮৫/৫</div>
+          </div>
+          <span class="ts">৬:৫৩ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="hl"><strong>উৎস:</strong> SNLTR রবীন্দ্র রচনাবলী + গীতবিতান.com · Gemini Vision OCR দ্বারা পঠিত</div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 12: YouTube লিংক ════ -->
+<div class="slide" data-idx="11">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">YouTube শ্রবণ</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১২/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:60%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১১ — গান শুনুন</div>
+    <div class="s-title"><span>YouTube-এ</span> শুনুন</div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">আমার সোনার বাংলা গানটি ইউটিউবে শুনতে চাই</div><span class="ts">৬:৫৫ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>আমার সোনার বাংলা — ইউটিউবে শুনুন</strong><br/><br/>
+            <div class="singer-cat">🎼 লেজেন্ডারি শিল্পী</div>
+            <div class="yt-grid">
+              <div class="yt-pill">▶ সুচিত্রা মিত্র</div>
+              <div class="yt-pill">▶ দেবব্রত বিশ্বাস</div>
+              <div class="yt-pill">▶ কণিকা বন্দ্যোপাধ্যায়</div>
+              <div class="yt-pill">▶ হেমন্ত মুখোপাধ্যায়</div>
+            </div>
+            <div class="singer-cat" style="margin-top:10px">🎵 সমসাময়িক শিল্পী</div>
+            <div class="yt-grid">
+              <div class="yt-pill">▶ শ্রেয়া গুহঠাকুরতা</div>
+              <div class="yt-pill">▶ ইমন চক্রবর্তী</div>
+              <div class="yt-pill">▶ লোপামুদ্রা মিত্র</div>
+              <div class="yt-pill">▶ শ্রাবণী সেন</div>
+              <div class="yt-pill">▶ জয়তী চক্রবর্তী</div>
+              <div class="yt-pill">▶ রেজওয়ানা চৌধুরী বন্যা</div>
+              <div class="yt-pill">▶ লগ্নজিতা ভট্টাচার্য</div>
+              <div class="yt-pill">▶ সাহানা বাজপেয়ী</div>
+            </div>
+            <div class="singer-cat" style="margin-top:10px">✨ বিশেষ</div>
+            <div class="yt-grid">
+              <div class="yt-pill">▶ শ্রেয়া ঘোষাল</div>
+              <div class="sp-pill">🎧 Spotify-তে খুঁজুন</div>
+            </div>
+          </div>
+          <span class="ts">৬:৫৫ PM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 13: ভয়েস ইনপুট ════ -->
+<div class="slide" data-idx="12">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">বাংলায় কথা বলুন</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১৩/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:65%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১২ — ভয়েস ইনপুট</div>
+    <div class="s-title">বাংলায় <span>কথা বলুন</span></div>
+    <div class="s-desc">মাইক্রোফোন বোতামে চাপ দিয়ে সরাসরি বাংলায় প্রশ্ন করুন।</div>
+    <div class="card" style="display:flex;align-items:center;gap:16px;padding:20px">
+      <div style="width:52px;height:52px;border-radius:50%;background:var(--p);display:flex;align-items:center;justify-content:center;font-size:1.5rem;flex-shrink:0;box-shadow:0 0 0 8px rgba(139,26,26,.15),0 0 0 16px rgba(139,26,26,.07)">🎙</div>
+      <div>
+        <div style="font-weight:700;color:var(--ink);margin-bottom:4px">শুনছি…</div>
+        <div class="voice-pill"><div class="v-dot"></div>বাংলায় বলুন</div>
+      </div>
+    </div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">🎙</div>
+        <div><div class="bubble usr"><em>[ভয়েস]</em> ভৈরবী রাগের গান দেখাও</div><span class="ts">৬:৫৮ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>ভৈরবী রাগের গানসমূহ</strong> (৪৭টি)<br/>
+            🎵 ভালোবেসে সখী নিভৃতে যতনে…<br/>
+            🎵 যদি তোর ডাক শুনে কেউ না আসে…<br/>
+            <em>…এবং আরও ৪৫টি</em>
+          </div>
+          <span class="ts">৬:৫৮ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="green-box"><strong>✓ Chrome</strong><br/><div class="s-desc" style="font-size:.8rem">Web Speech API — সরাসরি বাংলা STT</div></div>
+      <div class="green-box"><strong>✓ Firefox / Safari</strong><br/><div class="s-desc" style="font-size:.8rem">Google Cloud Speech-to-Text — FLAC/WEBM</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 14: AI মূল্যায়ন ════ -->
+<div class="slide" data-idx="13">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">AI মূল্যায়ন</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১৪/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:70%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১৩ — AI মূল্যায়ন</div>
+    <div class="s-title">প্রতিটি উত্তরে <span>স্বয়ংক্রিয় স্কোর</span></div>
+    <div class="s-desc">প্রতিটি AI প্রতিক্রিয়া Gemini Flash দ্বারা মূল্যায়িত হয় — ৫টি মাত্রায়।</div>
+    <div class="chat-wrap">
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">রবীন্দ্রনাথ ইমন রাগে তাঁর সন্ধ্যার ভাবনা প্রকাশ করেছেন। ইমন কল্যাণ ঠাটের রাগ — একমাত্র তীব্র মধ্যম এই রাগের বিশেষত্ব। সন্ধ্যার প্রশান্ত, আশাবাদী মেজাজে পূজা পর্যায়ের অনেক গানে ব্যবহৃত।</div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৪/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৪/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৪.৬৫/৫</div>
           </div>
         </div>
       </div>
     </div>
+    <div class="feat-grid">
+      <div class="feat"><div class="feat-ico">🎯</div><div><div class="feat-t">যথার্থতা</div><div class="feat-d">তথ্য সঠিক কিনা</div></div></div>
+      <div class="feat"><div class="feat-ico">📋</div><div><div class="feat-t">সম্পূর্ণতা</div><div class="feat-d">প্রশ্নের সব অংশ উত্তর হয়েছে কিনা</div></div></div>
+      <div class="feat"><div class="feat-ico">🔗</div><div><div class="feat-t">প্রাসঙ্গিক</div><div class="feat-d">উত্তর প্রশ্নের সাথে সংগতিপূর্ণ কিনা</div></div></div>
+      <div class="feat"><div class="feat-ico">📐</div><div><div class="feat-t">বিন্যাস</div><div class="feat-d">উত্তরের গঠন ও পঠনযোগ্যতা</div></div></div>
+    </div>
+    <div class="hl">সামগ্রিক স্কোর = ০.৩×যথার্থতা + ০.২৫×সম্পূর্ণতা + ০.২৫×প্রাসঙ্গিক + ০.২×বিন্যাস</div>
   </div>
+</div>
 
+<!-- ════ SLIDE 15: রবীন্দ্রের রাগ ব্যবহার ════ -->
+<div class="slide" data-idx="14">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">রবীন্দ্রের রাগ-ব্যবহার</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১৫/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:75%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১৪ — রবীন্দ্র পদ্ধতি</div>
+    <div class="s-title">রবীন্দ্রনাথ কীভাবে <span>রাগ ব্যবহার করতেন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">রবীন্দ্রনাথ ইমন রাগ কীভাবে ব্যবহার করেছেন?</div><span class="ts">৭:০০ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>ইমন — রবীন্দ্রের ব্যবহার</strong><br/><br/>
+            রবীন্দ্রনাথের অত্যন্ত প্রিয় রাগ। সন্ধ্যার উদার ও প্রশান্ত আবেগে রচিত পূজা পর্যায়ের অনেক গানে ব্যবহৃত।<br/><br/>
+            <strong>বিশেষত্ব:</strong> তীব্র মধ্যম (মা♯) এই রাগের প্রধান পরিচয়। রবীন্দ্রনাথ এই তীব্র মধ্যমকে আশার ও উদারতার প্রতীক হিসেবে ব্যবহার করেছেন।<br/><br/>
+            <strong>উদাহরণ গান:</strong><br/>
+            🎵 আমার সোনার বাংলা (বাউল থেকে ইমনের প্রভাব)<br/>
+            🎵 আলো আমার আলো ওগো<br/>
+            🎵 যখন পড়বে না মোর পায়ের চিহ্ন
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৪/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৪.৮৫/৫</div>
+          </div>
+          <span class="ts">৭:০০ PM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-  <!-- 5: Song result -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০৩/০৯ · গান</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:54%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">সম্পূর্ণ গান</div><h1 class="s-title">গান খুঁজলে <span>পুরো গান পাবেন</span></h1></div>
-      <div class="chat-wrap">
-        <div class="chat-hdr"><div class="chat-hdr-dot"></div><div class="chat-hdr-dot"></div><div class="chat-hdr-dot"></div><span class="chat-hdr-ttl">আদর · গীতবিতান</span></div>
-        <div class="chat-body">
-          <div class="msg u"><div class="av u">আ</div><div class="bub">আমার সোনার বাংলা গানটি খুঁজুন</div></div>
-          <div class="msg b"><div class="av b">আ</div><div class="bub">এই নিন —
-            <div class="song-card">
-              <div class="sc-title">🎵 আমার সোনার বাংলা আমি</div>
-              <div class="sc-pills"><span class="pill p-r">রাগ: বাউল</span><span class="pill p-t">তাল: দাদরা · ৬ মাত্রা</span></div>
-              <div style="font-size:.7rem;color:var(--ink-mid);margin-bottom:8px">পর্যায়: স্বদেশ</div>
-              <div class="sc-lyrics">আমার সোনার বাংলা, আমি তোমায় ভালোবাসি।
-চিরদিন তোমার আকাশ, তোমার বাতাস, আমার প্রাণে বাজায় বাঁশি।
-<span class="ref">   মরি হায়, হায় রে —</span></div>
+<!-- ════ SLIDE 16: সমজাতীয় রাগ ════ -->
+<div class="slide" data-idx="15">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">সমজাতীয় রাগ</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১৬/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:80%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১৫ — রাগ তুলনা</div>
+    <div class="s-title">সমজাতীয় রাগের <span>পার্থক্য বোঝুন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">ভৈরবী ও আসাবরী রাগের পার্থক্য কী?</div><span class="ts">৭:০২ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <table class="raag-table">
+              <tr><th>বিষয়</th><th>ভৈরবী</th><th>আসাবরী</th></tr>
+              <tr><td>ঠাট</td><td>ভৈরবী</td><td>আসাবরী</td></tr>
+              <tr><td>সময়</td><td>ভোর</td><td>সকাল</td></tr>
+              <tr><td>বাদী</td><td>মা</td><td>ধ॒</td></tr>
+              <tr><td>কোমল</td><td>রে গ ধ নি</td><td>গ ধ নি</td></tr>
+              <tr><td>পার্থক্য</td><td>সব স্বর কোমল</td><td>আরোহে গ বর্জিত</td></tr>
+            </table>
+            <br/><em>দুটিই করুণ রসের রাগ, কিন্তু ভৈরবী আরও গভীর বিদায়ের ভাব প্রকাশ করে।</em>
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৫/৫</div>
+          </div>
+          <span class="ts">৭:০২ PM</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 17: ঋতু ও সময় ভিত্তিক প্রশ্ন ════ -->
+<div class="slide" data-idx="16">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">ঋতু ও সময়</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১৭/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:85%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১৬ — প্রসঙ্গ ভিত্তিক</div>
+    <div class="s-title">ঋতু ও সময় দিয়ে <span>রাগ খুঁজুন</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">বর্ষার জন্য উপযুক্ত রাগ কোনগুলো?</div><span class="ts">৭:০৪ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>বর্ষার রাগসমূহ</strong><br/><br/>
+            🎼 <strong>সারঙ্গ</strong> — দুপুরের বর্ষার রাগ। গ ও ধ বর্জিত, প্রবহমান চলন।<br/>
+            🎼 <strong>কাফি</strong> — বসন্ত-বর্ষার রাগ। গভীর শৃঙ্গার ভাব।<br/>
+            🎼 <strong>বেহাগ</strong> — বর্ষার রাতের রাগ। কোমল প্রেমের প্রকাশ।<br/>
+            🎼 <strong>খাম্বাজ</strong> — বর্ষার রাতে উৎসবমুখর।<br/>
+            🎼 <strong>জয়জয়ন্তী</strong> — বর্ষার আনন্দময় রাগ।<br/><br/>
+            <em>প্রকৃতি পর্যায়ের বেশিরভাগ বর্ষার গানে সারঙ্গ ব্যবহৃত হয়েছে।</em>
+          </div>
+          <div class="eval-row">
+            <div class="ebadge eb-good">যথার্থতা ৫/৫</div>
+            <div class="ebadge eb-good">সম্পূর্ণতা ৫/৫</div>
+            <div class="ebadge eb-good">প্রাসঙ্গিক ৫/৫</div>
+            <div class="ebadge eb-good">বিন্যাস ৫/৫</div>
+            <div class="ebadge eb-total">সামগ্রিক ৫/৫</div>
+          </div>
+          <span class="ts">৭:০৪ PM</span>
+        </div>
+      </div>
+    </div>
+    <div class="gold">
+      <strong>💡 প্রসঙ্গ ভিত্তিক আরও প্রশ্ন:</strong><br/>
+      "ভোরের রাগ কোনগুলো" · "শীতকালের রাগ" · "রাতের গভীর রাগ" · "বসন্তের উৎসবের রাগ"
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 18: Multi-turn কথোপকথন ════ -->
+<div class="slide" data-idx="17">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">বহু-পর্যায়ের কথোপকথন</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১৮/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:90%"></div></div>
+  <div class="sb">
+    <div class="s-label">বৈশিষ্ট্য ১৭ — প্রাকৃতিক কথোপকথন</div>
+    <div class="s-title">ধারাবাহিক <span>প্রশ্নোত্তর</span></div>
+    <div class="chat-wrap">
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">একটি প্রেমের গান সুপারিশ করো যেটা ইমন রাগে</div><span class="ts">৭:০৬ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>আলো আমার আলো ওগো</strong> — প্রেম পর্যায়<br/>
+            রাগ: ইমন | তাল: তিনতাল<br/><br/>
+            <div class="stanza">আলো আমার আলো ওগো আলো ভুবন ভরা,<br/>আলো নয়নধোওয়া আমার, আলো হৃদয়হরা।</div>
+          </div>
+          <span class="ts">৭:০৬ PM</span>
+        </div>
+      </div>
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">এই গানটি ইউটিউবে শুনতে চাই</div><span class="ts">৭:০৭ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            <strong>আলো আমার আলো ওগো — শুনুন</strong><br/><br/>
+            <div class="yt-grid">
+              <div class="yt-pill">▶ শ্রেয়া গুহঠাকুরতা</div>
+              <div class="yt-pill">▶ কণিকা বন্দ্যোপাধ্যায়</div>
+              <div class="yt-pill">▶ সুচিত্রা মিত্র</div>
+              <div class="sp-pill">🎧 Spotify</div>
             </div>
-            <div class="evals"><span class="eval-b">যথার্থতা ৫/৫</span><span class="eval-b">সামগ্রিক ৫.০/৫</span></div>
-          </div></div>
+          </div>
+          <span class="ts">৭:০৭ PM</span>
+        </div>
+      </div>
+      <div class="bubble-row user">
+        <div class="avatar av-usr">ব্য</div>
+        <div><div class="bubble usr">এই গানের স্বরলিপি আছে?</div><span class="ts">৭:০৮ PM</span></div>
+      </div>
+      <div class="bubble-row">
+        <div class="avatar av-bot">গী</div>
+        <div>
+          <div class="bubble bot">
+            হ্যাঁ, স্বরলিপি পাওয়া যাচ্ছে।<br/>
+            📜 স্বরবিতান (NLTR রবীন্দ্র রচনাবলী)<br/>
+            🖼 গীতবিতান.com নোটেশন PNG<br/><br/>
+            <em>Gemini Vision OCR দ্বারা পঠিত সরগম নোটেশন:</em><br/>
+            <div class="notation" style="padding:8px 12px"><span class="n-sa">সা</span> <span class="n-re">রে</span> <span class="n-ga">গ</span> <span class="n-ma">মা♯</span> <span class="n-bar">|</span> <span class="n-pa">পা</span> <span class="n-dha">ধা</span> <span class="n-ni">নি</span> <span class="n-sa">সাঁ</span> <span class="n-bar">||</span></div>
+          </div>
+          <span class="ts">৭:০৮ PM</span>
         </div>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- 4b: Questions Scope -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০৪/০৯ · পরিধি</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:58%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">কী কী জিজ্ঞেস করবেন</div><h1 class="s-title">আদরের <span>সম্পূর্ণ পরিধি</span></h1></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="card">
-          <div style="font-weight:700;font-size:.82rem;color:var(--primary);margin-bottom:8px">🎵 গান খোঁজা</div>
-          <div style="font-size:.75rem;color:var(--ink-mid);line-height:1.9">আমার সোনার বাংলা খুঁজুন<br>একলা চলো রে দেখাও<br>যদি তোর ডাক শুনে কেউ না আসে</div>
-        </div>
-        <div class="card">
-          <div style="font-weight:700;font-size:.82rem;color:var(--primary);margin-bottom:8px">🎼 রাগ অনুযায়ী</div>
-          <div style="font-size:.75rem;color:var(--ink-mid);line-height:1.9">ভৈরবী রাগের গান দেখাও<br>বাউল রাগের গান কী কী?<br>ইমন রাগের গানগুলো দেখাও</div>
-        </div>
-        <div class="card">
-          <div style="font-weight:700;font-size:.82rem;color:var(--primary);margin-bottom:8px">🥁 তাল অনুযায়ী</div>
-          <div style="font-size:.75rem;color:var(--ink-mid);line-height:1.9">দাদরা তালের গান কী কী?<br>কাহারবা তালের গান দেখাও<br>তিনতালের গান দেখাও</div>
-        </div>
-        <div class="card">
-          <div style="font-weight:700;font-size:.82rem;color:var(--primary);margin-bottom:8px">📚 পর্যায় অনুযায়ী</div>
-          <div style="font-size:.75rem;color:var(--ink-mid);line-height:1.9">স্বদেশ পর্যায়ের গান দেখাও<br>পূজা পর্যায়ে কতটি গান?<br>প্রকৃতি পর্যায়ের গান কী কী?</div>
-        </div>
-        <div class="card">
-          <div style="font-weight:700;font-size:.82rem;color:var(--primary);margin-bottom:8px">💡 অর্থ ও ব্যাখ্যা</div>
-          <div style="font-size:.75rem;color:var(--ink-mid);line-height:1.9">একলা চলো রে-র অর্থ কী?<br>গানের প্রেক্ষাপট বলো<br>আবেগ বিশ্লেষণ করো</div>
-        </div>
-        <div class="card">
-          <div style="font-weight:700;font-size:.82rem;color:var(--primary);margin-bottom:8px">🌿 বিশেষ অনুসন্ধান</div>
-          <div style="font-size:.75rem;color:var(--ink-mid);line-height:1.9">বর্ষার গান দেখাও<br>দেশপ্রেমের গান দেখাও<br>বিরহের গান দেখাও</div>
-        </div>
+<!-- ════ SLIDE 19: সব প্রশ্নের তালিকা ════ -->
+<div class="slide" data-idx="18">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">প্রশ্নের গাইড</div></div></div>
+    <div class="tb-r"><div class="tb-prog">১৯/২০</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:95%"></div></div>
+  <div class="sb">
+    <div class="s-label">সম্পূর্ণ প্রশ্নগাইড</div>
+    <div class="s-title">যা যা <span>জিজ্ঞেস করতে পারেন</span></div>
+    <div class="card">
+      <div class="sec-h"><div class="sec-h-text">গান খোঁজা</div><div class="sec-h-line"></div></div>
+      <div style="font-size:.8rem;color:var(--ink);line-height:2">
+        "আমার সোনার বাংলা দেখাও" · "একলা চলো রে" · "Amar Sonar Bangla" · "জন গণ মন কোন রাগে"
+      </div>
+      <div class="sec-h" style="margin-top:10px"><div class="sec-h-text">পর্যায় অনুযায়ী</div><div class="sec-h-line"></div></div>
+      <div style="font-size:.8rem;color:var(--ink);line-height:2">
+        "পূজা পর্যায়ের গান" · "প্রেম পর্যায়ের সেরা গান" · "স্বদেশ পর্যায়ে কতটি গান আছে"
+      </div>
+      <div class="sec-h" style="margin-top:10px"><div class="sec-h-text">রাগ ভিত্তিক</div><div class="sec-h-line"></div></div>
+      <div style="font-size:.8rem;color:var(--ink);line-height:2">
+        "ভৈরবী রাগের গান" · "ইমন রাগের বিস্তারিত" · "রাতের রাগ কোনগুলো" · "বর্ষার রাগ দেখাও" · "ভৈরবী ও আসাবরীর পার্থক্য"
+      </div>
+      <div class="sec-h" style="margin-top:10px"><div class="sec-h-text">তাল ভিত্তিক</div><div class="sec-h-line"></div></div>
+      <div style="font-size:.8rem;color:var(--ink);line-height:2">
+        "কাহারবা তালের গান" · "দাদরা তাল সম্পর্কে বলো" · "তিনতালের বোল কী"
+      </div>
+      <div class="sec-h" style="margin-top:10px"><div class="sec-h-text">বিশ্লেষণ</div><div class="sec-h-line"></div></div>
+      <div style="font-size:.8rem;color:var(--ink);line-height:2">
+        "গানের মূল বার্তা" · "দ্বিতীয় স্তবক দেখাও" · "রবীন্দ্র কীভাবে এই রাগ ব্যবহার করেছেন"
+      </div>
+      <div class="sec-h" style="margin-top:10px"><div class="sec-h-text">শ্রবণ ও নোটেশন</div><div class="sec-h-line"></div></div>
+      <div style="font-size:.8rem;color:var(--ink);line-height:2">
+        "ইউটিউবে শুনতে চাই" · "স্বরলিপি দাও" · "সুচিত্রা মিত্রের গাওয়া গান"
       </div>
     </div>
   </div>
+</div>
 
-  <!-- 6: Raag -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০৫/০৯ · রাগ ও তাল</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:63%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">রাগ অনুসন্ধান</div><h1 class="s-title">রাগের নাম দিন, <span>গান পাবেন</span></h1></div>
-      <div class="chat-wrap">
-        <div class="chat-body" style="padding:12px">
-          <div class="msg u"><div class="av u">আ</div><div class="bub">ভৈরবী রাগের গান দেখাও</div></div>
-          <div class="msg b"><div class="av b">আ</div><div class="bub"><strong>ভৈরবী</strong> — করুণ, বিদায়, বিষণ্ণতা · সময়: প্রভাতী<br><br>এই রাগে <strong>৪৭টি</strong> গান:
-            <table class="r-table"><tr><th>গান</th><th>পর্যায়</th><th>তাল</th></tr><tr><td>আজি বাজে করুণ সুরে</td><td>পূজা</td><td>দাদরা</td></tr><tr><td>ভালোবেসে সখী</td><td>প্রেম</td><td>কাহারবা</td></tr></table>
-            <div class="evals" style="margin-top:8px"><span class="eval-b">যথার্থতা ৫/৫</span></div>
-          </div></div>
+<!-- ════ SLIDE 20: CLOSING ════ -->
+<div class="slide" data-idx="19">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">পরিচিতি সমাপ্ত</div></div></div>
+    <div class="tb-r"><div class="tb-prog">২০/২২</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:100%"></div></div>
+  <div class="sb" style="align-items:center;justify-content:center;text-align:center">
+    <div class="sp-logo" style="animation:float 3s ease-in-out infinite">গী</div>
+    <div class="s-title" style="text-align:center">গীতবিতান <span>সহায়ক</span></div>
+    <div class="s-desc" style="text-align:center;max-width:380px">
+      রবীন্দ্রসঙ্গীতের ২,০০০+ গান, ২৬টি রাগ, ৮টি তাল — সব একটি কথোপকথনে।
+    </div>
+    <div class="stat-grid" style="width:100%;max-width:400px">
+      <div class="stat-c"><div class="stat-v">২,০৪৮</div><div class="stat-l">গান</div></div>
+      <div class="stat-c"><div class="stat-v">১৩</div><div class="stat-l">শিল্পী</div></div>
+      <div class="stat-c"><div class="stat-v">AI ৫★</div><div class="stat-l">মূল্যায়ন</div></div>
+    </div>
+    <div class="feat-grid" style="max-width:420px">
+      <div class="feat"><div class="feat-ico">🔍</div><div><div class="feat-t">গান অনুসন্ধান</div></div></div>
+      <div class="feat"><div class="feat-ico">🎼</div><div><div class="feat-t">রাগ-তাল বিশ্লেষণ</div></div></div>
+      <div class="feat"><div class="feat-ico">📜</div><div><div class="feat-t">স্বরলিপি</div></div></div>
+      <div class="feat"><div class="feat-ico">▶</div><div><div class="feat-t">YouTube শ্রবণ</div></div></div>
+      <div class="feat"><div class="feat-ico">🎙</div><div><div class="feat-t">বাংলায় কথা বলুন</div></div></div>
+      <div class="feat"><div class="feat-ico">⭐</div><div><div class="feat-t">AI মূল্যায়ন</div></div></div>
+    </div>
+    <div class="hl" style="max-width:400px;text-align:center">
+      <strong>geetabitan.adar.agomoniai.com</strong><br/>
+      <em>রবীন্দ্রসঙ্গীতের ডিজিটাল সহায়ক</em>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 21: নিবন্ধন প্রক্রিয়া ════ -->
+<div class="slide" data-idx="20">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">নিবন্ধন</div></div></div>
+    <div class="tb-r"><div class="tb-prog">২১/২২</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:96%"></div></div>
+  <div class="sb">
+    <div class="s-label">শুরু করুন</div>
+    <div class="s-title">নিবন্ধন <span>মাত্র ৩টি ধাপে</span></div>
+
+    <!-- Step 1 -->
+    <div class="card" style="border-left:3px solid var(--p);padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0">১</div>
+        <div style="font-weight:700;color:var(--ink)">ওয়েবসাইটে যান</div>
+      </div>
+      <div style="font-size:.82rem;color:var(--mid);padding-left:38px">
+        <strong style="color:var(--p)">geetabitan.adar.agomoniai.com</strong> — ব্রাউজারে এই ঠিকানায় যান।
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="card" style="border-left:3px solid var(--p);padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0">২</div>
+        <div style="font-weight:700;color:var(--ink)">Register করুন</div>
+      </div>
+      <div style="font-size:.82rem;color:var(--mid);padding-left:38px">
+        লগইন পেজে <strong>Register</strong> বাটনে ক্লিক করুন। আপনার নাম, ইমেইল ও পাসওয়ার্ড দিন।
+        একটি টিম অ্যাকাউন্ট তৈরি হবে।
+      </div>
+      <!-- Mock form -->
+      <div style="margin-top:10px;padding-left:38px">
+        <div style="background:var(--bg);border:1px solid var(--div);border-radius:8px;padding:10px 12px;font-size:.78rem">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:var(--paper);border:1px solid var(--div);border-radius:6px">
+              <span style="color:var(--mid)">Team / Organization name</span>
+              <span style="color:var(--ink);font-weight:600">আমার নাম</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:var(--paper);border:1px solid var(--div);border-radius:6px">
+              <span style="color:var(--mid)">Email address</span>
+              <span style="color:var(--ink);font-weight:600">name@email.com</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:var(--paper);border:1px solid var(--div);border-radius:6px">
+              <span style="color:var(--mid)">Password</span>
+              <span style="color:var(--ink)">••••••••</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- 7: Summary -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০৬/০৯ · সারসংক্ষেপ</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:72%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">গানের গভীরে</div><h1 class="s-title">প্রতিটি গানের <span>চারটি দিক</span></h1></div>
-      <div class="sum-grid">
-        <div class="sum-card"><span class="emoji">📜</span><div class="lbl">প্রেক্ষাপট</div><div class="txt">কখন, কেন লেখা হয়েছিল — ঐতিহাসিক তথ্য</div></div>
-        <div class="sum-card"><span class="emoji">💡</span><div class="lbl">অর্থ</div><div class="txt">আক্ষরিক ও রূপক অর্থ — কবি কী বলতে চেয়েছেন</div></div>
-        <div class="sum-card"><span class="emoji">🎭</span><div class="lbl">আবেগ</div><div class="txt">কোন অনুভূতি জাগায় — শ্রোতার উপর প্রভাব</div></div>
-        <div class="sum-card"><span class="emoji">🖼</span><div class="lbl">চিত্রকল্প</div><div class="txt">প্রধান রূপক ও প্রতীক — কোন ছবি ব্যবহার হয়েছে</div></div>
+    <!-- Step 3 -->
+    <div class="card" style="border-left:3px solid var(--a);padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--a);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0">৩</div>
+        <div style="font-weight:700;color:var(--ink)">সাবস্ক্রাইব করুন</div>
+      </div>
+      <div style="font-size:.82rem;color:var(--mid);padding-left:38px">
+        নিবন্ধনের পরেই সাবস্ক্রিপশন পেজ আসবে। <strong>১৪ দিনের বিনামূল্যে ট্রায়াল</strong> শুরু করুন।
+        তারপর সরাসরি গীতবিতান চ্যাট শুরু করুন।
       </div>
     </div>
-  </div>
 
-  <!-- 8: Polls -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০৯/১১ · পোল</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:86%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">সাপ্তাহিক পোল</div><h1 class="s-title">সংগীতপ্রেমীদের <span>মতামত</span></h1></div>
-      <div class="poll-card">
-        <div class="poll-q">কোন পর্যায়ের গান আপনার সবচেয়ে প্রিয়?</div>
-        <div class="poll-opt"><div class="poll-lbl"><span>পূজা</span><span>৩৮%</span></div><div class="poll-bar-bg"><div class="poll-bar-fill" style="width:38%"></div></div></div>
-        <div class="poll-opt"><div class="poll-lbl"><span>প্রেম</span><span>২৮%</span></div><div class="poll-bar-bg"><div class="poll-bar-fill" style="width:28%"></div></div></div>
-        <div class="poll-opt"><div class="poll-lbl"><span>স্বদেশ</span><span>২২%</span></div><div class="poll-bar-bg"><div class="poll-bar-fill" style="width:22%"></div></div></div>
-        <div class="poll-opt"><div class="poll-lbl"><span>প্রকৃতি</span><span>১২%</span></div><div class="poll-bar-bg"><div class="poll-bar-fill" style="width:12%"></div></div></div>
-        <div style="font-size:.7rem;color:var(--ink-mid);margin-top:8px">মোট ৪৭টি ভোট · প্রতি ১৫ সেকেন্ডে আপডেট</div>
+    <div class="green-box"><strong>✓ সম্পূর্ণ নিবন্ধন প্রক্রিয়া ২ মিনিটেরও কম সময়ে।</strong> কোনো অ্যাপ ডাউনলোড নেই — শুধু ব্রাউজার।</div>
+  </div>
+</div>
+
+<!-- ════ SLIDE 22: সাবস্ক্রিপশন ও পেমেন্ট ════ -->
+<div class="slide" data-idx="21">
+  <div class="topbar">
+    <div class="tb-l"><div class="tb-badge">গী</div><div><div class="tb-name">গীতবিতান সহায়ক</div><div class="tb-sub">সাবস্ক্রিপশন</div></div></div>
+    <div class="tb-r"><div class="tb-prog">২২/২২</div><div class="tb-vc" onclick="toggleVoice(event)">🔊</div></div>
+  </div>
+  <div class="pbar"><div class="pfill" style="width:100%"></div></div>
+  <div class="sb">
+    <div class="s-label">পেমেন্ট ও সাবস্ক্রিপশন</div>
+    <div class="s-title">মাত্র <span>$3.99/মাসে</span> সম্পূর্ণ অ্যাক্সেস</div>
+
+    <!-- Plan card -->
+    <div style="background:linear-gradient(135deg,var(--p),var(--pd));border-radius:14px;padding:20px;color:#fff;position:relative;overflow:hidden">
+      <div style="position:absolute;top:-20px;right:-20px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.08)"></div>
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:.7;margin-bottom:6px">Adar Geetabitan Standard</div>
+      <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px">
+        <span style="font-size:2.4rem;font-weight:800;line-height:1">$3.99</span>
+        <span style="font-size:.85rem;opacity:.7">/ মাস</span>
+      </div>
+      <div style="background:rgba(255,255,255,.15);border-radius:999px;padding:4px 12px;display:inline-block;font-size:.75rem;font-weight:700;margin-bottom:12px">
+        🎉 ১৪ দিনের বিনামূল্যে ট্রায়াল
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;opacity:.9">✓ ২,০০০+ রবীন্দ্রসঙ্গীত</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;opacity:.9">✓ রাগ-তাল বিশ্লেষণ</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;opacity:.9">✓ স্বরলিপি</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;opacity:.9">✓ YouTube লিংক</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;opacity:.9">✓ বাংলায় ভয়েস ইনপুট</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:.78rem;opacity:.9">✓ ২০০ প্রশ্ন / দিন</div>
       </div>
     </div>
-  </div>
 
-  <!-- NEW: Voice Input -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০৭/১১ · কণ্ঠস্বর</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:70%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">বাংলায় বলুন</div><h1 class="s-title">কণ্ঠে প্রশ্ন করুন, <span>সাথে সাথে উত্তর</span></h1></div>
-      <div class="chat-wrap">
-        <div class="chat-hdr"><div class="chat-hdr-dot"></div><div class="chat-hdr-dot"></div><div class="chat-hdr-dot"></div><span class="chat-hdr-ttl">আদর · গীতবিতান</span></div>
-        <div class="chat-body">
-          <div class="msg u"><div class="av u">আ</div><div class="bub" style="display:flex;align-items:center;gap:8px"><span style="font-size:1.2rem">&#127908;</span><em>ভৈরবী রাগের গান দেখাও</em></div></div>
-          <div class="msg b"><div class="av b">আ</div><div class="bub">মাইক্রোফোনে কথা বলুন — আদর সাথে সাথে উত্তর দেবে। টাইপ করতে হবে না।</div></div>
-        </div>
-      </div>
-      <div class="browser-grid">
-        <div class="browser-card"><div class="icon">&#127760;</div><div class="name">Chrome / Edge</div><div class="detail">Web Speech API<br>বিনামূল্যে, তাৎক্ষণিক</div></div>
-        <div class="browser-card"><div class="icon">&#129418;</div><div class="name">Firefox</div><div class="detail">Google Cloud STT<br>WEBM Opus</div></div>
-        <div class="browser-card"><div class="icon">&#129517;</div><div class="name">Safari</div><div class="detail">Google Cloud STT<br>MP4 &#8594; FLAC</div></div>
+    <!-- Stripe badge -->
+    <div class="card" style="display:flex;align-items:center;gap:14px;padding:12px 16px">
+      <div style="font-size:1.8rem;flex-shrink:0">🔒</div>
+      <div>
+        <div style="font-size:.82rem;font-weight:700;color:var(--ink)">Stripe দ্বারা নিরাপদ পেমেন্ট</div>
+        <div style="font-size:.73rem;color:var(--mid);margin-top:2px">PCI DSS compliant · SSL encrypted · Visa, Mastercard, Amex, UPI সহ সব কার্ড গ্রহণযোগ্য</div>
       </div>
     </div>
-  </div>
 
-  <!-- NEW: Swaralipi -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">০৮/১১ · স্বরলিপি</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:77%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">স্বরলিপি</div><h1 class="s-title">স্বরলিপি চাইলে <span>লিংক ও টেক্সট পাবেন</span></h1></div>
-      <div class="chat-wrap">
-        <div class="chat-body" style="padding:12px">
-          <div class="msg u"><div class="av u">আ</div><div class="bub">আমার সোনার বাংলা গানের স্বরলিপি দাও</div></div>
-          <div class="msg b"><div class="av b">আ</div><div class="bub" style="font-size:.8rem"><strong>আমার সোনার বাংলা</strong> &#8212; স্বরলিপি<br><br>&#128196; নোটেশন পেজ: geetabitan.com<br>&#128444; স্বরলিপি ছবি: সরাসরি PNG<br><br><em style="font-size:.75rem;color:var(--ink-mid)">স্বরলিপি বই থেকে OCR করা নোটেশনও দেখানো যাবে।</em></div></div>
-        </div>
+    <!-- Payment flow -->
+    <div class="gold" style="padding:12px 16px">
+      <div style="font-size:.75rem;font-weight:700;color:var(--ink);margin-bottom:8px">💳 পেমেন্ট প্রক্রিয়া:</div>
+      <div style="display:flex;align-items:center;gap:0;font-size:.75rem;color:var(--ink);flex-wrap:wrap;gap:4px">
+        <span style="background:var(--p);color:#fff;padding:2px 8px;border-radius:999px;font-size:.68rem">সাবস্ক্রাইব ক্লিক</span>
+        <span style="color:var(--mid)">→</span>
+        <span style="background:rgba(139,26,26,.1);color:var(--p);padding:2px 8px;border-radius:999px;font-size:.68rem">Stripe পেজ</span>
+        <span style="color:var(--mid)">→</span>
+        <span style="background:rgba(139,26,26,.1);color:var(--p);padding:2px 8px;border-radius:999px;font-size:.68rem">কার্ড তথ্য দিন</span>
+        <span style="color:var(--mid)">→</span>
+        <span style="background:rgba(46,125,50,.1);color:#2E7D32;padding:2px 8px;border-radius:999px;font-size:.68rem;font-weight:700">✓ তাৎক্ষণিক অ্যাক্সেস</span>
       </div>
-      <div class="card">
-        <div style="font-size:.75rem;font-weight:700;color:var(--primary);margin-bottom:8px">স্বরলিপি বই OCR করুন</div>
-        <div style="font-family:monospace;font-size:.71rem;color:var(--ink-mid);line-height:1.9">python -m domains.geetabitan.ingestion.swaralipi_ocr<br>&nbsp;&nbsp;--pdf swaralipi_vol1.pdf<br>&nbsp;&nbsp;--source "গীতবিতান স্বরলিপি ১ম খণ্ড"</div>
-      </div>
+      <div style="font-size:.72rem;color:var(--mid);margin-top:8px">ট্রায়াল ১৪ দিনে কোনো চার্জ নেই। যেকোনো সময় বাতিল করুন।</div>
     </div>
   </div>
+</div>
 
-  <!-- 9: Billing -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">১০/১১ · সাবস্ক্রিপশন</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:93%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">Stripe চালিত</div><h1 class="s-title">একবার সাবস্ক্রাইব, <span>স্বয়ংক্রিয় নবায়ন</span></h1></div>
-      <div class="plan-grid">
-        <div class="plan"><div class="plan-name">বেসিক</div><div class="plan-price">$১০<span style="font-size:.7rem;color:var(--ink-mid)">/মাস</span></div><div class="plan-feat">৫০ বার্তা/দিন<br>গান খোঁজা<br>রাগ ও তাল</div></div>
-        <div class="plan pop"><div class="plan-pop">জনপ্রিয়</div><div class="plan-name">স্ট্যান্ডার্ড</div><div class="plan-price">$১৫<span style="font-size:.7rem;color:var(--ink-mid)">/মাস</span></div><div class="plan-feat">২০০ বার্তা/দিন<br>সম্পূর্ণ বৈশিষ্ট্য<br>পোল ও সারসংক্ষেপ</div></div>
-        <div class="plan"><div class="plan-name">আনলিমিটেড</div><div class="plan-price">$৩০<span style="font-size:.7rem;color:var(--ink-mid)">/মাস</span></div><div class="plan-feat">১০০০ বার্তা/দিন<br>সব বৈশিষ্ট্য</div></div>
-      </div>
-      <div style="text-align:center;font-size:.75rem;color:var(--ink-mid)">সব প্ল্যানে ১৪ দিন বিনামূল্যে · Stripe স্বয়ংক্রিয় নবায়ন</div>
-    </div>
-  </div>
-
-  <!-- 10: Quality + CTA -->
-  <div class="slide">
-    <div class="topbar"><div class="tb-left"><div class="tb-badge">আদর</div><div><div class="tb-name">গীতবিতান আদর</div><div class="tb-subtitle">রবীন্দ্রসঙ্গীত সহায়ক</div></div></div><div class="tb-right"><span class="tb-prog">১১/১১ · মান</span><button class="tb-voice" onclick="toggleVoice(event)">&#128266;</button></div></div>
-    <div class="prog-bar"><div class="prog-fill" style="width:100%"></div></div>
-    <div class="slide-body">
-      <div><div class="s-label">মান নিশ্চিতকরণ</div><h1 class="s-title">প্রতিটি উত্তর <span>স্বয়ংক্রিয়ভাবে মূল্যায়িত</span></h1></div>
-      <div class="qual-grid">
-        <div class="q-card"><div class="q-val">৪.৬৫</div><div class="q-lbl">গড় মান স্কোর</div></div>
-        <div class="q-card"><div class="q-val">৩৫%</div><div class="q-lbl">যথার্থতার ওজন</div></div>
-        <div class="q-card"><div class="q-val">২৫%</div><div class="q-lbl">সম্পূর্ণতার ওজন</div></div>
-        <div class="q-card"><div class="q-val">২৫%</div><div class="q-lbl">প্রাসঙ্গিকতার ওজন</div></div>
-      </div>
-      <div style="text-align:center;padding:16px 0">
-        <div style="font-family:'Noto Serif Bengali',serif;font-size:1.2rem;font-weight:700;color:var(--ink);margin-bottom:6px">গীতবিতান আদর দিয়ে শুরু করুন</div>
-        <div style="font-size:.84rem;color:var(--ink-mid);margin-bottom:16px">রবীন্দ্রনাথের ২০০০+ গান এখন আপনার সাথী</div>
-        <a href="/" style="display:inline-block;background:var(--primary);color:#fff;font-family:'Hind Siliguri',sans-serif;font-size:.9rem;font-weight:600;padding:12px 30px;border-radius:10px;text-decoration:none;box-shadow:0 4px 16px rgba(139,26,26,.25)">🎵 এখনই শুরু করুন</a>
-      </div>
-    </div>
-  </div>
 
 </div><!-- /deck -->
+
+<!-- NAV -->
+<div class="nav" id="nav" style="display:none">
+  <button class="nav-btn" id="btnPrev" onclick="goSlide(-1)">← পূর্ববর্তী</button>
+  <div class="nav-dots" id="dots"></div>
+  <button class="nav-btn pri" id="btnNext" onclick="goSlide(1)">পরবর্তী →</button>
+</div>
+
+<div class="scroll-hint" id="scrollHint">↕ স্ক্রোল করুন</div>
 <div class="subtitle-bar" id="subtitleBar"></div>
 
 <script>
+const TOTAL = 22
+let cur = 0
 
+const NARRATIONS = [
+  "গীতবিতান সহায়কে আপনাকে স্বাগত। এটি রবীন্দ্রসঙ্গীতের একটি বুদ্ধিমান AI সহায়ক — দুই হাজারের বেশি গান, ছাব্বিশটি রাগ, আট ধরনের তাল — সব কিছু একটি কথোপকথনে।",
+  "প্রথম বৈশিষ্ট্য: গানের শিরোনাম দিয়ে অনুসন্ধান। 'আমার সোনার বাংলা দেখাও' বললেই গানের রাগ, তাল, স্তবকসহ সম্পূর্ণ তথ্য পাওয়া যায়। AI মূল্যায়নে এই উত্তর পেয়েছে চার দশমিক আটপাঁচ।",
+  "পর্যায় অনুযায়ী গান খোঁজা যায়। গীতবিতানে ন'টি পর্যায় আছে — পূজা, প্রেম, স্বদেশ, প্রকৃতি, বিচিত্র সহ আরও কয়েকটি।",
+  "রাগ অনুযায়ী গান খোঁজা যায়। 'ভৈরবী রাগের গান দেখাও' বললে মোট সাতচল্লিশটি গানের তালিকা পাওয়া যায়।",
+  "রাগের সম্পূর্ণ বিশ্লেষণ — আরোহী, অবরোহী, পকড়, বাদী, সমবাদী, ঠাট, ঋতু, জাতি এবং রবীন্দ্রনাথের ব্যবহার সব একসাথে।",
+  "গীতবিতানে ছাব্বিশটি রাগ আছে — ভৈরবী, ইমন, কাফি, বেহাগ সহ আরও অনেক। সব রাগের তালিকা একটি প্রশ্নে পাওয়া যায়।",
+  "তালের বিশ্লেষণ — মাত্রা, বিভাগ, গতি এবং বোল সহ। দাদরা হলো ছয় মাত্রার তাল, গীতবিতানে ত্রিশটি গানে ব্যবহৃত।",
+  "তাল অনুযায়ী গান খোঁজা যায়। কাহারবা গীতবিতানের সবচেয়ে প্রচলিত তাল — মোট আটশো পঁচানব্বইটি গানে ব্যবহৃত।",
+  "গানের অর্থ ও আবেগ বিশ্লেষণ। 'আনন্দধারা বহিছে ভুবনে গানটির মূল বার্তা কী' — এই ধরনের গভীর প্রশ্নের উত্তরও পাওয়া যায়।",
+  "নির্দিষ্ট স্তবক চাইতে পারেন। 'একলা চলো রে গানের দ্বিতীয় স্তবক দেখাও' বললে শুধু সেই স্তবকটি পাওয়া যায়।",
+  "স্বরলিপি — স্বরবিতান ও গীতবিতান ডট কম থেকে Gemini Vision OCR দ্বারা পঠিত সরগম নোটেশন।",
+  "তেরোজন শিল্পীর YouTube ও Spotify লিংক — সুচিত্রা মিত্র থেকে শ্রেয়া ঘোষাল পর্যন্ত। সব লিংক নতুন ট্যাবে খোলে।",
+  "বাংলায় সরাসরি কথা বলুন। Chrome-এ Web Speech API এবং Firefox ও Safari-তে Google Cloud Speech-to-Text ব্যবহার করা হয়।",
+  "প্রতিটি AI উত্তর স্বয়ংক্রিয়ভাবে মূল্যায়িত হয় — যথার্থতা, সম্পূর্ণতা, প্রাসঙ্গিকতা ও বিন্যাস — পাঁচ পয়েন্টের স্কেলে।",
+  "রবীন্দ্রনাথ কীভাবে নির্দিষ্ট রাগ ব্যবহার করেছেন তা জানা যায়। প্রতিটি রাগের রবীন্দ্র ব্যবহার নোট আলাদাভাবে সংরক্ষিত।",
+  "সমজাতীয় রাগের পার্থক্য বোঝা যায়। ভৈরবী ও আসাবরী — দু'টিই করুণ রাগ, কিন্তু তাদের বাদী ও কোমল স্বরে পার্থক্য আছে।",
+  "ঋতু ও সময় ভিত্তিক প্রশ্ন করা যায়। 'বর্ষার রাগ কোনগুলো' বললে সারঙ্গ, কাফি, বেহাগ সহ বর্ষার রাগগুলো জানা যায়।",
+  "ধারাবাহিক কথোপকথন সম্ভব — একটি গান খুঁজে, তার YouTube লিংক চেয়ে, তারপর স্বরলিপি দেখতে পারেন। সব এক সেশনে।",
+  "সমস্ত প্রশ্নের ধরন এক জায়গায় — গান খোঁজা, পর্যায়, রাগ, তাল, বিশ্লেষণ, শ্রবণ এবং নোটেশন।",
+  "গীতবিতান সহায়ক — রবীন্দ্রসঙ্গীতের দুই হাজারের বেশি গান, তেরোজন শিল্পীর YouTube লিংক, AI মূল্যায়ন — সব একটি কথোপকথনে।",
+  "নিবন্ধন মাত্র তিনটি ধাপে। প্রথমে geetabitan.adar.agomoniai.com-এ যান। তারপর Register বাটনে ক্লিক করে নাম, ইমেইল ও পাসওয়ার্ড দিন। সম্পূর্ণ প্রক্রিয়া দুই মিনিটেরও কম সময়ে। কোনো অ্যাপ ডাউনলোড নেই — শুধু ব্রাউজার।",
+  "সাবস্ক্রিপশন মাত্র তিন দশমিক নয় নয় ডলার প্রতি মাসে। ADAR Geetabitan Standard প্ল্যানে চৌদ্দ দিনের বিনামূল্যে ট্রায়াল পাবেন। Stripe-এর নিরাপদ পেমেন্ট গেটওয়ে ব্যবহার করা হয়। সাবস্ক্রাইব ক্লিক করলেই Stripe পেজে যাবেন, কার্ড তথ্য দিলে তাৎক্ষণিক অ্যাক্সেস পাবেন। যেকোনো সময় বাতিল করতে পারবেন।"
+]
+
+// ── Fenrir TTS voice — exact same as working demo ────────────────────────
 var API_URL = 'https://api.geetabitan.adar.agomoniai.com';
-var TOTAL = 14, cur = -1, busy = false, autoTimer = null;
-var cache = {}, audioEl = null;
+var cache = {}, audioEl = null, busy = false;
 var SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-var NARRATIONS = ["আদর কী? আদর হলো একটি এজেন্টিক কৃত্রিম বুদ্ধিমত্তা প্ল্যাটফর্ম। আদর মানে স্নেহ, যত্ন ও মনোযোগ।","এডার মানে কী? এ মানে এজেন্টিক। ডি মানে ডেটা। দ্বিতীয় এ মানে অ্যাক্সেস। আর মানে রিজনিং।","গীতবিতান আদরে দুটি এজেন্ট আছে। অর্কেস্ট্রেটর প্রশ্ন বিশ্লেষণ করে। সং এজেন্ট গান খোঁজা এবং সারসংক্ষেপ তৈরি করে।","লগইন করা সহজ। নিবন্ধন করুন, স্ট্রাইপ চেকআউটে যান, চোদ্দ দিন বিনামূল্যে ট্রায়াল পাবেন।","মূল অভিজ্ঞতা হলো প্রাকৃতিক বাংলায় কথোপকথন। আমার সোনার বাংলা খুঁজুন, এভাবে প্রশ্ন করুন।","গান খুঁজলে সম্পূর্ণ গান পাবেন। সমস্ত স্তবক, রাগ, তাল, পর্যায় সহ পুরো গান দেখাবে।","আদর কী কী করতে পারে? গান খোঁজা, রাগ তাল অনুসন্ধান, গানের অর্থ ও প্রেক্ষাপট।","রাগের নাম দিলে সেই রাগের সমস্ত গান পাবেন। রাগের মেজাজ এবং তালও জানতে পারবেন।","প্রতিটি গানের চারটি দিক জানুন। প্রেক্ষাপট, অর্থ, আবেগ এবং চিত্রকল্প।","বাংলায় বলুন, আদর শুনবে। মাইক্রোফোন আইকনে ট্যাপ করুন, বাংলায় প্রশ্ন করুন। ক্রোম, ফায়ারফক্স, সাফারি সব ব্রাউজারে কাজ করে।","স্বরলিপি দাও বললে গীতবিতান ডট কম থেকে স্বরলিপির লিংক ও ছবি পাবেন। স্বরলিপি বই থেকে ওসিআর করা নোটেশনও দেখানো যাবে।","প্রতি সোমবার বাংলায় নতুন পোল খোলে। ভোট দিন।","তিনটি প্ল্যানে সাবস্ক্রাইব করুন। বেসিক দশ ডলার, স্ট্যান্ডার্ড পনেরো, আনলিমিটেড ত্রিশ।","প্রতিটি উত্তর স্বয়ংক্রিয়ভাবে মূল্যায়িত হয়। গড় স্কোর চার দশমিক পঁয়ষষ্টি। এখনই শুরু করুন।"];
+
 function getAudio(){if(!audioEl){audioEl=new Audio();audioEl.preload='none';}return audioEl;}
 function sub(t){var b=document.getElementById('subtitleBar');if(!b)return;b.textContent=t;b.style.display=t?'block':'none';}
-function stop(){clearTimeout(autoTimer);if(audioEl){audioEl.pause();audioEl.onended=null;audioEl.onerror=null;}busy=false;sub('');updateBtn();}
-function autoAdv(){autoTimer=setTimeout(function(){if(cur<TOTAL-1)goTo(cur+1,true);},1400);}
-function doPlay(idx,url){var a=getAudio();sub(NARRATIONS[idx]);a.src=url;a.onended=function(){busy=false;sub('');updateBtn();autoAdv();};a.onerror=function(){busy=false;sub('');updateBtn();autoAdv();};a.play().catch(function(){busy=false;sub(NARRATIONS[idx]);updateBtn();autoAdv();});}
-function fetchAndPlay(idx){if(cache[idx]){doPlay(idx,cache[idx]);return;}sub('...');fetch(API_URL+'/api/demo/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:NARRATIONS[idx]})}).then(function(r){return r.ok?r.json():Promise.reject('HTTP '+r.status);}).then(function(d){if(!d.audio)return Promise.reject('empty');var raw=atob(d.audio);var arr=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++){arr[i]=raw.charCodeAt(i);}cache[idx]=URL.createObjectURL(new Blob([arr],{type:'audio/mpeg'}));if(busy)doPlay(idx,cache[idx]);}).catch(function(e){console.error('TTS failed:',e);if(busy){sub(NARRATIONS[idx]);updateBtn();autoAdv();}});}
-function prefetch(idx){if(idx>=TOTAL||cache[idx])return;fetch(API_URL+'/api/demo/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:NARRATIONS[idx]})}).then(function(r){return r.ok?r.json():Promise.reject();}).then(function(d){if(!d.audio)return;var raw=atob(d.audio);var arr=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++){arr[i]=raw.charCodeAt(i);}cache[idx]=URL.createObjectURL(new Blob([arr],{type:'audio/mpeg'}));}).catch(function(){});}
-function play(idx){stop();busy=true;updateBtn();fetchAndPlay(idx);prefetch(idx+1);}
-function updateBtn(){var btns=document.querySelectorAll('.tb-voice');for(var i=0;i<btns.length;i++){if(i===cur){btns[i].textContent=busy?'\u23F9':'\uD83D\uDD0A';if(busy)btns[i].classList.add('on');else btns[i].classList.remove('on');}}}
-function toggleVoice(e){if(e)e.stopPropagation();if(busy)stop();else play(cur);}
-function goTo(idx,withVoice){stop();if(idx<0||idx>=TOTAL)return;var slides=document.querySelectorAll('.slide');for(var i=0;i<slides.length;i++){slides[i].classList.remove('active');}slides[idx].classList.add('active');cur=idx;updateBtn();document.getElementById('prevBtn').style.opacity=cur>0?'1':'0.3';document.getElementById('nextBtn').style.opacity=cur<TOTAL-1?'1':'0.3';if(withVoice)play(cur);}
-function startDemo(){
-  var a=getAudio();
-  var sp=document.getElementById('splash');
-  sp.classList.add('hide');
-  setTimeout(function(){sp.style.display='none';},500);
+function stopAudio(){if(audioEl){audioEl.pause();audioEl.onended=null;audioEl.onerror=null;}busy=false;sub('');updateVcBtn();}
 
-  // cache[0] guaranteed to be ready — play SYNCHRONOUSLY from tap gesture
-  a.src=cache[0];
-  a.volume=1;
-  var slides=document.querySelectorAll('.slide');
-  for(var i=0;i<slides.length;i++)slides[i].classList.remove('active');
-  slides[0].classList.add('active');
-  cur=0; busy=true; updateBtn();
-  sub(NARRATIONS[0]);
-  a.onended=function(){busy=false;sub('');updateBtn();autoAdv();};
-  a.onerror=function(){busy=false;sub('');updateBtn();autoAdv();};
-  a.play().catch(function(e){
-    console.warn('play blocked:',e.message);
-    busy=false; sub(NARRATIONS[0]); updateBtn(); autoAdv();
+function doPlay(idx,url){
+  var a=getAudio();
+  sub(NARRATIONS[idx]);
+  a.src=url;
+  a.onended=function(){busy=false;sub('');updateVcBtn();};
+  a.onerror=function(){busy=false;sub('');updateVcBtn();};
+  a.play().catch(function(){busy=false;sub(NARRATIONS[idx]);updateVcBtn();});
+}
+
+function fetchAndPlay(idx){
+  if(cache[idx]){doPlay(idx,cache[idx]);return;}
+  sub('...');
+  fetch(API_URL+'/api/demo/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:NARRATIONS[idx]})})
+    .then(function(r){return r.ok?r.json():Promise.reject('HTTP '+r.status);})
+    .then(function(d){
+      if(!d.audio)return Promise.reject('empty');
+      var raw=atob(d.audio);var arr=new Uint8Array(raw.length);
+      for(var i=0;i<raw.length;i++){arr[i]=raw.charCodeAt(i);}
+      cache[idx]=URL.createObjectURL(new Blob([arr],{type:'audio/mpeg'}));
+      if(busy)doPlay(idx,cache[idx]);
+    })
+    .catch(function(e){console.error('TTS failed:',e);if(busy){sub(NARRATIONS[idx]);updateVcBtn();}});
+}
+
+function prefetch(idx){
+  if(idx>=TOTAL||cache[idx])return;
+  fetch(API_URL+'/api/demo/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:NARRATIONS[idx]})})
+    .then(function(r){return r.ok?r.json():Promise.reject();})
+    .then(function(d){
+      if(!d.audio)return;
+      var raw=atob(d.audio);var arr=new Uint8Array(raw.length);
+      for(var i=0;i<raw.length;i++){arr[i]=raw.charCodeAt(i);}
+      cache[idx]=URL.createObjectURL(new Blob([arr],{type:'audio/mpeg'}));
+    })
+    .catch(function(){});
+}
+
+function playSlide(idx){stopAudio();busy=true;updateVcBtn();fetchAndPlay(idx);prefetch(idx+1);}
+
+function updateVcBtn(){
+  document.querySelectorAll('.tb-vc').forEach(function(b){
+    b.textContent = busy ? '⏹' : '🔊';
+    busy ? b.classList.add('on') : b.classList.remove('on');
   });
-  document.getElementById('prevBtn').style.opacity='0.3';
-  document.getElementById('nextBtn').style.opacity='1';
+}
+
+function startDemo() {
+  var a = getAudio();
+  document.getElementById('splash').classList.add('hide')
+  document.getElementById('nav').style.display = 'flex'
+  buildDots()
+  // Play slide 0 from cache if ready, else fetch
+  busy = true; updateVcBtn();
+  fetchAndPlay(0);
   prefetch(1);
 }
 
-document.getElementById('splash').addEventListener('click',startDemo);
-document.getElementById('deck').addEventListener('click',function(e){if(e.target.closest('.tb-voice,.nav-prev,.nav-next,a'))return;if(busy)return;if(cur<TOTAL-1)goTo(cur+1,true);});
-document.getElementById('prevBtn').addEventListener('click',function(e){e.stopPropagation();if(!busy&&cur>0)goTo(cur-1,true);});
-document.getElementById('nextBtn').addEventListener('click',function(e){e.stopPropagation();if(!busy&&cur<TOTAL-1)goTo(cur+1,true);});
-document.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();if(cur===-1)startDemo();else if(!busy&&cur<TOTAL-1)goTo(cur+1,true);}if(e.key==='ArrowLeft'){e.preventDefault();if(!busy&&cur>0)goTo(cur-1,true);}if(cur===-1&&e.key==='Enter')startDemo();});
-window.addEventListener('beforeunload',stop);
-window.addEventListener('visibilitychange',function(){if(document.hidden)stop();});
-// Pre-fetch slide 0 immediately on page load so tap can play synchronously
-setTimeout(function(){prefetch(0);prefetch(1);},100);
+function buildDots() {
+  const d = document.getElementById('dots')
+  d.innerHTML = ''
+  for (let i = 0; i < TOTAL; i++) {
+    const el = document.createElement('div')
+    el.className = 'dot' + (i === 0 ? ' active' : '')
+    el.onclick = (e) => { e.stopPropagation(); goTo(i) }
+    d.appendChild(el)
+  }
+}
+
+function updateDots() {
+  document.querySelectorAll('.dot').forEach((d, i) => {
+    d.className = 'dot' + (i === cur ? ' active' : '')
+  })
+}
+
+function goSlide(dir) {
+  const next = cur + dir
+  if (next < 0 || next >= TOTAL) return
+  goTo(next)
+}
+
+function goTo(idx) {
+  stopAudio();
+  document.querySelectorAll('.slide')[cur].classList.remove('active')
+  cur = idx
+  document.querySelectorAll('.slide')[cur].classList.add('active')
+  updateDots()
+  document.getElementById('btnPrev').disabled = cur === 0
+  document.getElementById('btnNext').textContent = cur === TOTAL - 1 ? '✓ সমাপ্ত' : 'পরবর্তী →'
+  playSlide(cur);
+  const body = document.querySelectorAll('.sb')[cur]
+  if (body && body.scrollHeight > body.clientHeight + 40) {
+    document.getElementById('scrollHint').classList.add('show')
+    setTimeout(() => document.getElementById('scrollHint').classList.remove('show'), 2500)
+  }
+}
+
+function toggleVoice(e) {
+  if(e) e.stopPropagation();
+  if(busy) stopAudio();
+  else playSlide(cur);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (document.getElementById('splash').style.opacity === '' && !document.getElementById('splash').classList.contains('hide')) return
+  if (e.key === 'ArrowRight' || e.key === ' ') goSlide(1)
+  if (e.key === 'ArrowLeft') goSlide(-1)
+})
+
+// Swipe
+let tx = 0
+document.addEventListener('touchstart', e => tx = e.touches[0].clientX, {passive:true})
+document.addEventListener('touchend', e => {
+  const dx = tx - e.changedTouches[0].clientX
+  if (Math.abs(dx) > 50) goSlide(dx > 0 ? 1 : -1)
+}, {passive:true})
+
+// Pre-fetch slides 0 & 1 on load
+setTimeout(function(){ prefetch(0); prefetch(1); }, 100);
 
 </script>
 </body>

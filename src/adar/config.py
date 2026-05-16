@@ -43,9 +43,11 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 # ── Stripe ────────────────────────────────────────────────────────────────────
 STRIPE_SECRET_KEY      = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET  = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-STRIPE_PRICE_BASIC     = os.getenv("STRIPE_PRICE_BASIC", "")
-STRIPE_PRICE_STANDARD  = os.getenv("STRIPE_PRICE_STANDARD", "")
-STRIPE_PRICE_UNLIMITED = os.getenv("STRIPE_PRICE_UNLIMITED", "")
+# Stripe price IDs — each domain uses its own
+STRIPE_PRICE_GEETABITAN = os.getenv("STRIPE_PRICE_GEETABITAN", "")  # Geetabitan only
+STRIPE_PRICE_BASIC      = os.getenv("STRIPE_PRICE_BASIC",      "")  # ARCL only
+STRIPE_PRICE_STANDARD   = os.getenv("STRIPE_PRICE_STANDARD",   "")  # ARCL only
+STRIPE_PRICE_UNLIMITED  = os.getenv("STRIPE_PRICE_UNLIMITED",  "")  # ARCL only
 FRONTEND_URL           = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 # ── App identity ──────────────────────────────────────────────────────────────
@@ -242,9 +244,11 @@ class _Settings:
     # Stripe
     STRIPE_SECRET_KEY:      str = STRIPE_SECRET_KEY
     STRIPE_WEBHOOK_SECRET:  str = STRIPE_WEBHOOK_SECRET
-    STRIPE_PRICE_BASIC:     str = STRIPE_PRICE_BASIC
-    STRIPE_PRICE_STANDARD:  str = STRIPE_PRICE_STANDARD
-    STRIPE_PRICE_UNLIMITED: str = STRIPE_PRICE_UNLIMITED
+    # Stripe prices — domain-specific
+    STRIPE_PRICE_GEETABITAN: str = STRIPE_PRICE_GEETABITAN
+    STRIPE_PRICE_BASIC:      str = STRIPE_PRICE_BASIC      if DOMAIN == "arcl" else ""
+    STRIPE_PRICE_STANDARD:   str = STRIPE_PRICE_STANDARD   if DOMAIN == "arcl" else ""
+    STRIPE_PRICE_UNLIMITED:  str = STRIPE_PRICE_UNLIMITED   if DOMAIN == "arcl" else ""
     FRONTEND_URL:           str = FRONTEND_URL
 
     # API keys

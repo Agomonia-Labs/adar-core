@@ -15,6 +15,7 @@ const STATUS_COLORS = {
   past_due:  'warning',
   canceled:  'error',
   none:      'default',
+  inactive:  'default',
 }
 
 const STATUS_LABELS = {
@@ -23,6 +24,7 @@ const STATUS_LABELS = {
   past_due: 'Payment due',
   canceled: 'Cancelled',
   none:     'No subscription',
+  inactive: 'No subscription',
 }
 
 export default function Billing({ token, onSubscribe, onBack }) {
@@ -52,7 +54,7 @@ export default function Billing({ token, onSubscribe, onBack }) {
     setActionLoading('portal')
     try {
       const { data } = await axios.post(`${API_URL}/api/payments/portal`, {}, { headers: authHeaders })
-      window.open(data.portal_url, '_blank')
+      window.location.href = data.url
     } catch (e) {
       setError('Could not open billing portal')
     } finally {
@@ -93,7 +95,7 @@ export default function Billing({ token, onSubscribe, onBack }) {
     </Box>
   )
 
-  const noSub = !billing || billing.subscription_status === 'none'
+  const noSub = !billing || billing.status === 'none'
 
   return (
     <Box sx={{ maxWidth: 600, mx: 'auto', p: 3 }}>
@@ -117,23 +119,23 @@ export default function Billing({ token, onSubscribe, onBack }) {
             </Typography>
             <Stack direction="row" spacing={1} alignItems="center">
               <Typography variant="h5" fontWeight={700} sx={{ textTransform: 'capitalize' }}>
-                {billing?.subscription_plan || 'None'}
+                {billing?.plan || 'None'}
               </Typography>
               <Chip
-                label={STATUS_LABELS[billing?.subscription_status] || 'Unknown'}
-                color={STATUS_COLORS[billing?.subscription_status] || 'default'}
+                label={STATUS_LABELS[billing?.status] || 'Unknown'}
+                color={STATUS_COLORS[billing?.status] || 'default'}
                 size="small"
               />
             </Stack>
-            {billing?.trial_ends_at && billing?.subscription_status === 'trialing' && (
+            {billing?.trial_end_date && billing?.status === 'trialing' && (
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Trial ends {new Date(billing.trial_ends_at).toLocaleDateString()}
+                Trial ends {new Date(billing.trial_end_date).toLocaleDateString()}
               </Typography>
             )}
-            {billing?.subscription_ends_at && billing?.subscription_status !== 'trialing' && (
+            {billing?.next_billing_date && billing?.status !== 'trialing' && (
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 {billing.cancel_at_period_end ? 'Cancels' : 'Renews'} on{' '}
-                {new Date(billing.subscription_ends_at).toLocaleDateString()}
+                {new Date(billing.next_billing_date).toLocaleDateString()}
               </Typography>
             )}
           </Box>

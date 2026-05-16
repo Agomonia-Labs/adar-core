@@ -91,8 +91,8 @@ async def get_songs_by_taal(taal: str, paryay: str = None) -> str:
 
 
 async def describe_raag(raag: str) -> str:
-    """Return full musical description of a raag including arohi, aborohi,
-    vadi, samvadi, komal notes, family, time, mood and song count."""
+    """Return full classical description of a raag — arohi, aborohi, pakad,
+    jaati, vadi, samvadi, varjit, similar raags, Rabindra usage note."""
     meta = RAAG_DATA.get(raag)
     if not meta:
         return (
@@ -104,36 +104,37 @@ async def describe_raag(raag: str) -> str:
         filters={"raag": raag},
         limit=500,
     )
-    count  = len(all_results)
-    arohi   = meta.get("arohi",   "")
-    aborohi = meta.get("aborohi", "")
-    vadi    = meta.get("vadi",    "")
-    samvadi = meta.get("samvadi", "")
-    komal   = meta.get("komal",   "")
+    count = len(all_results)
 
-    lines = [
-        f"## {raag}\n",
-        f"**পরিবার (ঠাট):** {meta.get('family', '—')}",
-        f"**পরিবেশনের সময়:** {meta.get('time', '—')}",
-        f"**মেজাজ:** {meta.get('mood', '—')}",
-    ]
-    if arohi:
-        lines.append(f"**আরোহী:** {arohi}")
-    if aborohi:
-        lines.append(f"**অবরোহী:** {aborohi}")
-    if vadi:
-        lines.append(f"**বাদী স্বর:** {vadi}")
-    if samvadi:
-        lines.append(f"**সমবাদী স্বর:** {samvadi}")
-    if komal and komal != "—":
-        lines.append(f"**কোমল স্বর:** {komal}")
-    lines += [
-        f"**প্রচলিত তাল:** {', '.join(meta.get('beats_common', []))}",
-        f"**গীতবিতানে গান:** {count}টি\n",
-        meta.get("description", ""),
-        "\nএই রাগের গান দেখতে চাইলে বলুন।",
-    ]
-    return "\n".join(lines)
+    similar = ", ".join(meta.get("similar_raag", [])) or "—"
+    komal   = meta.get("komal", "—") or "—"
+    varjit  = meta.get("varjit", "—") or "—"
+    taals   = ", ".join(meta.get("beats_common", [])) or "—"
+    rabindra_note = meta.get("rabindra_note", "—") or "—"
+
+    table = (
+        f"## {raag}\n\n"
+        f"| বিষয় | তথ্য |\n"
+        f"|---|---|\n"
+        f"| ঠাট | {meta.get('family', '—')} |\n"
+        f"| সময় | {meta.get('time', '—')} |\n"
+        f"| ঋতু | {meta.get('ritu', '—')} |\n"
+        f"| মেজাজ | {meta.get('mood', '—')} |\n"
+        f"| জাতি | {meta.get('jaati', '—')} |\n"
+        f"| আরোহী | {meta.get('arohi', '—')} |\n"
+        f"| অবরোহী | {meta.get('aborohi', '—')} |\n"
+        f"| পকড় | {meta.get('pakad', '—')} |\n"
+        f"| বাদী স্বর | {meta.get('vadi', '—')} |\n"
+        f"| সমবাদী স্বর | {meta.get('samvadi', '—')} |\n"
+        f"| কোমল স্বর | {komal} |\n"
+        f"| বর্জিত স্বর | {varjit} |\n"
+        f"| সমজাতীয় রাগ | {similar} |\n"
+        f"| প্রচলিত তাল | {taals} |\n"
+        f"| গীতবিতানে গান | {count}টি |\n\n"
+        f"**রবীন্দ্র ব্যবহার:** {rabindra_note}\n\n"
+        f"_এই রাগের গান দেখতে চাইলে বলুন।_"
+    )
+    return table
 
 
 async def describe_taal(taal: str) -> str:
@@ -151,13 +152,17 @@ async def describe_taal(taal: str) -> str:
         limit=500,
     )
     count = len(all_results)
+    bols = meta.get("bols", "—")
     return (
         f"## {taal}\n\n"
-        f"**মাত্রা:** {meta.get('beats', '?')}\n"
-        f"**বিভাগ:** {meta.get('vibhag', '—')}\n"
-        f"**গতি:** {meta.get('tempo', '—')}\n"
-        f"**অনুভূতি:** {meta.get('feel', '—')}\n"
-        f"**গীতবিতানে গান:** {count}টি\n\n"
+        f"| বিষয় | তথ্য |\n"
+        f"|---|---|\n"
+        f"| মাত্রা | {meta.get('beats', '?')} |\n"
+        f"| বিভাগ | {meta.get('vibhag', '—')} |\n"
+        f"| গতি | {meta.get('tempo', '—')} |\n"
+        f"| অনুভূতি | {meta.get('feel', '—')} |\n"
+        f"| বোল | {bols} |\n"
+        f"| গীতবিতানে গান | {count}টি |\n\n"
         f"{meta.get('description', '')}\n\n"
-        f"এই তালের গান দেখতে চাইলে বলুন।"
+        f"_এই তালের গান দেখতে চাইলে বলুন।_"
     )

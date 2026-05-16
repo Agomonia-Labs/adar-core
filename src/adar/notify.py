@@ -21,7 +21,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-FROM_EMAIL     = os.environ.get("NOTIFY_FROM_EMAIL", "admin@agomoniai.com")
+FROM_EMAIL     = os.environ.get("NOTIFY_FROM_EMAIL", "noreply@adar.agomoniai.com")
 FROM_NAME      = "Adar ARCL"
 APP_URL        = os.environ.get("FRONTEND_URL", "https://adar.agomoniai.com")
 GMAIL_USER     = os.environ.get("GMAIL_USER", "admin@agomoniai.com")

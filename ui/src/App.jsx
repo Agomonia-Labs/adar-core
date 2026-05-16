@@ -25,6 +25,35 @@ import Billing from './Billing'
 import Register from './Register'
 import AdminDashboard from './AdminDashboard'
 
+
+// ── Handle Stripe payment return BEFORE React mounts ─────────────────────────
+// This runs synchronously so adar_status is correct when useState initialises.
+;(function handlePaymentReturn() {
+  try {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('payment') === 'success') {
+      localStorage.setItem('adar_status', 'active')
+      window.history.replaceState({}, '', window.location.pathname)
+      // Fire activate to backend (non-blocking, best-effort)
+      const token   = localStorage.getItem('adar_token')
+      const apiUrl  = import.meta.env.VITE_API_URL || ''
+      const apiKey  = import.meta.env.VITE_API_KEY  || ''
+      if (token) {
+        const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }
+        if (apiKey) headers['X-API-Key'] = apiKey
+        fetch(apiUrl + '/api/payments/activate', { method: 'POST', headers })
+          .then(r => r.json())
+          .then(d => console.log('[Payment] Activated:', d))
+          .catch(e => console.warn('[Payment] Activate error (non-fatal):', e))
+      }
+    }
+    if (p.get('payment') === 'cancelled') {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  } catch (e) { /* never crash */ }
+})()
+
+
 const API_URL = import.meta.env.VITE_API_URL || ''
 const API_KEY = import.meta.env.VITE_API_KEY || ''
 
@@ -452,29 +481,11 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [page])
 
-  // Handle Stripe return
+  // Stripe return handled by handlePaymentReturn() above (runs before React mounts)
+  // If page is still 'checkout' but status is 'active', correct it
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('payment') === 'success') {
-      window.history.replaceState({}, '', window.location.pathname)
-      const activateAndEnter = async () => {
-        const t = localStorage.getItem('adar_token')
-        if (t) {
-          try {
-            const res = await fetch(`${API_URL}/api/payments/activate`, {
-              method:'POST',
-              headers:{ Authorization:`Bearer ${t}`, 'Content-Type':'application/json', ...(API_KEY ? { 'X-API-Key':API_KEY } : {}) }
-            })
-            if (res.ok) { const data = await res.json(); console.log('Activation result:', data) }
-          } catch (e) { console.warn('Activate call failed:', e) }
-        }
-        localStorage.setItem('adar_status', 'active')
-        setPage('chat')
-      }
-      activateAndEnter()
-    } else if (params.get('payment') === 'cancelled') {
-      window.history.replaceState({}, '', window.location.pathname)
-      if (localStorage.getItem('adar_status') === 'pending_payment') setPage('checkout')
+    if (page === 'checkout' && localStorage.getItem('adar_status') === 'active') {
+      setPage('chat')
     }
   }, [])
 
@@ -483,6 +494,8 @@ export default function App() {
     if (!data) return
     setToken(data.access_token)
     setTeamName(data.team_name)
+    // Always sync adar_status from server so localStorage matches Firestore
+    if (data.status) localStorage.setItem('adar_status', data.status)
     setTimeout(fetchUsage, 500)
     if (data.status === 'pending_payment') {
       setPage('checkout')

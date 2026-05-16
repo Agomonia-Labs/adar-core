@@ -24,7 +24,8 @@ function authHeaders(token) {
 function StatusChip({ status }) {
   const map = {
     active:    { label:'Active',    color:'success' },
-    pending:   { label:'Pending',   color:'warning' },
+    pending:         { label:'Pending',         color:'warning' },
+    pending_payment: { label:'Pending Payment',  color:'warning' },
     suspended: { label:'Suspended', color:'error'   },
   }
   const s = map[status] || { label:status, color:'default' }
@@ -75,7 +76,7 @@ export default function AdminDashboard({ token, onLogout }) {
     } catch (e) { setError(e.response?.data?.detail || 'Action failed') }
   }
 
-  const pending   = teams.filter(t => t.status === 'pending')
+  const pending   = teams.filter(t => t.status === 'pending' || t.status === 'pending_payment')
   const active    = teams.filter(t => t.status === 'active')
   const suspended = teams.filter(t => t.status === 'suspended')
 

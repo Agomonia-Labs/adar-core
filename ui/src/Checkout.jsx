@@ -7,6 +7,7 @@ import CheckIcon from '@mui/icons-material/Check'
 import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
+const DOMAIN  = import.meta.env.VITE_DOMAIN   || 'arcl'
 
 const PLAN_COLORS = {
   basic:     { border: '#C8E8D8', badge: '#EBF7F1', text: '#1A8A5A' },
@@ -41,7 +42,7 @@ export default function Checkout({ token, onBack, onSuccess }) {
       // Show branded redirect screen then go to Stripe
       setRedirecting(true)
       await new Promise(r => setTimeout(r, 1400))
-      window.location.href = data.checkout_url
+      window.location.href = data.url
     } catch (e) {
       setError(e.response?.data?.detail || 'Failed to start checkout')
       setLoading(false)
@@ -61,10 +62,10 @@ export default function Checkout({ token, onBack, onSuccess }) {
         display:'flex',alignItems:'center',justifyContent:'center',
         fontSize:'1.3rem',fontWeight:700,color:'#fff',
         boxShadow:'0 0 50px rgba(46,184,126,0.45)',mb:1}}>
-        আদর
+        {DOMAIN === 'geetabitan' ? 'গী' : 'আদর'}
       </Box>
       <Typography variant="h6" sx={{color:'#fff',fontWeight:600}}>
-        Starting your free trial...
+        DOMAIN === 'geetabitan' ? 'ট্রায়াল শুরু হচ্ছে...' : 'Starting your free trial...'
       </Typography>
       <Typography sx={{color:'rgba(255,255,255,0.45)',fontSize:'0.88rem',maxWidth:320}}>
         Setting up your 14-day free trial. Taking you to our secure payment page.
@@ -171,14 +172,21 @@ export default function Checkout({ token, onBack, onSuccess }) {
           All plans include:
         </Typography>
         <Stack spacing={0.5}>
-          {[
+          {(DOMAIN === 'geetabitan' ? [
+            '২,০০০+ রবীন্দ্রসঙ্গীত অ্যাক্সেস',
+            'রাগ-তাল বিশ্লেষণ ও স্বরলিপি',
+            'YouTube লিংক — ১৩ জন শিল্পী',
+            'বাংলায় ভয়েস ইনপুট',
+            'AI মূল্যায়ন স্কোর',
+            'Auto-renews · Cancel anytime',
+          ] : [
             'Player stats and career history',
             'Team schedules and scorecards',
             'Dismissal analysis',
             'ARCL rules and umpiring guide',
             'Community polls',
             'Auto-renews · Cancel anytime',
-          ].map(item => (
+          ]).map(item => (
             <Stack key={item} direction="row" spacing={1} alignItems="center">
               <CheckIcon sx={{ fontSize: 14, color: 'primary.main' }} />
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>{item}</Typography>
