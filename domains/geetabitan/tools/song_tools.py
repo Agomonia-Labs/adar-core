@@ -209,7 +209,8 @@ async def list_taals() -> str:
     from domains.geetabitan.data.raag_metadata import TAAL_DATA
     rows = []
     for name, meta in TAAL_DATA.items():
-        bols = meta.get("bols", "—") or "—"
+        # Replace | with · so vibhag separators don't break markdown table columns
+        bols = (meta.get("bols", "—") or "—").replace("|", "·")
         rows.append(
             f"| {name} | {meta.get('beats','—')} | "
             f"{meta.get('vibhag','—')} | {meta.get('tempo','—')} | "
@@ -384,3 +385,38 @@ async def summarize_aspect(song_id: str, aspect: str) -> str:
         f"**{doc['title']}** — {label_map.get(aspect, aspect)}:\n\n"
         f"{summary.get(aspect, 'পাওয়া যায়নি।')}"
     )
+
+async def get_palta_url(name: str, kind: str = "raag") -> str:
+    """Return YouTube search URLs for palta/exercise practice for a raag or taal.
+    kind: 'raag' or 'taal'
+    """
+    import urllib.parse
+
+    def yt(query: str) -> str:
+        return f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
+
+    if kind == "taal":
+        rows = [
+            f"| পল্টা — থেকা | তাল · Bengali | [▶ শুনুন]({yt(f'{name} taal theka tabla')}) |",
+            f"| পল্টা — কায়দা | তাল · Hindi | [▶ শুনুন]({yt(f'{name} taal palta kaida tabla')}) |",
+            f"| তাল পরিচয় | বাংলায় | [▶ শুনুন]({yt(f'{name} তাল পল্টা রবীন্দ্রসঙ্গীত')}) |",
+            f"| Tabla practice | English | [▶ শুনুন]({yt(f'{name} taal tabla practice lesson')}) |",
+        ]
+        title = f"{name} তালের পল্টা — YouTube-এ শুনুন"
+    else:
+        rows = [
+            f"| আলাপ ও পল্টা | বাংলায় | [▶ শুনুন]({yt(f'{name} রাগ পল্টা আলাপ রবীন্দ্রসঙ্গীত')}) |",
+            f"| Alaap & Palta | Hindi lesson | [▶ শুনুন]({yt(f'{name} raag palta alaap lesson')}) |",
+            f"| পল্টা — সরগম | Sargam exercise | [▶ শুনুন]({yt(f'{name} raag sargam palta exercise vocal')}) |",
+            f"| Bandish practice | Hindustani | [▶ শুনুন]({yt(f'{name} raag bandish practice hindustani classical')}) |",
+        ]
+        title = f"{name} রাগের পল্টা — YouTube-এ শুনুন"
+
+    table = (
+        f"## {title}\n\n"
+        f"| ধরন | ভাষা | লিংক |\n"
+        f"|---|---|---|\n"
+        + "\n".join(rows)
+        + "\n\n_লিংকে ক্লিক করলে YouTube-এ সরাসরি খোঁজা হবে।_"
+    )
+    return table

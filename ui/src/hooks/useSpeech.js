@@ -1,165 +1,138 @@
-/**
- * ui/src/hooks/useSpeech.js
- *
- * Speech-to-text hook using:
- *   1. Web Speech API (primary — free, works in Chrome)
- *   2. Google Cloud STT via /api/stt (fallback — better Bengali accuracy)
- *
- * Usage:
- *   const { listening, supported, startListening, stopListening } = useSpeech({
- *     lang:      'bn-IN',
- *     onResult:  (text) => setInput(prev => prev + text),
- *     onError:   (err)  => console.warn(err),
- *   })
- */
+// hooks/useSpeech.js
+// STT (speech-to-text) + TTS (text-to-speech) in Bangla
+// Used by ChatTab in App.jsx
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+// ── Pick the best available Bangla TTS voice ─────────────────────────────────
+function pickBanglaVoice() {
+  const voices = window.speechSynthesis?.getVoices() || []
+  // Priority: exact bn-BD → bn-IN → any bn → fallback to first voice
+  return (
+    voices.find(v => v.lang === 'bn-BD') ||
+    voices.find(v => v.lang === 'bn-IN') ||
+    voices.find(v => v.lang.startsWith('bn')) ||
+    voices[0] ||
+    null
+  )
+}
 
-// ── Web Speech API check ──────────────────────────────────────────────────────
-const SpeechRecognition =
-  window.SpeechRecognition || window.webkitSpeechRecognition || null
-
-const WEB_SPEECH_SUPPORTED = Boolean(SpeechRecognition)
-const CLOUD_STT_SUPPORTED  = Boolean(API_URL)
-
-// Mic is available if EITHER engine works
-// Firefox/iOS → Cloud STT; Chrome/Edge → Web Speech
-
-export function useSpeech({ lang = 'bn-IN', onResult, onError } = {}) {
-  const [listening, setListening]   = useState(false)
+/**
+ * useSpeech
+ *
+ * Provides:
+ *   listening      — bool, true while mic is active
+ *   isSpeaking     — bool, true while TTS is playing
+ *   supported      — bool, browser supports STT
+ *   startListening — fn()
+ *   stopListening  — fn()
+ *   speakBangla    — fn(text: string) — speaks text in Bangla voice
+ *   stopSpeaking   — fn()
+ *
+ * Options:
+ *   lang      — STT language (default 'bn-BD')
+ *   onResult  — fn(transcript: string) called when speech recognised
+ *   onError   — fn(errorMessage: string)
+ */
+export function useSpeech({ lang = 'bn-BD', onResult, onError } = {}) {
+  const [listening,  setListening]  = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
   const recognitionRef = useRef(null)
-  const mediaRecRef    = useRef(null)
-  const chunksRef      = useRef([])
+  const supported = !!(window.SpeechRecognition || window.webkitSpeechRecognition)
 
-  const supported = WEB_SPEECH_SUPPORTED || CLOUD_STT_SUPPORTED
+  // ── Initialise SpeechRecognition ──────────────────────────────────────────
+  useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) return
 
-  // ── Web Speech API ──────────────────────────────────────────────────────────
-  const startWebSpeech = useCallback(() => {
-    const rec = new SpeechRecognition()
-    rec.lang          = lang
-    rec.interimResults = true
+    const rec = new SR()
+    rec.lang            = lang
+    rec.interimResults  = false
     rec.maxAlternatives = 1
-    rec.continuous    = false
+    rec.continuous      = false
 
-    let finalTranscript = ''
+    rec.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      setListening(false)
+      if (transcript.trim()) onResult?.(transcript.trim())
+    }
 
-    rec.onstart  = () => setListening(true)
-    rec.onend    = () => {
+    rec.onerror = (e) => {
       setListening(false)
-      if (finalTranscript.trim()) onResult?.(finalTranscript.trim())
-    }
-    rec.onerror  = (e) => {
-      setListening(false)
-      onError?.(e.error)
-      // Fallback to Cloud STT if Web Speech fails with 'not-allowed' or 'service-not-allowed'
-      if (e.error === 'service-not-allowed' || e.error === 'not-allowed') {
-        onError?.('মাইক্রোফোন অনুমতি প্রয়োজন। ব্রাউজার সেটিংসে মাইক্রোফোন চালু করুন।')
+      const msgs = {
+        'no-speech':   'কথা শোনা যায়নি — আবার চেষ্টা করুন।',
+        'not-allowed': 'মাইক্রোফোন অ্যাক্সেস দিন।',
+        'network':     'নেটওয়ার্ক সমস্যা।',
       }
+      onError?.(msgs[e.error] || `ভয়েস এরর: ${e.error}`)
     }
-    rec.onresult = (e) => {
-      finalTranscript = ''
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          finalTranscript += e.results[i][0].transcript
-        }
-      }
-    }
+
+    rec.onend = () => setListening(false)
 
     recognitionRef.current = rec
-    rec.start()
   }, [lang, onResult, onError])
 
-  const stopWebSpeech = useCallback(() => {
+  // ── STT controls ──────────────────────────────────────────────────────────
+  const startListening = useCallback(() => {
+    if (!recognitionRef.current || listening) return
+    // Stop any active speech before listening
+    window.speechSynthesis?.cancel()
+    setIsSpeaking(false)
+    recognitionRef.current.start()
+    setListening(true)
+  }, [listening])
+
+  const stopListening = useCallback(() => {
     recognitionRef.current?.stop()
     setListening(false)
   }, [])
 
-  // ── Google Cloud STT via /api/stt ─────────────────────────────────────────
-  const startCloudSTT = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  // ── TTS: speak reply in Bangla ────────────────────────────────────────────
+  const speakBangla = useCallback((text) => {
+    if (!text || !window.speechSynthesis) return
+    window.speechSynthesis.cancel()
 
-      // Pick a MIME type — Safari only supports audio/mp4
-      // Chrome/Firefox prefer webm/ogg for better STT compatibility
-      const mimeType = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/ogg',
-        'audio/mp4',             // Safari fallback
-      ].find(m => MediaRecorder.isTypeSupported(m)) || ''
-      console.log('Recording MIME:', mimeType || 'browser default')
+    // Strip markdown symbols so they aren't read aloud
+    const clean = text
+      .replace(/#{1,6}\s/g, '')         // headings
+      .replace(/\*\*(.+?)\*\*/g, '$1') // bold
+      .replace(/\*(.+?)\*/g, '$1')     // italic
+      .replace(/`(.+?)`/g, '$1')       // inline code
+      .replace(/\|.+\|/g, '')          // table rows
+      .replace(/[-*_]{3,}/g, '')       // hr
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1') // links
+      .replace(/\n{2,}/g, '. ')        // paragraph breaks → pause
+      .trim()
 
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {})
-      chunksRef.current = []
+    const utter = new SpeechSynthesisUtterance(clean)
+    utter.lang  = 'bn-BD'
+    utter.rate  = 0.88   // slightly slower for clarity
+    utter.pitch = 1.0
 
-      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      mr.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop())
-        setListening(false)
-        const actualMime = mimeType || 'audio/webm'
-        const blob   = new Blob(chunksRef.current, { type: actualMime })
-        const reader = new FileReader()
-        reader.onloadend = async () => {
-          const b64 = reader.result.split(',')[1]
-          try {
-            const token = localStorage.getItem('adar_token') || ''
-            const resp  = await fetch(`${API_URL}/api/stt`, {
-              method: 'POST',
-              headers: {
-                'Content-Type':  'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              body: JSON.stringify({ audio: b64, lang, mime: actualMime }),
-            })
-            if (!resp.ok) {
-              const err = await resp.text()
-              console.error('STT API error:', resp.status, err)
-              onError?.('ভয়েস সার্ভার এরর: ' + resp.status)
-              return
-            }
-            const data = await resp.json()
-            console.log('STT response:', data)
-            if (data.text) onResult?.(data.text)
-            else onError?.('কথা বোঝা যায়নি, আবার চেষ্টা করুন।')
-          } catch (e) {
-            console.error('STT fetch error:', e)
-            onError?.('সংযোগ সমস্যা: ' + e.message)
-          }
-        }
-        reader.readAsDataURL(blob)
-      }
-
-      mediaRecRef.current = mr
-      mr.start()
-      setListening(true)
-    } catch (e) {
-      onError?.('মাইক্রোফোন চালু করা যায়নি: ' + e.message)
+    const doSpeak = () => {
+      const voice = pickBanglaVoice()
+      if (voice) utter.voice = voice
+      utter.onstart  = () => setIsSpeaking(true)
+      utter.onend    = () => setIsSpeaking(false)
+      utter.onerror  = () => setIsSpeaking(false)
+      window.speechSynthesis.speak(utter)
     }
-  }, [lang, onResult, onError])
 
-  const stopCloudSTT = useCallback(() => {
-    mediaRecRef.current?.stop()
+    // Voices may not be loaded yet on first call
+    if (window.speechSynthesis.getVoices().length > 0) {
+      doSpeak()
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        doSpeak()
+        window.speechSynthesis.onvoiceschanged = null
+      }
+    }
   }, [])
 
-  // ── Public API ────────────────────────────────────────────────────────────
-  const startListening = useCallback(() => {
-    if (WEB_SPEECH_SUPPORTED) startWebSpeech()
-    else if (CLOUD_STT_SUPPORTED) startCloudSTT()
-  }, [startWebSpeech, startCloudSTT])
-
-  const stopListening = useCallback(() => {
-    if (WEB_SPEECH_SUPPORTED) stopWebSpeech()
-    else stopCloudSTT()
-  }, [stopWebSpeech, stopCloudSTT])
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-    recognitionRef.current?.abort()
-    mediaRecRef.current?.stop()
+  const stopSpeaking = useCallback(() => {
+    window.speechSynthesis?.cancel()
+    setIsSpeaking(false)
   }, [])
 
-  return { listening, supported, startListening, stopListening }
+  return { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking }
 }

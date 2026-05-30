@@ -131,9 +131,8 @@ _PROD_ORIGINS = [
     "https://geetabitan-adar.firebaseapp.com",
 ]
 _DEV_ORIGINS = [
-    "http://localhost:5173", "http://localhost:5174",
-    "http://localhost:6001", "http://localhost:3000",
-    "http://127.0.0.1:5173", "http://127.0.0.1:6001",
+    "http://localhost:6001", "http://localhost:5173", "http://localhost:3000",
+    "http://127.0.0.1:6001", "http://127.0.0.1:5173", "http://127.0.0.1:3000",
 ]
 _ALL_ORIGINS = _PROD_ORIGINS + (_DEV_ORIGINS if settings.APP_ENV != "production" else [])
 
@@ -594,7 +593,7 @@ async def speech_to_text(
             out_buf   = io.BytesIO()
             seg.export(out_buf, format="flac")
             audio     = _b64.b64encode(out_buf.getvalue()).decode()
-            encoding  = "FLAC"
+            mime      = "audio/flac"
             logger.info(f"Converted mp4→flac, new audio_len={len(audio)}")
         except Exception as e:
             logger.error(f"Audio conversion failed: {e}")
@@ -606,6 +605,7 @@ async def speech_to_text(
         "audio/webm;codecs=opus":  "WEBM_OPUS",
         "audio/ogg":               "OGG_OPUS",
         "audio/ogg;codecs=opus":   "OGG_OPUS",
+        "audio/flac":              "FLAC",
     }
     encoding = encoding_map.get(mime.split(";")[0].strip(), "WEBM_OPUS")
 

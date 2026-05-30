@@ -7,6 +7,8 @@ import {
 import SendIcon from '@mui/icons-material/Send'
 import MicIcon from '@mui/icons-material/Mic'
 import MicOffIcon from '@mui/icons-material/MicOff'
+import VolumeUpIcon from '@mui/icons-material/VolumeUp'
+import StopCircleIcon from '@mui/icons-material/StopCircle'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import LogoutIcon from '@mui/icons-material/Logout'
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined'
@@ -284,7 +286,7 @@ function TypingIndicator() {
 
 function ChatTab() {
   // ── Speech to text ──────────────────────────────────────────────────────
-  const { listening, supported, startListening, stopListening } = useSpeech({
+  const { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking } = useSpeech({
     lang:     'bn-IN',
     onResult: (text) => {
       if (text.trim()) sendMessage(text.trim())
@@ -333,6 +335,8 @@ function ChatTab() {
         role:'assistant', content:data.response, timestamp:Date.now(), eval:data.eval||null,
       }])
       setUsage(prev => prev ? { ...prev, used_today:(prev.used_today||0)+1 } : prev)
+      // ── Speak the reply in Bangla if the question came from voice ──────────
+      if (text && data.response) speakBangla(data.response)
     } catch (err) {
       console.error('Chat error:', err)
       setMessages(prev => {
@@ -346,7 +350,7 @@ function ChatTab() {
       sendingRef.current = false
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }, [input, loading, sessionId, userId])
+  }, [input, loading, sessionId, userId, speakBangla])
 
   const handleKeyDown = (e) => {
     if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
@@ -420,20 +424,25 @@ function ChatTab() {
             }}
           />
           {supported && (
-            <IconButton
-              onClick={listening ? stopListening : startListening}
-              title={listening ? 'থামুন' : 'বাংলায় বলুন'}
-              sx={{
-                color:     listening ? 'error.main' : 'primary.main',
-                flexShrink: 0,
-                animation: listening ? 'micPulse 1s ease-in-out infinite' : 'none',
-                '@keyframes micPulse': {
-                  '0%,100%': { opacity: 1 },
-                  '50%':     { opacity: 0.3 },
-                },
-              }}>
-              {listening ? <MicOffIcon /> : <MicIcon />}
-            </IconButton>
+            <Tooltip title={isSpeaking ? 'উত্তর বন্ধ করুন' : listening ? 'থামুন' : 'বাংলায় বলুন'}>
+              <IconButton
+                onClick={isSpeaking ? stopSpeaking : listening ? stopListening : startListening}
+                sx={{
+                  color: isSpeaking ? 'warning.main' : listening ? 'error.main' : 'primary.main',
+                  flexShrink: 0,
+                  animation: listening ? 'micPulse 1s ease-in-out infinite' : isSpeaking ? 'speakPulse 0.8s ease-in-out infinite' : 'none',
+                  '@keyframes micPulse': {
+                    '0%,100%': { opacity: 1 },
+                    '50%':     { opacity: 0.3 },
+                  },
+                  '@keyframes speakPulse': {
+                    '0%,100%': { transform: 'scale(1)' },
+                    '50%':     { transform: 'scale(1.25)' },
+                  },
+                }}>
+                {isSpeaking ? <StopCircleIcon /> : listening ? <MicOffIcon /> : <MicIcon />}
+              </IconButton>
+            </Tooltip>
           )}
           <IconButton onClick={() => sendMessage()} disabled={!input.trim()||loading}
             sx={{
