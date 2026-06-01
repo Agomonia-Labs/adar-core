@@ -4,17 +4,63 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 
-// ── Pick the best available Bangla TTS voice ─────────────────────────────────
-function pickBanglaVoice() {
-  const voices = window.speechSynthesis?.getVoices() || []
-  // Priority: exact bn-BD → bn-IN → any bn → fallback to first voice
-  return (
-    voices.find(v => v.lang === 'bn-BD') ||
-    voices.find(v => v.lang === 'bn-IN') ||
-    voices.find(v => v.lang.startsWith('bn')) ||
-    voices[0] ||
-    null
-  )
+const API_URL = import.meta.env.VITE_API_URL || ''
+const SILENT_AUDIO =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
+const STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল/i
+
+function audioUrlFromBase64(base64Audio) {
+  const raw = atob(base64Audio)
+  const bytes = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return URL.createObjectURL(new Blob([bytes], { type:'audio/mpeg' }))
+}
+
+function arrayBufferFromBase64(base64Audio) {
+  const raw = atob(base64Audio)
+  const bytes = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes.buffer
+}
+
+function toSpeechText(text) {
+  return (text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\|.+\|/g, ' ')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/[*_#>`|~\-]+/g, ' ')
+    .replace(/([।.!?])\s*/g, '$1 ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function splitSpeechText(text, maxLength = 360) {
+  const parts = []
+  const sentences = text.match(/[^।.!?]+[।.!?]?/g) || [text]
+
+  for (const rawSentence of sentences) {
+    const sentence = rawSentence.trim()
+    if (!sentence) continue
+
+    if (sentence.length <= maxLength) {
+      parts.push(sentence)
+      continue
+    }
+
+    let chunk = ''
+    for (const word of sentence.split(/\s+/)) {
+      if ((chunk + ' ' + word).trim().length > maxLength && chunk) {
+        parts.push(chunk.trim())
+        chunk = word
+      } else {
+        chunk = `${chunk} ${word}`.trim()
+      }
+    }
+    if (chunk) parts.push(chunk.trim())
+  }
+
+  return parts.slice(0, 8)
 }
 
 /**
@@ -38,14 +84,61 @@ export function useSpeech({ lang = 'bn-BD', onResult, onError } = {}) {
   const [listening,  setListening]  = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const recognitionRef = useRef(null)
-  const supported = !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+  const mediaRecRef = useRef(null)
+  const chunksRef = useRef([])
+  const cloudStopTimerRef = useRef(null)
+  const silenceTimerRef = useRef(null)
+  const recorderAudioContextRef = useRef(null)
+  const playbackAudioContextRef = useRef(null)
+  const playbackSourceRef = useRef(null)
+  const interruptRecognitionRef = useRef(null)
+  const interruptActiveRef = useRef(false)
+  const audioRef = useRef(null)
+  const ttsUrlsRef = useRef([])
+  const speakRunRef = useRef(0)
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+  const webSpeechSupported = Boolean(SpeechRecognition)
+  const cloudSttSupported = Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder)
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  const preferCloudStt = cloudSttSupported && (isSafari || isIOS || !webSpeechSupported)
+  const supported = webSpeechSupported || cloudSttSupported
+
+  const stopSpeakingRef = useRef(null)
+
+  const getAudio = useCallback(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio()
+      audioRef.current.preload = 'none'
+    }
+    return audioRef.current
+  }, [])
+
+  const unlockPlayback = useCallback(() => {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext
+    if (AudioCtx && !playbackAudioContextRef.current) {
+      playbackAudioContextRef.current = new AudioCtx()
+    }
+    const context = playbackAudioContextRef.current
+    context?.resume?.().then(() => {
+      const buffer = context.createBuffer(1, 1, context.sampleRate)
+      const source = context.createBufferSource()
+      source.buffer = buffer
+      source.connect(context.destination)
+      source.start(0)
+    }).catch(() => {})
+
+    const audio = getAudio()
+    audio.pause()
+    audio.src = SILENT_AUDIO
+    audio.play().catch(() => {})
+  }, [getAudio])
 
   // ── Initialise SpeechRecognition ──────────────────────────────────────────
   useEffect(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) return
+    if (!webSpeechSupported) return
 
-    const rec = new SR()
+    const rec = new SpeechRecognition()
     rec.lang            = lang
     rec.interimResults  = false
     rec.maxAlternatives = 1
@@ -70,68 +163,328 @@ export function useSpeech({ lang = 'bn-BD', onResult, onError } = {}) {
     rec.onend = () => setListening(false)
 
     recognitionRef.current = rec
-  }, [lang, onResult, onError])
+  }, [SpeechRecognition, lang, onResult, onError, webSpeechSupported])
+
+  useEffect(() => {
+    if (!webSpeechSupported) return
+
+    const rec = new SpeechRecognition()
+    rec.lang = lang
+    rec.interimResults = true
+    rec.maxAlternatives = 1
+    rec.continuous = true
+
+    rec.onresult = (event) => {
+      let transcript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript + ' '
+      }
+      if (STOP_COMMAND_RE.test(transcript)) {
+        interruptActiveRef.current = false
+        try {
+          rec.abort()
+        } catch {
+          // Recognition may have already stopped.
+        }
+        stopSpeakingRef.current?.()
+      }
+    }
+
+    rec.onerror = () => {}
+    rec.onend = () => {
+      if (!interruptActiveRef.current) return
+      try {
+        rec.start()
+      } catch {
+        interruptActiveRef.current = false
+      }
+    }
+
+    interruptRecognitionRef.current = rec
+    return () => {
+      interruptActiveRef.current = false
+      rec.abort()
+    }
+  }, [SpeechRecognition, lang, webSpeechSupported])
+
+  const startInterruptListening = useCallback(() => {
+    const rec = interruptRecognitionRef.current
+    if (!rec || listening) return
+    interruptActiveRef.current = true
+    try {
+      rec.start()
+    } catch {
+      // Already started, or this browser does not allow concurrent recognition.
+    }
+  }, [listening])
+
+  const stopInterruptListening = useCallback(() => {
+    interruptActiveRef.current = false
+    try {
+      interruptRecognitionRef.current?.abort()
+    } catch {
+      // Recognition may already be stopped.
+    }
+  }, [])
+
+  const startCloudSTT = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true })
+      let heardSpeech = false
+      const stopRecorder = () => {
+        if (mediaRecRef.current?.state === 'recording') mediaRecRef.current.stop()
+      }
+      const clearRecorderTimers = () => {
+        if (cloudStopTimerRef.current) clearTimeout(cloudStopTimerRef.current)
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+        cloudStopTimerRef.current = null
+        silenceTimerRef.current = null
+      }
+      const closeAudioContext = () => {
+        recorderAudioContextRef.current?.close?.().catch(() => {})
+        recorderAudioContextRef.current = null
+      }
+      let monitorSilence = null
+      const mimeType = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/mp4',
+      ].find(m => MediaRecorder.isTypeSupported?.(m)) || ''
+
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {})
+      chunksRef.current = []
+
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext
+        if (AudioCtx) {
+          const audioContext = new AudioCtx()
+          recorderAudioContextRef.current = audioContext
+          const analyser = audioContext.createAnalyser()
+          const source = audioContext.createMediaStreamSource(stream)
+          analyser.fftSize = 1024
+          const data = new Uint8Array(analyser.fftSize)
+          source.connect(analyser)
+
+          monitorSilence = () => {
+            if (mr.state !== 'recording') return
+            analyser.getByteTimeDomainData(data)
+            let sum = 0
+            for (let i = 0; i < data.length; i++) {
+              const centered = data[i] - 128
+              sum += centered * centered
+            }
+            const volume = Math.sqrt(sum / data.length)
+
+            if (volume > 8) {
+              heardSpeech = true
+              if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+              silenceTimerRef.current = null
+            } else if (heardSpeech && !silenceTimerRef.current) {
+              silenceTimerRef.current = setTimeout(stopRecorder, 1200)
+            }
+
+            requestAnimationFrame(monitorSilence)
+          }
+        }
+      } catch (err) {
+        console.warn('Silence detection unavailable:', err)
+      }
+
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+      mr.onstop = async () => {
+        clearRecorderTimers()
+        closeAudioContext()
+        stream.getTracks().forEach(t => t.stop())
+        setListening(false)
+        const actualMime = mimeType || 'audio/webm'
+        const blob = new Blob(chunksRef.current, { type:actualMime })
+        const reader = new FileReader()
+        reader.onloadend = async () => {
+          try {
+            const token = localStorage.getItem('adar_token') || ''
+            const resp = await fetch(`${API_URL}/api/stt`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                audio: reader.result.split(',')[1],
+                lang,
+                mime: actualMime,
+              }),
+            })
+            if (!resp.ok) throw new Error(`STT HTTP ${resp.status}`)
+            const data = await resp.json()
+            if (data.text?.trim()) onResult?.(data.text.trim())
+            else onError?.('কথা বোঝা যায়নি, আবার চেষ্টা করুন।')
+          } catch (err) {
+            onError?.(`ভয়েস সার্ভার সমস্যা: ${err.message}`)
+          }
+        }
+        reader.readAsDataURL(blob)
+      }
+
+      mediaRecRef.current = mr
+      mr.start()
+      setListening(true)
+      monitorSilence?.()
+      cloudStopTimerRef.current = setTimeout(stopRecorder, 10000)
+    } catch (err) {
+      setListening(false)
+      onError?.(`মাইক্রোফোন চালু করা যায়নি: ${err.message}`)
+    }
+  }, [lang, onError, onResult])
 
   // ── STT controls ──────────────────────────────────────────────────────────
   const startListening = useCallback(() => {
-    if (!recognitionRef.current || listening) return
+    if (listening) return
     // Stop any active speech before listening
-    window.speechSynthesis?.cancel()
+    unlockPlayback()
     setIsSpeaking(false)
-    recognitionRef.current.start()
-    setListening(true)
-  }, [listening])
+    if (preferCloudStt) {
+      startCloudSTT()
+      return
+    }
+    if (webSpeechSupported && recognitionRef.current) {
+      recognitionRef.current.start()
+      setListening(true)
+      return
+    }
+    if (cloudSttSupported) startCloudSTT()
+  }, [cloudSttSupported, getAudio, listening, preferCloudStt, startCloudSTT, webSpeechSupported])
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop()
+    if (mediaRecRef.current?.state === 'recording') mediaRecRef.current.stop()
+    else recognitionRef.current?.stop()
     setListening(false)
   }, [])
 
-  // ── TTS: speak reply in Bangla ────────────────────────────────────────────
-  const speakBangla = useCallback((text) => {
-    if (!text || !window.speechSynthesis) return
-    window.speechSynthesis.cancel()
+  // ── TTS: speak reply with the same Google Fenrir voice used by the demo ───
+  const speakBangla = useCallback(async (text) => {
+    const chunks = splitSpeechText(toSpeechText(text))
+    if (!chunks.length) return false
 
-    // Strip markdown symbols so they aren't read aloud
-    const clean = text
-      .replace(/#{1,6}\s/g, '')         // headings
-      .replace(/\*\*(.+?)\*\*/g, '$1') // bold
-      .replace(/\*(.+?)\*/g, '$1')     // italic
-      .replace(/`(.+?)`/g, '$1')       // inline code
-      .replace(/\|.+\|/g, '')          // table rows
-      .replace(/[-*_]{3,}/g, '')       // hr
-      .replace(/\[(.+?)\]\(.+?\)/g, '$1') // links
-      .replace(/\n{2,}/g, '. ')        // paragraph breaks → pause
-      .trim()
+    const runId = speakRunRef.current + 1
+    speakRunRef.current = runId
+    setIsSpeaking(true)
+    startInterruptListening()
 
-    const utter = new SpeechSynthesisUtterance(clean)
-    utter.lang  = 'bn-BD'
-    utter.rate  = 0.88   // slightly slower for clarity
-    utter.pitch = 1.0
+    try {
+      const audio = getAudio()
+      audio.pause()
+      audio.onended = null
+      audio.onerror = null
+      await playbackAudioContextRef.current?.resume?.().catch(() => {})
 
-    const doSpeak = () => {
-      const voice = pickBanglaVoice()
-      if (voice) utter.voice = voice
-      utter.onstart  = () => setIsSpeaking(true)
-      utter.onend    = () => setIsSpeaking(false)
-      utter.onerror  = () => setIsSpeaking(false)
-      window.speechSynthesis.speak(utter)
-    }
+      const playChunk = async (index) => {
+        if (speakRunRef.current !== runId) return false
+        if (index >= chunks.length) {
+          stopInterruptListening()
+          setIsSpeaking(false)
+          return true
+        }
 
-    // Voices may not be loaded yet on first call
-    if (window.speechSynthesis.getVoices().length > 0) {
-      doSpeak()
-    } else {
-      window.speechSynthesis.onvoiceschanged = () => {
-        doSpeak()
-        window.speechSynthesis.onvoiceschanged = null
+        const resp = await fetch(`${API_URL}/api/demo/tts`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ text:chunks[index] }),
+        })
+        if (!resp.ok) throw new Error(`TTS HTTP ${resp.status}`)
+        const data = await resp.json()
+        if (speakRunRef.current !== runId) return false
+        if (!data.audio) return false
+
+        const context = playbackAudioContextRef.current
+        if (context) {
+          const decoded = await context.decodeAudioData(arrayBufferFromBase64(data.audio).slice(0))
+          if (speakRunRef.current !== runId) return false
+          return new Promise((resolve) => {
+            const source = context.createBufferSource()
+            playbackSourceRef.current = source
+            source.buffer = decoded
+            source.connect(context.destination)
+            source.onended = async () => {
+              if (playbackSourceRef.current === source) playbackSourceRef.current = null
+              resolve(await playChunk(index + 1))
+            }
+            source.start(0)
+          })
+        }
+
+        const url = audioUrlFromBase64(data.audio)
+        ttsUrlsRef.current.push(url)
+        return new Promise((resolve, reject) => {
+          audio.src = url
+          audio.onended = async () => {
+            URL.revokeObjectURL(url)
+            try {
+              resolve(await playChunk(index + 1))
+            } catch (err) {
+              reject(err)
+            }
+          }
+          audio.onerror = () => {
+            URL.revokeObjectURL(url)
+            reject(new Error('Audio playback failed'))
+          }
+          audio.play().catch(reject)
+        })
       }
+
+      return await playChunk(0)
+    } catch (err) {
+      console.warn('TTS playback error:', err)
+      if (speakRunRef.current === runId) setIsSpeaking(false)
+      stopInterruptListening()
+      return false
     }
-  }, [])
+  }, [getAudio, startInterruptListening, stopInterruptListening])
 
   const stopSpeaking = useCallback(() => {
-    window.speechSynthesis?.cancel()
+    speakRunRef.current += 1
+    stopInterruptListening()
+    try {
+      playbackSourceRef.current?.stop?.()
+    } catch {
+      // Source may have already ended.
+    }
+    playbackSourceRef.current = null
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.onended = null
+      audioRef.current.onerror = null
+    }
     setIsSpeaking(false)
+  }, [stopInterruptListening])
+
+  useEffect(() => {
+    stopSpeakingRef.current = stopSpeaking
+  }, [stopSpeaking])
+
+  useEffect(() => () => {
+    recognitionRef.current?.abort()
+    if (mediaRecRef.current?.state === 'recording') mediaRecRef.current.stop()
+    if (cloudStopTimerRef.current) clearTimeout(cloudStopTimerRef.current)
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+    recorderAudioContextRef.current?.close?.().catch(() => {})
+    try {
+      playbackSourceRef.current?.stop?.()
+    } catch {
+      // Source may have already ended.
+    }
+    playbackAudioContextRef.current?.close?.().catch(() => {})
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.onended = null
+      audioRef.current.onerror = null
+    }
+    ttsUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+    ttsUrlsRef.current = []
   }, [])
 
   return { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking }

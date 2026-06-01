@@ -6,9 +6,10 @@ import {
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import MicIcon from '@mui/icons-material/Mic'
-import MicOffIcon from '@mui/icons-material/MicOff'
 import VolumeUpIcon from '@mui/icons-material/VolumeUp'
 import StopCircleIcon from '@mui/icons-material/StopCircle'
+import CloseIcon from '@mui/icons-material/Close'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import LogoutIcon from '@mui/icons-material/Logout'
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined'
@@ -58,6 +59,34 @@ import AdminDashboard from './AdminDashboard'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const API_KEY = import.meta.env.VITE_API_KEY || ''
+
+const YOUTUBE_PLAY_INTENT_RE = /youtube|youtu\.be|ইউটিউব|play|listen|শুন|শোন|লিংক/i
+const YOUTUBE_VIDEO_URL_RE = /https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[^\s)\]]+/i
+const VOICE_STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল/i
+
+function shouldOpenYouTube(message = '') {
+  return YOUTUBE_PLAY_INTENT_RE.test(message)
+}
+
+function toYouTubeEmbedUrl(url = '') {
+  try {
+    const parsed = new URL(url)
+    let videoId = ''
+    if (parsed.hostname.includes('youtu.be')) {
+      videoId = parsed.pathname.split('/').filter(Boolean)[0] || ''
+    } else if (parsed.hostname.includes('youtube.com')) {
+      videoId = parsed.searchParams.get('v') || ''
+    }
+    return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : ''
+  } catch {
+    return ''
+  }
+}
+
+function extractYouTubeVideoUrl(text = '') {
+  const match = text.match(YOUTUBE_VIDEO_URL_RE)
+  return match ? match[0].replace(/[.,।!?]+$/, '') : ''
+}
 
 // ── Set page title from tenant ────────────────────────────────────────────────
 document.title = `আদর · ${tenant.appTitle}`
@@ -180,7 +209,7 @@ function StatsCharts({ content, autoShow, hint = '' }) {
 }
 
 
-function MessageBubble({ msg, prevContent = '' }) {
+function MessageBubble({ msg, prevContent = '', onSpeak, onPlayYouTube, isSpeaking = false }) {
   const isUser = msg.role === 'user'
   return (
     <Box sx={{ display:'flex', flexDirection: isUser ? 'row-reverse' : 'row', gap:1.5, alignItems:'flex-start', mb:2 }}>
@@ -212,12 +241,28 @@ function MessageBubble({ msg, prevContent = '' }) {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              a: ({ href, children }) => (
-                <a href={href} target="_blank" rel="noopener noreferrer"
-                   style={{ color: tenant.primaryDark }}>
-                  {children}
-                </a>
-              )
+              a: ({ href = '', children }) => {
+                const embedUrl = toYouTubeEmbedUrl(href)
+                if (embedUrl && onPlayYouTube) {
+                  return (
+                    <a
+                      href={href}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        onPlayYouTube({ url:href, embedUrl })
+                      }}
+                      style={{ color: tenant.primaryDark, cursor:'pointer' }}>
+                      {children}
+                    </a>
+                  )
+                }
+                return (
+                  <a href={href} target="_blank" rel="noopener noreferrer"
+                     style={{ color: tenant.primaryDark }}>
+                    {children}
+                  </a>
+                )
+              }
             }}
           >{msg.content}</ReactMarkdown>
         </Box>
@@ -254,9 +299,24 @@ function MessageBubble({ msg, prevContent = '' }) {
             )}
           </Box>
         )}
-        <Typography variant="caption" sx={{ color:'text.secondary', mt:0.5, display:'block' }}>
-          {new Date(msg.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}
-        </Typography>
+        <Box sx={{ mt:0.5, display:'flex', alignItems:'center', gap:0.75 }}>
+          <Typography variant="caption" sx={{ color:'text.secondary', display:'block', flex:1 }}>
+            {new Date(msg.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}
+          </Typography>
+          {!isUser && msg.voiceRequested && onSpeak && (
+            <Tooltip title={msg.voicePlaybackFailed ? 'উত্তর শুনতে ট্যাপ করুন' : 'উত্তর শুনুন'}>
+              <IconButton
+                size="small"
+                onClick={() => onSpeak(msg.content)}
+                disabled={isSpeaking}
+                sx={{
+                  width:24, height:24, color: msg.voicePlaybackFailed ? 'warning.main' : 'primary.main',
+                }}>
+                <VolumeUpIcon sx={{ fontSize:16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       </Paper>
     </Box>
   )
@@ -284,12 +344,59 @@ function TypingIndicator() {
   )
 }
 
-function ChatTab() {
+function YouTubeMiniPlayer({ player, onClose }) {
+  if (!player?.embedUrl) return null
+  return (
+    <Paper elevation={0} sx={{
+      mx:2.5, mb:1.5, overflow:'hidden',
+      border:'1px solid', borderColor:'divider',
+      borderRadius:1, bgcolor:'background.paper',
+    }}>
+      <Box sx={{
+        px:1.25, py:0.75, display:'flex', alignItems:'center', gap:1,
+        borderBottom:'1px solid', borderColor:'divider',
+      }}>
+        <Typography variant="caption" sx={{ flex:1, fontWeight:600, color:'text.primary' }}>
+          YouTube
+        </Typography>
+        <Tooltip title="YouTube-এ খুলুন">
+          <IconButton size="small" component="a" href={player.url} target="_blank" rel="noopener noreferrer"
+            sx={{ width:26, height:26 }}>
+            <OpenInNewIcon sx={{ fontSize:16 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="বন্ধ করুন">
+          <IconButton size="small" onClick={onClose} sx={{ width:26, height:26 }}>
+            <CloseIcon sx={{ fontSize:16 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Box sx={{ width:'100%', aspectRatio:'16 / 9', bgcolor:'#000' }}>
+        <Box
+          component="iframe"
+          title="YouTube player"
+          src={player.embedUrl}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          sx={{ width:'100%', height:'100%', border:0, display:'block' }}
+        />
+      </Box>
+    </Paper>
+  )
+}
+
+function ChatTab({ onUsageIncrement }) {
   // ── Speech to text ──────────────────────────────────────────────────────
   const { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking } = useSpeech({
     lang:     'bn-IN',
     onResult: (text) => {
-      if (text.trim()) sendMessage(text.trim())
+      if (VOICE_STOP_COMMAND_RE.test(text)) {
+        setVoiceModeActive(false)
+        stopSpeaking()
+        stopListening()
+        return
+      }
+      if (text.trim()) sendMessage(text.trim(), { speakResponse:true })
     },
     onError: (e) => {
       console.warn('Speech error:', e)
@@ -305,17 +412,54 @@ function ChatTab() {
   }])
   const [input, setInput]         = useState('')
   const [loading, setLoading]     = useState(false)
+  const [voiceModeActive, setVoiceModeActive] = useState(false)
+  const [youtubePlayer, setYoutubePlayer] = useState(null)
   const sendingRef                = useRef(false)
   const [sessionId, setSessionId] = useState(null)
   const [userId]                  = useState(() => `user_${uuidv4().slice(0,8)}`)
+  const voiceConversationRef      = useRef(false)
+  const startListeningRef         = useRef(startListening)
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [messages, loading])
+  useEffect(() => { startListeningRef.current = startListening }, [startListening])
+  useEffect(() => { voiceConversationRef.current = voiceModeActive }, [voiceModeActive])
 
-  const sendMessage = useCallback(async (text) => {
+  useEffect(() => {
+    if (!voiceModeActive || listening || isSpeaking || loading || sendingRef.current) return
+    const timer = setTimeout(() => {
+      if (voiceConversationRef.current && !sendingRef.current) startListeningRef.current()
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [voiceModeActive, listening, isSpeaking, loading])
+
+  const restartVoiceListening = useCallback(() => {
+    if (!voiceConversationRef.current) return
+    setTimeout(() => {
+      if (voiceConversationRef.current) startListeningRef.current()
+    }, 900)
+  }, [])
+
+  const speakWithTimeout = useCallback((text) => {
+    const timeoutMs = Math.min(45000, Math.max(7000, (text || '').length * 90))
+    return Promise.race([
+      speakBangla(text),
+      new Promise(resolve => setTimeout(() => resolve(false), timeoutMs)),
+    ])
+  }, [speakBangla])
+
+  const playYouTubeInsideApp = useCallback((player) => {
+    stopSpeaking()
+    stopListening()
+    setVoiceModeActive(false)
+    setYoutubePlayer(player)
+  }, [stopListening, stopSpeaking])
+
+  const sendMessage = useCallback(async (text, options = {}) => {
     const message = text || input.trim()
     if (!message || loading || sendingRef.current) return
+    const wantsYouTube = shouldOpenYouTube(message)
     sendingRef.current = true
     setInput('')
     setMessages(prev => [...prev, { role:'user', content:message, timestamp:Date.now() }])
@@ -331,12 +475,37 @@ function ChatTab() {
         { headers },
       )
       setSessionId(data.session_id)
-      setMessages(prev => [...prev, {
-        role:'assistant', content:data.response, timestamp:Date.now(), eval:data.eval||null,
-      }])
-      setUsage(prev => prev ? { ...prev, used_today:(prev.used_today||0)+1 } : prev)
+      const assistantMessage = {
+        role:'assistant',
+        content:data.response,
+        timestamp:Date.now(),
+        eval:data.eval||null,
+        voiceRequested:Boolean(options.speakResponse),
+      }
+      setMessages(prev => [...prev, assistantMessage])
+      let youtubeStarted = false
+      if (wantsYouTube) {
+        const youtubeUrl = extractYouTubeVideoUrl(data.response || '')
+        const embedUrl = toYouTubeEmbedUrl(youtubeUrl)
+        if (embedUrl) {
+          playYouTubeInsideApp({ url:youtubeUrl, embedUrl })
+          youtubeStarted = true
+        }
+      }
+      onUsageIncrement?.()
       // ── Speak the reply in Bangla if the question came from voice ──────────
-      if (text && data.response) speakBangla(data.response)
+      if (options.speakResponse && data.response && !youtubeStarted) {
+        try {
+          const played = await speakWithTimeout(data.response)
+          if (!played) {
+            setMessages(prev => prev.map(msg =>
+              msg === assistantMessage ? { ...msg, voicePlaybackFailed:true } : msg
+            ))
+          }
+        } finally {
+          restartVoiceListening()
+        }
+      }
     } catch (err) {
       console.error('Chat error:', err)
       setMessages(prev => {
@@ -350,10 +519,21 @@ function ChatTab() {
       sendingRef.current = false
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }, [input, loading, sessionId, userId, speakBangla])
+  }, [input, loading, onUsageIncrement, playYouTubeInsideApp, restartVoiceListening, sessionId, speakWithTimeout, userId])
 
   const handleKeyDown = (e) => {
     if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  }
+
+  const handleVoiceClick = () => {
+    if (voiceModeActive) {
+      setVoiceModeActive(false)
+      stopSpeaking()
+      stopListening()
+      return
+    }
+    setVoiceModeActive(true)
+    startListening()
   }
 
   const clearSession = async () => {
@@ -363,14 +543,27 @@ function ChatTab() {
           { headers: API_KEY ? { 'X-API-Key':API_KEY } : {} })
       } catch { /* ignore */ }
     }
+    setVoiceModeActive(false)
+    stopSpeaking()
+    stopListening()
     setSessionId(null)
+    setYoutubePlayer(null)
     setMessages([{ role:'assistant', content:tenant.clearMessage, timestamp:Date.now() }])
   }
 
   return (
     <>
       <Box sx={{ flex:1, overflowY:'auto', px:2.5, py:2 }}>
-        {messages.map((msg,i) => <MessageBubble key={i} msg={msg} prevContent={messages[i-1]?.content||''} />)}
+        {messages.map((msg,i) => (
+          <MessageBubble
+            key={i}
+            msg={msg}
+            prevContent={messages[i-1]?.content||''}
+            onSpeak={speakBangla}
+            onPlayYouTube={playYouTubeInsideApp}
+            isSpeaking={isSpeaking}
+          />
+        ))}
         {loading && <TypingIndicator />}
         <div ref={bottomRef} />
       </Box>
@@ -396,6 +589,8 @@ function ChatTab() {
       )}
 
       <Divider />
+
+      <YouTubeMiniPlayer player={youtubePlayer} onClose={() => setYoutubePlayer(null)} />
 
       {sessionId && (
         <Box sx={{ px:2.5, pt:1, display:'flex', justifyContent:'flex-end' }}>
@@ -424,11 +619,11 @@ function ChatTab() {
             }}
           />
           {supported && (
-            <Tooltip title={isSpeaking ? 'উত্তর বন্ধ করুন' : listening ? 'থামুন' : 'বাংলায় বলুন'}>
+            <Tooltip title={voiceModeActive ? 'ভয়েস কথোপকথন বন্ধ করুন' : 'বাংলায় বলুন'}>
               <IconButton
-                onClick={isSpeaking ? stopSpeaking : listening ? stopListening : startListening}
+                onClick={handleVoiceClick}
                 sx={{
-                  color: isSpeaking ? 'warning.main' : listening ? 'error.main' : 'primary.main',
+                  color: isSpeaking ? 'warning.main' : voiceModeActive ? 'error.main' : 'primary.main',
                   flexShrink: 0,
                   animation: listening ? 'micPulse 1s ease-in-out infinite' : isSpeaking ? 'speakPulse 0.8s ease-in-out infinite' : 'none',
                   '@keyframes micPulse': {
@@ -440,7 +635,7 @@ function ChatTab() {
                     '50%':     { transform: 'scale(1.25)' },
                   },
                 }}>
-                {isSpeaking ? <StopCircleIcon /> : listening ? <MicOffIcon /> : <MicIcon />}
+                {voiceModeActive ? <StopCircleIcon /> : <MicIcon />}
               </IconButton>
             </Tooltip>
           )}
@@ -661,7 +856,7 @@ export default function App() {
 
         {activeTab === 0 ? (
           <Box sx={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-            <ChatTab />
+            <ChatTab onUsageIncrement={() => setUsage(prev => prev ? { ...prev, used_today:(prev.used_today||0)+1 } : prev)} />
           </Box>
         ) : (
           <Box sx={{ flex:1, overflowY:'auto' }}>

@@ -9,6 +9,7 @@ if os.environ.get("APP_ENV") != "production":
 import uuid
 import time
 import logging
+import re
 from typing import Optional
 from collections import defaultdict
 from contextlib import asynccontextmanager
@@ -41,6 +42,24 @@ session_service: DatabaseSessionService = None
 # ── CHANGE 2: generic name (was arcl_orchestrator) ───────────────────────────
 orchestrator = None
 APP_NAME = settings.APP_NAME
+
+
+def _strip_song_ids(text: str) -> str:
+    """Remove internal song identifiers from user-facing model output."""
+    if not text:
+        return text
+    text = re.sub(r"\[song_id:[^\]]+\]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*[—-]?\s*song_id\s*:\s*`?[^`\s|),।.!?]+`?", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bsong_id\b\s*[:=]\s*`?[^`\s|),।.!?]+`?", "", text, flags=re.IGNORECASE)
+    return text
+
+
+def _is_youtube_play_request(text: str) -> bool:
+    return bool(re.search(r"youtube|youtu\.be|ইউটিউব|play|listen|শুন|শোন|লিংক", text or "", re.IGNORECASE))
+
+
+def _has_youtube_url(text: str) -> bool:
+    return bool(re.search(r"https://(?:www\.)?(?:youtube\.com|youtu\.be)/", text or "", re.IGNORECASE))
 
 # ── Rate limiting ────────────────────────────────────────────────────────────
 # Simple in-memory rate limiter: max 20 requests per minute per IP
@@ -295,7 +314,6 @@ async def chat(
     if len(message) > 2000:
         raise HTTPException(status_code=400, detail="Message too long (max 2000 characters)")
 
-    import re
     if not re.match(r'^[a-zA-Z0-9_\-]{1,64}$', request.user_id):
         raise HTTPException(status_code=400, detail="Invalid user_id format")
 
@@ -344,6 +362,13 @@ async def chat(
 
         if not response_text:
             response_text = "I couldn't find an answer. Please try rephrasing your question."
+        response_text = _strip_song_ids(response_text)
+        if _is_youtube_play_request(message) and not _has_youtube_url(response_text):
+            try:
+                from domains.geetabitan.tools.song_tools import play_youtube_song
+                response_text = _strip_song_ids(await play_youtube_song(message))
+            except Exception as yt_err:
+                logger.warning(f"YouTube fallback failed: {yt_err}")
 
         logger.info(f"Chat OK — ip={client_ip} user={request.user_id} len={len(message)}")
 
@@ -502,7 +527,21 @@ async def demo_tts(request: Request):
     import httpx
 
     body = await request.json()
-    text = (body.get("text") or "")[:500].strip()
+    raw_text = (body.get("text") or "").strip()
+    text = raw_text[:1200].strip()
+    if len(text) > 380:
+        parts = []
+        current = ""
+        for word in text.split():
+            candidate = f"{current} {word}".strip()
+            if len(candidate) > 360 and current:
+                parts.append(current.rstrip("।.!?") + "।")
+                current = word
+            else:
+                current = candidate
+        if current:
+            parts.append(current.rstrip("।.!?") + "।")
+        text = " ".join(parts)
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
 

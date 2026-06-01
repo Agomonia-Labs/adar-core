@@ -20,6 +20,7 @@ from domains.geetabitan.tools.song_tools import (
     list_raags,
     list_taals,
     get_youtube_url,
+    play_youtube_song,
     get_palta_url,
 )
 from domains.geetabitan.tools.notation_tools import (
@@ -46,6 +47,7 @@ TOOL_REGISTRY: dict = {
     "list_raags":           list_raags,
     "list_taals":           list_taals,
     "get_youtube_url":      get_youtube_url,
+    "play_youtube_song":    play_youtube_song,
     "get_palta_url":        get_palta_url,
     # Notation / swaralipi
     "get_notation_link":    get_notation_link,

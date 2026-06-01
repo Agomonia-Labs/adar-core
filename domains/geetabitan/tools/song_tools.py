@@ -3,7 +3,7 @@ domains/geetabitan/tools/song_tools.py
 Song retrieval and summary tools.
 """
 
-from src.adar.db import direct_query, get_documents_by_field, get_db
+from src.adar.db import direct_query, get_documents_by_field, get_db, vector_search
 from domains.geetabitan.config import FIRESTORE_COLLECTION
 from domains.geetabitan.data.raag_metadata import TAAL_DATA
 
@@ -73,14 +73,12 @@ def _format_lyrics(doc: dict) -> str:
 def _song_card(doc: dict) -> str:
     """Format a song as a structured card with metadata header and full lyrics."""
     tm      = _taal_meta(doc.get("taal", ""))
-    song_id = doc.get("doc_id", doc.get("id", ""))
     raag    = doc.get("raag", "") or "—"
     taal    = doc.get("taal", "") or "—"
     beats   = tm.get("beats", "")
     beats_str = f" | {beats} মাত্রা" if beats else ""
 
     lines = [
-        f"[song_id:{song_id}]",
         "─────────────────────────────",
         f"🎵 **{doc['title']}**",
         "─────────────────────────────",
@@ -114,7 +112,7 @@ async def get_full_song(song_id: str) -> str:
     """Retrieve complete formatted lyrics of a song by its song_id."""
     doc = await _get_doc_by_id(song_id)
     if not doc:
-        return "গান পাওয়া যায়নি। song_id টি সঠিক কিনা যাচাই করুন।"
+        return "গান পাওয়া যায়নি। অনুগ্রহ করে গানের নাম দিয়ে আবার খুঁজুন।"
     return _song_card(doc)
 
 
@@ -129,7 +127,6 @@ async def get_songs_by_paryay(paryay: str) -> str:
         return f"'{paryay}' পর্যায়ে কোনো গান পাওয়া যায়নি।"
 
     lines = [
-        f"[song_id:{r.get('doc_id', r.get('id', ''))}] "
         f"- **{r['title']}** | রাগ: {r.get('raag', '—')} | "
         f"তাল: {r.get('taal', '—')}"
         for r in results[:25]
@@ -331,6 +328,90 @@ async def get_youtube_url(song_id: str) -> str:
     return "\n".join(lines)
 
 
+def _looks_like_generic_youtube_request(query: str) -> bool:
+    text = (query or "").strip().lower()
+    if not text:
+        return True
+    generic_terms = (
+        "youtube", "ইউটিউব", "play", "listen", "শুন", "শোন",
+        "গান", "song", "এখান", "একটি", "একটা",
+    )
+    has_specific_title_hint = any(
+        marker in text for marker in ("'", "\"", "‘", "’", "“", "”")
+    )
+    if has_specific_title_hint:
+        return False
+    return any(term in text for term in generic_terms) and len(text) <= 80
+
+
+async def _find_song_for_youtube(query: str) -> dict | None:
+    query = (query or "").strip()
+
+    if query:
+        if not _looks_like_generic_youtube_request(query):
+            exact = await get_documents_by_field(
+                collection=FIRESTORE_COLLECTION,
+                field="title",
+                value=query,
+                limit=1,
+            )
+            if exact:
+                return exact[0]
+
+        matches = await vector_search(
+            collection=FIRESTORE_COLLECTION,
+            query=query,
+            top_k=1,
+        )
+        if matches:
+            return matches[0]
+
+    for title in ("আমার সোনার বাংলা", "যদি তোর ডাক শুনে কেউ না আসে", "আনন্দধারা বহিছে ভুবনে"):
+        exact = await get_documents_by_field(
+            collection=FIRESTORE_COLLECTION,
+            field="title",
+            value=title,
+            limit=1,
+        )
+        if exact:
+            return exact[0]
+
+    matches = await vector_search(
+        collection=FIRESTORE_COLLECTION,
+        query=query or "জনপ্রিয় রবীন্দ্রসঙ্গীত",
+        top_k=1,
+    )
+    return matches[0] if matches else None
+
+
+async def play_youtube_song(query: str = "") -> str:
+    """Find a requested or representative Rabindra Sangeet and return YouTube links.
+
+    This hides internal Firestore IDs from the assistant response while still
+    allowing a direct play/listen request to resolve a song and produce links.
+    """
+    doc = await _find_song_for_youtube(query)
+    if not doc:
+        return "YouTube-এ চালানোর মতো গান খুঁজে পাওয়া যায়নি। অনুগ্রহ করে গানের নামটি বলুন।"
+
+    song_id = doc.get("doc_id") or doc.get("id")
+    if not song_id:
+        title = doc.get("title", "")
+        if title:
+            exact = await get_documents_by_field(
+                collection=FIRESTORE_COLLECTION,
+                field="title",
+                value=title,
+                limit=1,
+            )
+            song_id = exact[0].get("doc_id") if exact else None
+
+    if not song_id:
+        return "গানটি পাওয়া গেছে, কিন্তু YouTube লিংক তৈরির জন্য দরকারি তথ্য পাওয়া যায়নি।"
+
+    return await get_youtube_url(song_id)
+
+
 async def get_song_summary(song_id: str) -> str:
     """Return the full pre-generated summary — context, meaning, emotion, imagery."""
     doc = await _get_doc_by_id(song_id)
@@ -386,10 +467,9 @@ async def summarize_aspect(song_id: str, aspect: str) -> str:
         f"{summary.get(aspect, 'পাওয়া যায়নি।')}"
     )
 
+
 async def get_palta_url(name: str, kind: str = "raag") -> str:
-    """Return YouTube search URLs for palta/exercise practice for a raag or taal.
-    kind: 'raag' or 'taal'
-    """
+    """Return YouTube search URLs for palta/exercise practice for a raag or taal."""
     import urllib.parse
 
     def yt(query: str) -> str:
@@ -412,11 +492,10 @@ async def get_palta_url(name: str, kind: str = "raag") -> str:
         ]
         title = f"{name} রাগের পল্টা — YouTube-এ শুনুন"
 
-    table = (
+    return (
         f"## {title}\n\n"
         f"| ধরন | ভাষা | লিংক |\n"
         f"|---|---|---|\n"
         + "\n".join(rows)
         + "\n\n_লিংকে ক্লিক করলে YouTube-এ সরাসরি খোঁজা হবে।_"
     )
-    return table

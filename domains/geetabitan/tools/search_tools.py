@@ -55,7 +55,7 @@ async def get_songs_by_raag(raag: str, paryay: str = None) -> str:
     )
     lines = [
         f"- **{r['title']}** ({r.get('paryay', '')}) | "
-        f"তাল: {r.get('taal', '—')} — song_id: `{r.get('doc_id', r.get('id', ''))}`"
+        f"তাল: {r.get('taal', '—')}"
         for r in results
     ]
     return header + "\n".join(lines)
@@ -84,7 +84,7 @@ async def get_songs_by_taal(taal: str, paryay: str = None) -> str:
     )
     lines = [
         f"- **{r['title']}** ({r.get('paryay', '')}) | "
-        f"রাগ: {r.get('raag', '—')} — song_id: `{r.get('doc_id', r.get('id', ''))}`"
+        f"রাগ: {r.get('raag', '—')}"
         for r in results
     ]
     return header + "\n".join(lines)
@@ -152,14 +152,7 @@ async def describe_taal(taal: str) -> str:
         limit=500,
     )
     count = len(all_results)
-    # Replace | with · so vibhag separators don't break the markdown table
-    bols_raw  = meta.get("bols", "—") or "—"
-    bols_safe = bols_raw.replace("|", "·")
-    # Also show a clean indented bol breakdown below the table
-    bol_lines = [b.strip() for b in bols_raw.split("|")]
-    bol_display = "\n".join(
-        f"> বিভাগ {i+1}: {b}" for i, b in enumerate(bol_lines) if b.strip()
-    )
+    bols = meta.get("bols", "—")
     return (
         f"## {taal}\n\n"
         f"| বিষয় | তথ্য |\n"
@@ -167,10 +160,9 @@ async def describe_taal(taal: str) -> str:
         f"| মাত্রা | {meta.get('beats', '?')} |\n"
         f"| বিভাগ | {meta.get('vibhag', '—')} |\n"
         f"| গতি | {meta.get('tempo', '—')} |\n"
-        f"| অনুভূতি | {meta.get('mood', meta.get('feel', '—'))} |\n"
-        f"| বোল (সংক্ষিপ্ত) | {bols_safe} |\n"
+        f"| অনুভূতি | {meta.get('feel', '—')} |\n"
+        f"| বোল | {bols} |\n"
         f"| গীতবিতানে গান | {count}টি |\n\n"
-        f"**সম্পূর্ণ বোল:**\n\n{bol_display}\n\n"
         f"{meta.get('description', '')}\n\n"
         f"_এই তালের গান দেখতে চাইলে বলুন।_"
     )

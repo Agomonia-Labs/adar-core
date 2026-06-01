@@ -55,7 +55,7 @@ async def get_notation_link(song_id: str) -> str:
     db  = get_db()
     doc = await db.collection(FIRESTORE_COLLECTION).document(song_id).get()
     if not doc.exists:
-        return "গান পাওয়া যায়নি। song_id টি সঠিক কিনা যাচাই করুন।"
+        return "গান পাওয়া যায়নি। অনুগ্রহ করে গানের নাম দিয়ে আবার খুঁজুন।"
 
     data  = doc.to_dict()
     title = data.get("title", "")
