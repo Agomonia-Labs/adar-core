@@ -2,6 +2,7 @@
 .env.local
 .env.production
 .env.geetabitan
+.env.restaurants
 venv/
 __pycache__/
 *.pyc
