@@ -1,0 +1,21 @@
+{
+  "reviews": [
+    {
+      "restaurant_id": "4ca42224-9e5a-56f9-8327-812a536246d2",
+      "source": "seed",
+      "external_review_id": "sample-review-1",
+      "rating": 5,
+      "review_date": "2026-06-01",
+      "text": "The chicken tikka masala was flavorful and the garlic naan was fresh. Good portions for the price."
+    },
+    {
+      "restaurant_id": "4ca42224-9e5a-56f9-8327-812a536246d2",
+      "source": "seed",
+      "external_review_id": "sample-review-2",
+      "rating": 4,
+      "review_date": "2026-06-04",
+      "text": "Solid Indian dinner option for takeout. Delivery was slower than expected, but the food was hot."
+    }
+  ]
+}
+

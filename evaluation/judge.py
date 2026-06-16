@@ -34,6 +34,7 @@ GOOGLE_API_KEY   = os.environ.get("GOOGLE_API_KEY", "")
 _DOMAIN_CONTEXT = {
     "geetabitan": "Rabindra Sangeet (Bengali songs by Rabindranath Tagore) assistant",
     "arcl":       "cricket assistant for the Agomonia Recreation Cricket League",
+    "restaurants": "restaurant recommendation assistant for menus, prices, reviews, and nearby food options",
 }
 _ASSISTANT_DESC = _DOMAIN_CONTEXT.get(DOMAIN, "AI assistant")
 
@@ -105,7 +106,7 @@ async def _call_judge(question: str, response: str) -> dict:
         scores = {
             "accuracy": 3, "completeness": 3,
             "relevance": 3, "format": 3,
-            "explanation": "parse error"
+            "explanation": ""
         }
 
     return scores

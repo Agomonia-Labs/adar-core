@@ -1,0 +1,27 @@
+{
+  "menus": [
+    {
+      "restaurant_id": "replace-with-restaurant-uuid",
+      "restaurant_name": "Optional Restaurant Name",
+      "menu_url": "https://example.com/menu",
+      "cuisine": ["indian"],
+      "meal": ["lunch", "dinner"]
+    },
+    {
+      "restaurant_id": "replace-with-restaurant-uuid",
+      "restaurant_name": "Optional PDF Restaurant",
+      "file_path": "/absolute/path/to/menu.pdf",
+      "menu_url": "https://example.com/menu.pdf",
+      "cuisine": ["american"],
+      "meal": ["lunch", "dinner"]
+    },
+    {
+      "restaurant_id": "replace-with-restaurant-uuid",
+      "restaurant_name": "Optional Image Menu Restaurant",
+      "file_path": "/absolute/path/to/menu.jpg",
+      "menu_url": "https://example.com/menu-image.jpg",
+      "cuisine": ["thai", "asian"],
+      "meal": ["dinner"]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+url,text,kind,is_menu_candidate,is_platform
+http://www.rachawadeethai.com/food-menu,,menu_page,True,False
+http://www.rachawadeethai.com/menu,,menu_page,True,False
+http://www.rachawadeethai.com/menus,,menu_page,True,False
+http://www.rachawadeethai.com/restaurant-menu,,menu_page,True,False
+https://www.rachawadeethai.com/menus,MENU,menu_page,True,False
+http://www.rachawadeethai.com/online-order,,order_page,True,False
+http://www.rachawadeethai.com/online-ordering,,order_page,True,False
+http://www.rachawadeethai.com/order,,order_page,True,False
+http://www.rachawadeethai.com/order-online,,order_page,True,False
+http://www.rachawadeethai.com/ordering,,order_page,True,False
+http://www.rachawadeethai.com/takeout,,order_page,True,False
+https://rachawadeethaicafewa.smiledining.com/,ORDER ONLINE (11a-3p),order_page,True,False
+mailto:rachawadee@comcast.net,rachawadee@comcast.net,contact,False,False
+tel:1-360-336-6699,CALL TO ORDER,contact,False,False
+http://www.rachawadeethai.com/store,,order_page,False,False
+http://www.rachawadeethai.com/,,other,False,False
+https://maps.google.com/?cid=755545714882010638,googlePlaces,other,False,False
+https://www.rachawadeethai.com/,Top of Page,other,False,False
+https://www.yelp.com/biz/rachawadee-thai-cafe-mount-vernon,yelp,other,False,False
+http://facebook.com/rachawadeethaicafe,facebook,social,False,False
+http://instagram.com/rachawadeethaicafe,Instagram,social,False,False

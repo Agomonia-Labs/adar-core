@@ -1,0 +1,15 @@
+services:
+  restaurants-db:
+    image: pgvector/pgvector:pg16
+    container_name: adar-restaurants-db
+    environment:
+      POSTGRES_DB: restaurants
+      POSTGRES_USER: adar
+      POSTGRES_PASSWORD: adar12
+    ports:
+      - "5432:5432"
+    volumes:
+      - restaurants_pgdata:/var/lib/postgresql/data
+
+volumes:
+  restaurants_pgdata:

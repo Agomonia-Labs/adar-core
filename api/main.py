@@ -61,6 +61,410 @@ def _is_youtube_play_request(text: str) -> bool:
 def _has_youtube_url(text: str) -> bool:
     return bool(re.search(r"https://(?:www\.)?(?:youtube\.com|youtu\.be)/", text or "", re.IGNORECASE))
 
+
+def _is_restaurant_price_query(text: str) -> bool:
+    if DOMAIN != "restaurants":
+        return False
+    lowered = (text or "").lower()
+    return bool(re.search(r"\b(compare|cheapest|price|prices|cost|costs|how much)\b", lowered))
+
+
+def _is_restaurant_count_query(text: str) -> bool:
+    if DOMAIN != "restaurants":
+        return False
+    lowered = (text or "").lower()
+    return bool(
+        re.search(r"\b(how many|count|number of|total)\b", lowered)
+        and re.search(r"\b(restaurant|restaurants|places)\b", lowered)
+    )
+
+
+def _is_restaurant_detail_query(text: str) -> bool:
+    if DOMAIN != "restaurants":
+        return False
+    lowered = (text or "").lower()
+    return bool(
+        re.search(r"\b(address|phone|website|site|url|rating|reviews|review count|where is|location|details|detail|profile|contact)\b", lowered)
+        and (
+            re.search(r"[\"“”'][^\"“”']{3,}[\"“”']", text or "")
+            or re.search(r"\b(restaurant|cafe|bistro|kitchen|bar|grill)\b", lowered)
+        )
+    )
+
+
+def _is_restaurant_genre_summary_query(text: str) -> bool:
+    if DOMAIN != "restaurants":
+        return False
+    lowered = (text or "").lower()
+    return bool(
+        re.search(r"\b(group|grouped|summary|summarize|breakdown|by genre|by category|by type)\b", lowered)
+        and re.search(r"\b(restaurant|restaurants|genre|genres|category|categories|type|types)\b", lowered)
+    )
+
+
+def _is_restaurant_list_query(text: str) -> bool:
+    if DOMAIN != "restaurants":
+        return False
+    lowered = (text or "").lower()
+    if _is_restaurant_price_query(lowered) or _is_restaurant_count_query(lowered):
+        return False
+    if re.search(r"\b(with|without|no|missing|doesn'?t have|do not have|don'?t have|has|have)\b.{0,30}\b(menu|menus|meny|menue)\b", lowered):
+        return bool(re.search(r"\b(restaurant|restaurants|places)\b", lowered))
+    return bool(
+        re.search(r"\b(show|list|give|get|display)\b", lowered)
+        and re.search(r"\b(all|entire|every|full list|list)\b", lowered)
+        and re.search(r"\b(restaurant|restaurants|places)\b", lowered)
+    )
+
+
+def _restaurant_menu_status_from_query(text: str) -> str:
+    lowered = (text or "").lower()
+    if re.search(r"\b(without|missing|no)\b.{0,40}\b(menu|menus|meny|menue)\b", lowered):
+        return "without"
+    if re.search(r"\b(doesn'?t have|does not have|do not have|don'?t have)\b.{0,40}\b(menu|menus|meny|menue)\b", lowered):
+        return "without"
+    if re.search(r"\b(with|has|have)\b.{0,40}\b(menu|menus|meny|menue)\b", lowered):
+        return "with"
+    return "all"
+
+
+def _is_restaurant_menu_item_query(text: str) -> bool:
+    if DOMAIN != "restaurants":
+        return False
+    lowered = (text or "").lower()
+    if _is_restaurant_price_query(lowered):
+        return False
+    if re.search(r"[\"“”'][^\"“”']{3,}[\"“”']", text or ""):
+        return True
+    if re.search(r"\b(these|those|this|that|they|it|them)\b.{0,30}\bnot\b", lowered):
+        return True
+    return bool(re.search(
+        r"\b(menu|menus|meny|menue|dish|dishes|item|items|serve|serves|serving|have|has|available|availability|find|show|recommend|option|options)\b",
+        lowered,
+    ))
+
+
+def _is_single_restaurant_menu_query(text: str) -> bool:
+    if DOMAIN != "restaurants":
+        return False
+    lowered = (text or "").lower()
+    return bool(
+        re.search(r"\b(menu|menus|meny|menue)\b", lowered)
+        and re.search(r"\b(restaurant|place|cafe|bistro|kitchen|bar|grill|thai|indian|italian|chinese|american)\b", lowered)
+    )
+
+
+def _extract_restaurant_name_for_menu(text: str) -> str:
+    raw = text or ""
+    quoted = re.findall(r"[\"“”']([^\"“”']{3,})[\"“”']", raw)
+    if quoted:
+        return quoted[-1].strip(" .,?!")
+    name = raw.lower()
+    name = re.sub(r"\b(show|find|get|give|me|the|a|an|their|its|full|restaurant|restaurants|menu|menus|meny|menue|for|of|at|in|near|around)\b", " ", name)
+    name = re.sub(r"\s+", " ", name).strip(" .,?!")
+    return name
+
+
+def _restaurant_query_locations(text: str) -> list[str]:
+    aliases = {"bellvue": "bellevue"}
+    known = [
+        "greater seattle", "seattle", "bellevue", "bellvue", "bothell",
+        "redmond", "kirkland", "renton", "tacoma", "everett",
+    ]
+    lowered = (text or "").lower()
+    locations = []
+    for name in known:
+        if re.search(rf"\b{re.escape(name)}\b", lowered):
+            canonical = aliases.get(name, name)
+            if canonical not in locations:
+                locations.append(canonical)
+    return locations
+
+
+def _restaurant_location_terms(text: str) -> list[str]:
+    known = [
+        "greater seattle", "seattle", "bellevue", "bellvue", "bothell",
+        "redmond", "kirkland", "renton", "tacoma", "everett",
+    ]
+    lowered = (text or "").lower()
+    return [name for name in known if re.search(rf"\b{re.escape(name)}\b", lowered)]
+
+
+def _extract_restaurant_price_item(text: str, location: str | None = None) -> str:
+    item = (text or "").lower()
+    protected_phrases = {
+        "pad thai": "padthai",
+    }
+    for phrase, token in protected_phrases.items():
+        item = re.sub(rf"\b{re.escape(phrase)}\b", token, item)
+    item = re.sub(
+        r"\b(compare|comparison|cheapest|cheap|least expensive|find|show|me|the|a|an|what|which|are|is|have|has|with|price|prices|cost|costs|how much|for|from|of|these|those|this|that|restaurant|restaurants)\b",
+        " ",
+        item,
+    )
+    item = re.sub(
+        r"\b(thai|indian|italian|american|asian|chinese|japanese|korean|mexican|vietnamese|seafood|vegetarian|vegan)\b",
+        " ",
+        item,
+    )
+    item = re.sub(r"\bnear me\b", " ", item)
+    locations = _restaurant_location_terms(text)
+    if location and location not in locations:
+        locations.append(location)
+    for loc in locations:
+        loc_label = loc.replace("-", " ")
+        item = re.sub(rf"\b(near|in|around)\s+{re.escape(loc_label)}\b", " ", item)
+        item = re.sub(rf"\b{re.escape(loc_label)}\b", " ", item)
+    item = re.sub(r"\b(in|near|around)\s+[a-z ]+$", " ", item)
+    item = re.sub(r"\bnear\s+[a-z ]+$", " ", item)
+    for phrase, token in protected_phrases.items():
+        item = re.sub(rf"\b{re.escape(token)}\b", phrase, item)
+    item = re.sub(r"[,;/]+", " ", item)
+    item = re.sub(r"\s+", " ", item).strip(" .,?!")
+    return item or (text or "").strip()
+
+
+def _extract_restaurant_menu_item(text: str, location: str | None = None) -> str:
+    raw = text or ""
+    quoted = re.findall(r"[\"“”']([^\"“”']{3,})[\"“”']", raw)
+    if quoted:
+        return quoted[-1].strip(" .,?!")
+    item = raw.lower()
+    item = re.sub(
+        r"\b(these|those|this|that|they|it|them|are|is|were|was|not|no|specific|actual|real|exact|same|list|previous|results|result)\b",
+        " ",
+        item,
+    )
+    item = re.sub(
+        r"\b(which|what|where|who|find|show|me|the|a|an|restaurant|restaurants|place|places|nearby|near|around|in|with|that|have|has|serve|serves|serving|available|availability|menu|menus|meny|menue|dish|dishes|item|items|option|options|recommend|recommendation|recommendations)\b",
+        " ",
+        item,
+    )
+    item = re.sub(
+        r"\b(thai|indian|italian|american|asian|chinese|japanese|korean|mexican|vietnamese|seafood|vegetarian|vegan)\b",
+        " ",
+        item,
+    )
+    item = re.sub(r"\bnear me\b", " ", item)
+    if location:
+        item = re.sub(rf"\b(near|in|around)\s+{re.escape(location.replace('-', ' '))}\b", " ", item)
+        item = re.sub(rf"\b{re.escape(location.replace('-', ' '))}\b", " ", item)
+    item = re.sub(r"\bnear\s+[a-z ]+$", " ", item)
+    item = re.sub(r"\s+", " ", item).strip(" .,?!")
+    return item
+
+
+async def _restaurant_price_response(message: str) -> str | None:
+    if not _is_restaurant_price_query(message):
+        return None
+    from domains.restaurants.tools.restaurant_tools import parse_food_request
+    from domains.restaurants.tools.pricing_tools import compare_menu_prices
+
+    parsed = await parse_food_request(message)
+    item_query = _extract_restaurant_price_item(message, parsed.get("location"))
+    lowered = message.lower()
+    parsed_location = parsed.get("location")
+    query_locations = _restaurant_query_locations(message)
+    search_location = "greater seattle" if len(query_locations) > 1 else (parsed_location or "seattle")
+    if "near me" in lowered:
+        radius_miles = 5
+    elif len(query_locations) > 1:
+        radius_miles = 60
+    elif "cheapest" in lowered and parsed_location in {"greater seattle", "greater-seattle", "seattle", None}:
+        radius_miles = 60
+    elif "cheapest" in lowered and parsed_location:
+        radius_miles = 15
+    else:
+        radius_miles = 5
+    result = await compare_menu_prices(
+        item_query=item_query,
+        location=search_location,
+        quantity=parsed.get("quantity") or 1,
+        cuisine=parsed.get("cuisine"),
+        radius_miles=radius_miles,
+    )
+    if result.get("count", 0) > 0:
+        lowest = result.get("lowest_price")
+        prefix = f"Lowest found for {item_query}: ${lowest:.2f}." if lowest is not None else f"Found prices for {item_query}."
+        return f"{prefix}\n\n{result.get('formatted', '')}"
+    if result.get("formatted"):
+        return result["formatted"]
+    return None
+
+
+async def _restaurant_count_response(message: str) -> str | None:
+    if not _is_restaurant_count_query(message):
+        return None
+    from domains.restaurants.tools.restaurant_tools import parse_food_request, count_restaurants
+
+    parsed = await parse_food_request(message)
+    locations = _restaurant_query_locations(message)
+    location = locations[0] if len(locations) == 1 else None
+    radius_miles = 15 if location else None
+    result = await count_restaurants(
+        cuisine=parsed.get("cuisine"),
+        location=location,
+        radius_miles=radius_miles,
+    )
+    return result.get("formatted")
+
+
+def _extract_restaurant_name_for_detail(text: str) -> str:
+    quoted = re.findall(r"[\"“”']([^\"“”']{3,})[\"“”']", text or "")
+    if quoted:
+        return quoted[-1].strip(" .,?!")
+    name = (text or "").lower()
+    name = re.sub(
+        r"\b(what|whats|what's|is|are|the|address|phone|website|site|url|rating|reviews|review count|where|location|details|detail|profile|contact|of|for|at|restaurant|restaurants)\b",
+        " ",
+        name,
+    )
+    return re.sub(r"\s+", " ", name).strip(" .,?!")
+
+
+def _quoted_restaurant_names(text: str) -> list[str]:
+    names = []
+    seen = set()
+    for raw in re.findall(r"[\"“”']([^\"“”']{3,})[\"“”']", text or ""):
+        name = raw.strip(" .,?!")
+        key = name.lower()
+        if name and key not in seen:
+            names.append(name)
+            seen.add(key)
+    return names
+
+
+async def _restaurant_detail_response(message: str) -> str | None:
+    if not _is_restaurant_detail_query(message):
+        return None
+    from domains.restaurants.tools.restaurant_tools import parse_food_request, get_restaurant_details
+    from domains.restaurants.tools.query_utils import table
+
+    quoted_names = _quoted_restaurant_names(message)
+    if len(quoted_names) > 1:
+        parsed = await parse_food_request(message)
+        rows = []
+        for restaurant_name in quoted_names:
+            result = await get_restaurant_details(
+                restaurant_name=restaurant_name,
+                location=parsed.get("location") or "seattle",
+            )
+            restaurant = result.get("restaurant") or {}
+            address_parts = [
+                restaurant.get("address"),
+                restaurant.get("city"),
+                restaurant.get("region"),
+                restaurant.get("postal_code"),
+            ]
+            address = ", ".join(str(part) for part in address_parts if part)
+            rows.append([
+                restaurant.get("name") or restaurant_name,
+                address or "-",
+                restaurant.get("phone") or "-",
+                restaurant.get("website_url") or "-",
+                restaurant.get("rating") or "-",
+                restaurant.get("review_count") or 0,
+                restaurant.get("menu_items_ingested") or 0,
+            ])
+        return table(["Restaurant", "Address", "Phone", "Website", "Rating", "Reviews", "Menu items"], rows)
+
+    parsed = await parse_food_request(message)
+    restaurant_name = _extract_restaurant_name_for_detail(message)
+    if not restaurant_name:
+        return None
+    result = await get_restaurant_details(
+        restaurant_name=restaurant_name,
+        location=parsed.get("location") or "seattle",
+    )
+    return result.get("formatted")
+
+
+async def _restaurant_direct_response(message: str) -> str | None:
+    """Deterministic restaurant-domain router before the ADK fallback."""
+    for handler in [
+        _restaurant_count_response,
+        _restaurant_detail_response,
+        _restaurant_listing_response,
+        _restaurant_price_response,
+        _single_restaurant_menu_response,
+        _restaurant_menu_item_response,
+    ]:
+        response = await handler(message)
+        if response:
+            return response
+    return None
+
+
+async def _restaurant_listing_response(message: str) -> str | None:
+    if _is_restaurant_genre_summary_query(message):
+        from domains.restaurants.tools.restaurant_tools import restaurant_genre_summary
+
+        result = await restaurant_genre_summary()
+        return result.get("formatted")
+    if not _is_restaurant_list_query(message):
+        return None
+    from domains.restaurants.tools.restaurant_tools import parse_food_request, list_restaurants
+
+    parsed = await parse_food_request(message)
+    locations = _restaurant_query_locations(message)
+    location = locations[0] if len(locations) == 1 else None
+    result = await list_restaurants(
+        cuisine=parsed.get("cuisine"),
+        location=location,
+        radius_miles=60 if location else None,
+        menu_status=_restaurant_menu_status_from_query(message),
+        limit=100,
+    )
+    return result.get("formatted")
+
+
+async def _single_restaurant_menu_response(message: str) -> str | None:
+    if not _is_single_restaurant_menu_query(message):
+        return None
+    from domains.restaurants.tools.restaurant_tools import parse_food_request
+    from domains.restaurants.tools.menu_tools import get_restaurant_menu
+
+    parsed = await parse_food_request(message)
+    restaurant_name = _extract_restaurant_name_for_menu(message)
+    if not restaurant_name:
+        return None
+    result = await get_restaurant_menu(
+        restaurant_name=restaurant_name,
+        location=parsed.get("location") or "seattle",
+        limit=40,
+    )
+    if result.get("formatted"):
+        return result["formatted"]
+    return None
+
+
+async def _restaurant_menu_item_response(message: str) -> str | None:
+    if not _is_restaurant_menu_item_query(message):
+        return None
+    from domains.restaurants.tools.restaurant_tools import parse_food_request
+    from domains.restaurants.tools.menu_tools import hybrid_search_menu_items
+
+    parsed = await parse_food_request(message)
+    item_query = _extract_restaurant_menu_item(message, parsed.get("location"))
+    if not item_query or len(item_query.split()) > 6:
+        return None
+    cuisine = parsed.get("cuisine")
+    lowered = message.lower()
+    radius_miles = 5 if "near me" in lowered else 60
+    result = await hybrid_search_menu_items(
+        query=item_query,
+        location=parsed.get("location") or "seattle",
+        radius_miles=radius_miles,
+        cuisine=cuisine,
+        limit=12,
+    )
+    if result.get("count", 0) > 0:
+        cuisine_note = f" ({cuisine})" if cuisine else ""
+        return f"Found menu matches for {item_query}{cuisine_note}:\n\n{result.get('formatted', '')}"
+    if result.get("formatted"):
+        return result["formatted"]
+    return None
+
 # ── Rate limiting ────────────────────────────────────────────────────────────
 # Simple in-memory rate limiter: max 20 requests per minute per IP
 RATE_LIMIT_REQUESTS = 20
@@ -125,6 +529,10 @@ _DOMAIN_META = {
         "title":       "Adar Geetabitan API",
         "description": "Multi-agent AI assistant for Geetabitan — Rabindranath Tagore's complete songs",
     },
+    "restaurants": {
+        "title":       "Adar Restaurants API",
+        "description": "Multi-agent AI assistant for restaurants food recommendations, menu search, price comparison, and reviews",
+    },
 }
 _meta = _DOMAIN_META.get(DOMAIN, _DOMAIN_META["arcl"])
 
@@ -150,8 +558,8 @@ _PROD_ORIGINS = [
     "https://geetabitan-adar.firebaseapp.com",
 ]
 _DEV_ORIGINS = [
-    "http://localhost:6001", "http://localhost:5173", "http://localhost:3000",
-    "http://127.0.0.1:6001", "http://127.0.0.1:5173", "http://127.0.0.1:3000",
+    "http://localhost:6001", "http://localhost:6002", "http://localhost:5173", "http://localhost:3000",
+    "http://127.0.0.1:6001", "http://127.0.0.1:6002", "http://127.0.0.1:5173", "http://127.0.0.1:3000",
 ]
 _ALL_ORIGINS = _PROD_ORIGINS + (_DEV_ORIGINS if settings.APP_ENV != "production" else [])
 
@@ -348,17 +756,18 @@ async def chat(
 
         user_message = Content(role="user", parts=[Part(text=message)])
 
-        response_text = ""
-        async for event in runner.run_async(
-            user_id=request.user_id,
-            session_id=session.id,
-            new_message=user_message,
-        ):
-            if hasattr(event, "is_final_response") and event.is_final_response():
-                if event.content and event.content.parts:
-                    for part in event.content.parts:
-                        if hasattr(part, "text") and part.text:
-                            response_text += part.text
+        response_text = await _restaurant_direct_response(message) or ""
+        if not response_text:
+            async for event in runner.run_async(
+                user_id=request.user_id,
+                session_id=session.id,
+                new_message=user_message,
+            ):
+                if hasattr(event, "is_final_response") and event.is_final_response():
+                    if event.content and event.content.parts:
+                        for part in event.content.parts:
+                            if hasattr(part, "text") and part.text:
+                                response_text += part.text
 
         if not response_text:
             response_text = "I couldn't find an answer. Please try rephrasing your question."

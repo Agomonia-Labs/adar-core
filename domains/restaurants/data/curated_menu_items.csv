@@ -1,0 +1,2 @@
+restaurant_id,name,description,category,price,currency,cuisine_tags,meal_tags,dietary_tags,source_url,source_type,extraction_confidence
+replace-with-restaurant-uuid,Chicken Tikka Masala,Grilled chicken in creamy tomato curry,Entree,14.99,USD,"indian,asian","lunch,dinner",,https://example.com/menu,curated,1.0

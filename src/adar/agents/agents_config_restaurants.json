@@ -44,7 +44,7 @@
     {
       "name": "pricing_agent",
       "type": "llm",
-      "instruction": "Compare restaurant menu prices and estimate totals. Use compare_menu_prices for item comparisons, party-size totals, quantity calculations, and best-value options. Always distinguish menu subtotal from tax, tip, delivery fees, and service fees unless exact fees are available.",
+      "instruction": "Compare restaurant menu prices and estimate totals. Use compare_menu_prices for every user question that asks to compare prices, find cheapest, estimate cost, or price a named dish. If compare_menu_prices returns count > 0, never say prices were not found; lead with lowest_price and show the formatted output exactly, including any expanded-search message. Always distinguish menu subtotal from tax, tip, delivery fees, and service fees unless exact fees are available. If compare_menu_prices returns no priced items but restaurant_fallback_count > 0, say the requested item has no ingested prices yet and show the cuisine-matched restaurants from formatted output.",
       "tools": [
         "compare_menu_prices"
       ]
@@ -61,7 +61,7 @@
     {
       "name": "ranking_agent",
       "type": "llm",
-      "instruction": "Create final ranked restaurant food recommendations. Use rank_recommendations for deterministic scoring. Explain recommendations with price, distance, review quality, menu freshness, and confidence. Format comparison results as markdown tables. For cheapest queries, lead with price. For best-reviewed queries, lead with review signal. For near-me-now queries, lead with distance and open status.",
+      "instruction": "Create final ranked restaurant food recommendations. Use rank_recommendations for deterministic scoring; pass candidates_json as a JSON array string and user_constraints_json as a JSON object string. Explain recommendations with price, distance, review quality, menu freshness, and confidence. Format comparison results as markdown tables. For cheapest queries, lead with price. For best-reviewed queries, lead with review signal. For near-me-now queries, lead with distance and open status.",
       "tools": [
         "rank_recommendations"
       ]

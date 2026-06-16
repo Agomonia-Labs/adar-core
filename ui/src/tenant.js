@@ -7,11 +7,14 @@
  *
  * .env.arcl:       VITE_DOMAIN=arcl
  * .env.geetabitan: VITE_DOMAIN=geetabitan
+ * .env.restaurants: VITE_DOMAIN=restaurants
  */
 
 const _domain =
   import.meta.env.VITE_DOMAIN ||
-  (import.meta.env.VITE_API_URL?.includes('geetabitan') ? 'geetabitan' : 'arcl')
+  (import.meta.env.VITE_API_URL?.includes('geetabitan') ? 'geetabitan'
+    : import.meta.env.VITE_API_URL?.includes('restaurant') ? 'restaurants'
+    : 'arcl')
 
 const TENANTS = {
 
@@ -147,6 +150,55 @@ const TENANTS = {
     // Login page
     loginTitle:   'আদর · গীতবিতান',
     loginCaption: 'Powered by Adar · গীতবিতান',
+  },
+
+  restaurants: {
+    id:            'restaurants',
+    appTitle:      'Adar Restaurants',
+    name:          'Restaurant Food Recommender',
+    shortName:     'Restaurants',
+    subtitle:      'Food, Menu, Price & Review Assistant',
+    logoText:      'Adar',
+
+    primaryColor:  '#0F766E',
+    primaryLight:  '#5EBFB7',
+    primaryDark:   '#0B4F4A',
+    accentColor:   '#D97706',
+    accentLight:   '#F5B04D',
+    accentDark:    '#92400E',
+    bgDefault:     '#F7FAF8',
+    bgPaper:       '#FFFFFF',
+    textPrimary:   '#17211F',
+    textSecondary: '#61736F',
+    divider:       '#CFE3DE',
+
+    fontFamily: '"Inter", "Roboto", "Helvetica Neue", sans-serif',
+
+    welcomeMessage:
+      "Hi! I'm Adar, your restaurant food recommender. Ask for restaurants or menu items by location, cuisine, budget, quantity, reviews, or price comparison.\n\nTry: “Find Thai dinner near Seattle under $25.”",
+    placeholder:    'Ask for Thai, Indian, Italian, American, price comparisons…',
+    typingText:     'Searching restaurants, menus, prices, and reviews…',
+    clearMessage:   'Session cleared. What food should we compare next?',
+    footerText:     'Powered by Adar · Restaurant menu data includes source freshness and confidence',
+
+    suggestedQuestions: [
+      'Find Indian restaurants near Seattle',
+      'Compare chicken tikka masala prices near Seattle',
+      'Find Thai dinner under $25 near Bellevue',
+      'Show Italian restaurants with menu items near Seattle',
+      'What is the cheapest pad thai near me?',
+      'Find American fast food options near Seattle',
+      'Show seafood restaurants with good reviews',
+      'Find vegetarian Asian dinner options',
+    ],
+
+    registerSubtitle:    'Restaurant recommender · menu search · price comparison',
+    showTeamDropdown:    false,
+    teamDropdownLabel:   '',
+    teamDropdownHelper:  '',
+
+    loginTitle:   'Adar Restaurants',
+    loginCaption: 'Powered by Adar · Restaurant Food Recommender',
   },
 }
 

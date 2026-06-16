@@ -54,6 +54,7 @@ FRONTEND_URL           = os.getenv("FRONTEND_URL", "http://localhost:5173")
 _APP_NAME_DEFAULTS = {
     "arcl":       "adar-arcl-api",
     "geetabitan": "adar-geetabitan-api",
+    "restaurants": "adar-restaurants-api",
 }
 APP_NAME = os.getenv("APP_NAME", _APP_NAME_DEFAULTS.get(DOMAIN, "adar-api"))
 APP_ENV  = os.getenv("APP_ENV", "development")
@@ -62,7 +63,13 @@ PORT     = int(os.getenv("PORT", "8040"))
 # ── API key (domain-scoped) ───────────────────────────────────────────────────
 ARCL_API_KEY       = os.getenv("ARCL_API_KEY", "")
 GEETABITAN_API_KEY = os.getenv("GEETABITAN_API_KEY", "")
-API_KEY = GEETABITAN_API_KEY if DOMAIN == "geetabitan" else ARCL_API_KEY
+RESTAURANTS_API_KEY = os.getenv("RESTAURANTS_API_KEY", "")
+_API_KEY_DEFAULTS = {
+    "arcl": ARCL_API_KEY,
+    "geetabitan": GEETABITAN_API_KEY,
+    "restaurants": RESTAURANTS_API_KEY,
+}
+API_KEY = _API_KEY_DEFAULTS.get(DOMAIN, ARCL_API_KEY)
 
 # ── Firestore collection names ────────────────────────────────────────────────
 if DOMAIN == "geetabitan":
@@ -205,6 +212,27 @@ OFFTOPIC_GUARD: dict = {
         ],
         "reject_msg": (
             "আমি শুধু রবীন্দ্রসঙ্গীত ও গীতবিতান বিষয়ক প্রশ্নের উত্তর দিতে পারি।"
+        ),
+    },
+    "restaurants": {
+        "off_topic": [
+            "python", "javascript", "java", "write a program", "write code",
+            "cricket", "football", "soccer", "music", "lyrics", "song",
+            "stock market", "crypto", "bitcoin", "how to hack", "sql injection",
+            "calculus", "algebra", "write an essay",
+        ],
+        "hints": [
+            "restaurant", "restaurants", "food", "menu", "menus", "dish",
+            "breakfast", "brunch", "lunch", "dinner", "fast food",
+            "american", "asian", "indian", "chinese", "japanese", "thai",
+            "mexican", "italian", "mediterranean", "price", "prices",
+            "cheap", "cheapest", "budget", "cost", "review", "reviews",
+            "rating", "near me", "nearby", "delivery", "takeout", "dine",
+            "vegetarian", "vegan", "halal", "gluten-free", "qty", "quantity",
+        ],
+        "reject_msg": (
+            "I can help with restaurant and food recommendations, including "
+            "menus, prices, reviews, and nearby options."
         ),
     },
 }

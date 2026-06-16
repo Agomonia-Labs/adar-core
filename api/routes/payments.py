@@ -28,6 +28,10 @@ TEAMS_COLLECTION = "adar_teams"   # must match auth.py
 FRONTEND_URL   = os.getenv("FRONTEND_URL", "")
 
 
+def _billing_enabled() -> bool:
+    return os.getenv("BILLING_ENABLED", "true").lower() == "true"
+
+
 # ── Domain-specific plan catalogue ────────────────────────────────────────────
 def _plan_catalogue() -> dict:
     if DOMAIN == "geetabitan":
@@ -38,6 +42,16 @@ def _plan_catalogue() -> dict:
                 "trial_days":  14,
                 "quota":       200,
                 "description": "$3.99/month · 14-day free trial",
+            },
+        }
+    if DOMAIN == "restaurants":
+        return {
+            "standard": {
+                "name":        "Adar Restaurants Standard",
+                "price_id":    os.getenv("STRIPE_PRICE_RESTAURANTS", ""),
+                "trial_days":  14,
+                "quota":       500,
+                "description": "Restaurant recommendations, menu search, price comparison",
             },
         }
     return {
@@ -75,7 +89,11 @@ def _get_plan(plan_key: str):
 def _frontend_url() -> str:
     if FRONTEND_URL:
         return FRONTEND_URL.rstrip("/")
-    return "https://geetabitan.adar.agomoniai.com" if DOMAIN == "geetabitan" else "https://arcl.agomoniai.com"
+    if DOMAIN == "geetabitan":
+        return "https://geetabitan.adar.agomoniai.com"
+    if DOMAIN == "restaurants":
+        return "https://restaurants.adar.agomoniai.com"
+    return "https://arcl.agomoniai.com"
 
 
 def _fs_update(team_id: str, updates: dict):
@@ -108,6 +126,18 @@ class CheckoutRequest(BaseModel):
 
 @router.post("/create-checkout")
 async def create_checkout(req: CheckoutRequest, team: dict = Depends(get_current_team)):
+    if not _billing_enabled():
+        team_id = team["team_id"]
+        plan_cfg, plan_key = _get_plan(req.plan)
+        await _update_team(team_id, {
+            "status": "active",
+            "subscription_status": "active",
+            "subscription_plan": plan_key,
+            "daily_quota": plan_cfg.get("quota", 500),
+        })
+        success_url = f"{_frontend_url()}?payment=success"
+        return {"url": success_url, "checkout_url": success_url, "billing_disabled": True}
+
     if not stripe.api_key:
         raise HTTPException(500, "Stripe not configured")
     plan_cfg, plan_key = _get_plan(req.plan)
@@ -156,6 +186,8 @@ async def create_checkout(req: CheckoutRequest, team: dict = Depends(get_current
 # ── Billing portal ────────────────────────────────────────────────────────────
 @router.post("/portal")
 async def billing_portal(team: dict = Depends(get_current_team)):
+    if not _billing_enabled():
+        raise HTTPException(400, "Billing is disabled for this environment")
     customer_id = team.get("stripe_customer_id")
     if not customer_id:
         raise HTTPException(400, "No Stripe customer found")
@@ -167,6 +199,23 @@ async def billing_portal(team: dict = Depends(get_current_team)):
 @router.get("/billing")
 async def get_billing(team: dict = Depends(get_current_team)):
     catalogue   = _plan_catalogue()
+    if not _billing_enabled():
+        plan_key = team.get("subscription_plan", "standard")
+        return {
+            "status": "active",
+            "domain": DOMAIN,
+            "plan": plan_key,
+            "plan_name": catalogue.get(plan_key, {}).get("name", plan_key),
+            "subscription_status": "active",
+            "subscription_plan": plan_key,
+            "trial_days_remaining": None,
+            "next_billing_date": None,
+            "cancel_at_period_end": False,
+            "invoices": [],
+            "usage_today": 0,
+            "daily_quota": catalogue.get(plan_key, {}).get("quota", 500),
+            "billing_disabled": True,
+        }
     customer_id = team.get("stripe_customer_id")
     if not customer_id:
         return {"status": "inactive", "domain": DOMAIN}
@@ -235,6 +284,19 @@ async def get_plans():
                 "name":        "Adar Geetabitan Standard",
                 "description": "$3.99/month · 14-day free trial",
                 "amount":      399,
+                "currency":    "USD",
+                "interval":    "month",
+            }],
+        }
+    if DOMAIN == "restaurants":
+        return {
+            "domain": "restaurants",
+            "billing_enabled": _billing_enabled(),
+            "plans": [{
+                "id":          "standard",
+                "name":        "Adar Restaurants Standard",
+                "description": "Restaurant recommendations, menu search, price comparison",
+                "amount":      0 if not _billing_enabled() else 999,
                 "currency":    "USD",
                 "interval":    "month",
             }],

@@ -1,0 +1,48 @@
+{
+  "restaurants": [
+    {
+      "name": "Sample Curry House",
+      "website_url": "https://example.com/menu",
+      "address": "123 Newark Ave",
+      "city": "Jersey City",
+      "region": "NJ",
+      "postal_code": "07302",
+      "country": "US",
+      "latitude": 40.7213,
+      "longitude": -74.0467,
+      "rating": 4.5,
+      "review_count": 120,
+      "price_level": 2,
+      "service_types": ["takeout", "delivery", "casual"],
+      "cuisine_tags": ["Indian"],
+      "meal_tags": ["lunch", "dinner"],
+      "source_refs": [
+        {
+          "source": "seed",
+          "url": "https://example.com/menu"
+        }
+      ],
+      "menu_items": [
+        {
+          "name": "Chicken Tikka Masala",
+          "description": "Grilled chicken in creamy tomato curry sauce",
+          "category": "Entree",
+          "price": 14.99,
+          "currency": "USD",
+          "source_type": "seed",
+          "extraction_confidence": 0.99
+        },
+        {
+          "name": "Garlic Naan",
+          "description": "Tandoor bread with garlic and herbs",
+          "category": "Bread",
+          "price": 3.99,
+          "currency": "USD",
+          "source_type": "seed",
+          "extraction_confidence": 0.99
+        }
+      ]
+    }
+  ]
+}
+

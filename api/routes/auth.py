@@ -37,6 +37,7 @@ JWT_EXPIRE_DAYS  = 30
 def _jwt_secret()      -> str: return os.environ.get("JWT_SECRET",      "change-me-in-production-use-secret-manager")
 def _admin_email()     -> str: return os.environ.get("ADMIN_EMAIL",     "admin@agomoniai.com").strip().lower()
 def _admin_password()  -> str: return os.environ.get("ADMIN_PASSWORD",  "").strip()
+def _billing_enabled() -> bool: return os.environ.get("BILLING_ENABLED", "true").lower() == "true"
 
 # ── FIX 2: auth always uses its own database, independent of DOMAIN ───────────
 # Read at call time (function) not import time so load_dotenv() has already run.
@@ -170,7 +171,7 @@ async def register(req: RegisterRequest):
         "email":          email,
         "password_hash":  _hash_password(req.password),
         "contact_person": req.contact_person.strip(),
-        "status":         "pending_payment",
+        "status":         "pending_payment" if _billing_enabled() else "active",
         "role":           "team",
         "quota_rpm":      20,
         "quota_daily":    500,
