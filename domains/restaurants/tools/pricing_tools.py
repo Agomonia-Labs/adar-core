@@ -63,6 +63,12 @@ def _item_query_variants(query: str) -> list[str]:
         variants.append("tom yum")
     elif canonical == "tom yum":
         variants.append("tom yum soup")
+    if canonical == "chicken tikka masala":
+        variants.extend(["tikka masala chicken", "tikka masala"])
+    elif canonical == "tikka masala chicken":
+        variants.extend(["chicken tikka masala", "tikka masala"])
+    elif canonical == "tikka masala":
+        variants.extend(["chicken tikka masala", "tikka masala chicken"])
     if "biryani" in canonical:
         if re.search(r"\bgoat\b", canonical):
             variants.extend([
@@ -117,6 +123,8 @@ def _same_dish_key(item_query: str, item: dict) -> tuple:
         return restaurant_key, "fried rice"
     if canonical in {"tom yum", "tom yum soup"} and "tom yum" in name:
         return restaurant_key, "tom yum"
+    if canonical in {"chicken tikka masala", "tikka masala chicken", "tikka masala"} and "tikka masala" in name:
+        return restaurant_key, "chicken tikka masala"
     return restaurant_key, name
 
 
@@ -137,16 +145,6 @@ async def _direct_priced_item_search_variants(
     seen_ids = set()
     variants = _item_query_variants(item_query)
     fetch_limit = max(limit, 250)
-    if variants:
-        exact_matches = await _direct_priced_item_search(
-            item_query=variants[0],
-            cuisine=cuisine,
-            location=location,
-            radius_miles=radius_miles,
-            limit=fetch_limit,
-        )
-        if exact_matches:
-            return exact_matches
     for variant in variants:
         for item in await _direct_priced_item_search(
             item_query=variant,
@@ -173,7 +171,7 @@ def _item_name_matches(query: str, item: dict) -> bool:
         return True
     haystack = " ".join(
         str(item.get(field) or "").lower()
-        for field in ["name", "category"]
+        for field in ["name", "description", "category"]
     )
     if _requires_strict_phrase(query):
         return any(variant in haystack for variant in variants)
@@ -189,6 +187,10 @@ def _is_irrelevant_price_match(query: str, item: dict) -> bool:
         for field in ["name", "description", "category"]
     )
     name_text = " ".join(
+        str(item.get(field) or "").lower()
+        for field in ["name", "description", "category"]
+    )
+    name_category_text = " ".join(
         str(item.get(field) or "").lower()
         for field in ["name", "category"]
     )
@@ -218,6 +220,21 @@ def _is_irrelevant_price_match(query: str, item: dict) -> bool:
             if float(item.get("price") or 0) < 8:
                 return True
         except (TypeError, ValueError):
+            return True
+    if query_l in {"chicken tikka masala", "tikka masala chicken", "tikka masala"}:
+        if "tikka masala" not in _normalize_item_query(name_category_text):
+            return True
+        if re.search(r"\b(sauce|side|sides|add|extra|party|catering)\b", name_category_text):
+            return True
+        if query_l in {"chicken tikka masala", "tikka masala chicken"}:
+            other_protein = re.search(r"\b(beef|lamb|goat|mutton|prawns?|shrimps?|seafood|fish|salmon|paneer|tofu|vegetables?|veggie)\b", name_category_text)
+            if other_protein and "chicken" not in name_category_text:
+                return True
+        try:
+            price = float(item.get("price") or 0)
+        except (TypeError, ValueError):
+            return True
+        if price < 8 or price > 60:
             return True
     return False
 
@@ -277,6 +294,7 @@ async def _direct_priced_item_search(
     item_text = """
         lower(
             coalesce(mi.name, '') || ' ' ||
+            coalesce(mi.description, '') || ' ' ||
             coalesce(mi.category, '')
         )
     """

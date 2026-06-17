@@ -14,6 +14,9 @@
         "arcl": [
           "adar-arcl",
           "bdas-493785"
+        ],
+        "restaurants": [
+          "restaurants-adar"
         ]
       }
     }

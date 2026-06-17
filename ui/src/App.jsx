@@ -59,6 +59,7 @@ import AdminDashboard from './AdminDashboard'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const API_KEY = import.meta.env.VITE_API_KEY || ''
+const SHOW_EVAL = import.meta.env.VITE_SHOW_EVAL !== 'false'
 
 const YOUTUBE_PLAY_INTENT_RE = /youtube|youtu\.be|ইউটিউব|play|listen|শুন|শোন|লিংক/i
 const YOUTUBE_VIDEO_URL_RE = /https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[^\s)\]]+/i
@@ -211,6 +212,14 @@ function StatsCharts({ content, autoShow, hint = '' }) {
 
 function MessageBubble({ msg, prevContent = '', onSpeak, onPlayYouTube, isSpeaking = false }) {
   const isUser = msg.role === 'user'
+  const evalLabels = tenant.evalLabels || {
+    accuracy: 'Accuracy',
+    completeness: 'Completeness',
+    relevance: 'Relevance',
+    format: 'Format',
+    overall: 'Overall',
+    scale: '5',
+  }
   return (
     <Box sx={{ display:'flex', flexDirection: isUser ? 'row-reverse' : 'row', gap:1.5, alignItems:'flex-start', mb:2 }}>
       <Avatar sx={{ width:32, height:32, flexShrink:0, bgcolor: isUser ? 'secondary.main' : 'primary.main' }}>
@@ -269,13 +278,13 @@ function MessageBubble({ msg, prevContent = '', onSpeak, onPlayYouTube, isSpeaki
 
         <StatsCharts content={msg.content} autoShow={/chart|graph|bar|visual|plot/i.test(prevContent)} hint={prevContent} />
 
-        {msg.eval && (
+        {SHOW_EVAL && msg.eval && (
           <Box sx={{ mt:0.75, display:'flex', alignItems:'center', gap:0.75, flexWrap:'wrap' }}>
             {[
-              { label:'যথার্থতা',  val: msg.eval.scores?.accuracy },
-              { label:'সম্পূর্ণতা', val: msg.eval.scores?.completeness },
-              { label:'প্রাসঙ্গিক', val: msg.eval.scores?.relevance },
-              { label:'বিন্যাস',    val: msg.eval.scores?.format },
+              { label:evalLabels.accuracy,     val: msg.eval.scores?.accuracy },
+              { label:evalLabels.completeness, val: msg.eval.scores?.completeness },
+              { label:evalLabels.relevance,    val: msg.eval.scores?.relevance },
+              { label:evalLabels.format,       val: msg.eval.scores?.format },
             ].map(({ label, val }) => (
               <Box key={label} sx={{
                 px:0.75, py:0.2, borderRadius:0.75, fontSize:'0.62rem', fontWeight:600,
@@ -284,13 +293,13 @@ function MessageBubble({ msg, prevContent = '', onSpeak, onPlayYouTube, isSpeaki
                 border:'1px solid',
                 borderColor: val>=4?`${tenant.primaryColor}50`:val>=3?`${tenant.accentColor}50`:'rgba(226,75,74,0.3)',
               }}>
-                {label} {val}/৫
+                {label} {val}/{evalLabels.scale}
               </Box>
             ))}
             <Box sx={{ px:0.75, py:0.2, borderRadius:0.75, fontSize:'0.62rem', fontWeight:700,
                        bgcolor:`${tenant.primaryColor}25`, color:tenant.primaryDark,
                        border:`1px solid ${tenant.primaryColor}60` }}>
-              সামগ্রিক {msg.eval.scores?.overall}/৫
+              {evalLabels.overall} {msg.eval.scores?.overall}/{evalLabels.scale}
             </Box>
             {msg.eval.explanation && (
               <Box component="span" sx={{ fontSize:'0.62rem', color:'text.secondary', ml:0.5 }}>
@@ -386,9 +395,11 @@ function YouTubeMiniPlayer({ player, onClose }) {
 }
 
 function ChatTab({ onUsageIncrement }) {
+  const voiceLabels = tenant.voice || {}
   // ── Speech to text ──────────────────────────────────────────────────────
   const { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking } = useSpeech({
-    lang:     'bn-IN',
+    lang:     voiceLabels.lang || 'bn-IN',
+    labels:   voiceLabels,
     onResult: (text) => {
       if (VOICE_STOP_COMMAND_RE.test(text)) {
         setVoiceModeActive(false)
@@ -619,7 +630,7 @@ function ChatTab({ onUsageIncrement }) {
             }}
           />
           {supported && (
-            <Tooltip title={voiceModeActive ? 'ভয়েস কথোপকথন বন্ধ করুন' : 'বাংলায় বলুন'}>
+            <Tooltip title={voiceModeActive ? (voiceLabels.stopTooltip || 'ভয়েস কথোপকথন বন্ধ করুন') : (voiceLabels.startTooltip || 'বাংলায় বলুন')}>
               <IconButton
                 onClick={handleVoiceClick}
                 sx={{

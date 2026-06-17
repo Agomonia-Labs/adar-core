@@ -80,7 +80,7 @@ function splitSpeechText(text, maxLength = 360) {
  *   onResult  — fn(transcript: string) called when speech recognised
  *   onError   — fn(errorMessage: string)
  */
-export function useSpeech({ lang = 'bn-BD', onResult, onError } = {}) {
+export function useSpeech({ lang = 'bn-BD', labels = {}, onResult, onError } = {}) {
   const [listening,  setListening]  = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const recognitionRef = useRef(null)
@@ -153,17 +153,17 @@ export function useSpeech({ lang = 'bn-BD', onResult, onError } = {}) {
     rec.onerror = (e) => {
       setListening(false)
       const msgs = {
-        'no-speech':   'কথা শোনা যায়নি — আবার চেষ্টা করুন।',
-        'not-allowed': 'মাইক্রোফোন অ্যাক্সেস দিন।',
-        'network':     'নেটওয়ার্ক সমস্যা।',
+        'no-speech':   labels.noSpeech || 'কথা শোনা যায়নি — আবার চেষ্টা করুন।',
+        'not-allowed': labels.micPermission || 'মাইক্রোফোন অ্যাক্সেস দিন।',
+        'network':     labels.network || 'নেটওয়ার্ক সমস্যা।',
       }
-      onError?.(msgs[e.error] || `ভয়েস এরর: ${e.error}`)
+      onError?.(msgs[e.error] || `${labels.speechErrorPrefix || 'ভয়েস এরর'}: ${e.error}`)
     }
 
     rec.onend = () => setListening(false)
 
     recognitionRef.current = rec
-  }, [SpeechRecognition, lang, onResult, onError, webSpeechSupported])
+  }, [SpeechRecognition, labels, lang, onResult, onError, webSpeechSupported])
 
   useEffect(() => {
     if (!webSpeechSupported) return
@@ -321,9 +321,9 @@ export function useSpeech({ lang = 'bn-BD', onResult, onError } = {}) {
             if (!resp.ok) throw new Error(`STT HTTP ${resp.status}`)
             const data = await resp.json()
             if (data.text?.trim()) onResult?.(data.text.trim())
-            else onError?.('কথা বোঝা যায়নি, আবার চেষ্টা করুন।')
+            else onError?.(labels.notUnderstood || 'কথা বোঝা যায়নি, আবার চেষ্টা করুন।')
           } catch (err) {
-            onError?.(`ভয়েস সার্ভার সমস্যা: ${err.message}`)
+            onError?.(`${labels.voiceServerProblemPrefix || 'ভয়েস সার্ভার সমস্যা'}: ${err.message}`)
           }
         }
         reader.readAsDataURL(blob)
@@ -336,9 +336,9 @@ export function useSpeech({ lang = 'bn-BD', onResult, onError } = {}) {
       cloudStopTimerRef.current = setTimeout(stopRecorder, 10000)
     } catch (err) {
       setListening(false)
-      onError?.(`মাইক্রোফোন চালু করা যায়নি: ${err.message}`)
+      onError?.(`${labels.micStartProblemPrefix || 'মাইক্রোফোন চালু করা যায়নি'}: ${err.message}`)
     }
-  }, [lang, onError, onResult])
+  }, [labels, lang, onError, onResult])
 
   // ── STT controls ──────────────────────────────────────────────────────────
   const startListening = useCallback(() => {

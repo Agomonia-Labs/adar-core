@@ -123,7 +123,16 @@ def cuisine_filter(cuisine: str | None) -> list[str]:
     if not cuisine:
         return []
     normalized = cuisine.strip().lower().replace("-", " ")
+    if normalized in {"american fast food", "american_fast_food"}:
+        return ["american", "fast_food"]
     return CUISINE_ALIASES.get(normalized, normalize_tags(cuisine))
+
+
+def cuisine_filter_requires_all(cuisine: str | None) -> bool:
+    if not cuisine:
+        return False
+    normalized = cuisine.strip().lower().replace("-", " ").replace("_", " ")
+    return normalized in {"american fast food"}
 
 
 def primary_cuisine_filter(cuisine: str | None) -> list[str]:
@@ -131,6 +140,8 @@ def primary_cuisine_filter(cuisine: str | None) -> list[str]:
     if not cuisine:
         return []
     normalized = cuisine.strip().lower().replace("-", " ").replace(" ", "_")
+    if normalized == "american_fast_food":
+        return ["american", "fast_food"]
     if normalized == "asian":
         return ["asian"]
     if normalized == "fast_food":
@@ -209,7 +220,9 @@ def extract_quantity(text: str) -> int:
 
 def extract_cuisine(text: str) -> str | None:
     lowered = text.lower()
-    for cuisine in CUISINE_ALIASES:
+    if "american" in lowered and "fast food" in lowered:
+        return "american fast food"
+    for cuisine in sorted(CUISINE_ALIASES, key=len, reverse=True):
         if cuisine.replace("_", " ") in lowered:
             return cuisine
     for dish, cuisine in DISH_CUISINE_HINTS.items():

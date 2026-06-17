@@ -50,6 +50,26 @@ const TENANTS = {
     typingText:     'Searching ARCL data…',
     clearMessage:   'Session cleared. How can I help you with ARCL cricket?',
     footerText:     'Powered by Adar · Data from arcl.org',
+    evalLabels: {
+      accuracy: 'Accuracy',
+      completeness: 'Completeness',
+      relevance: 'Relevance',
+      format: 'Format',
+      overall: 'Overall',
+      scale: '5',
+    },
+    voice: {
+      lang: 'en-US',
+      startTooltip: 'Speak',
+      stopTooltip: 'Stop voice conversation',
+      noSpeech: 'No speech heard. Please try again.',
+      micPermission: 'Please allow microphone access.',
+      network: 'Network problem.',
+      speechErrorPrefix: 'Voice error',
+      notUnderstood: 'Could not understand speech. Please try again.',
+      voiceServerProblemPrefix: 'Voice server problem',
+      micStartProblemPrefix: 'Could not start microphone',
+    },
 
     // Suggested questions shown on first load
     suggestedQuestions: [
@@ -105,6 +125,26 @@ const TENANTS = {
     typingText:     'গীতবিতান খোঁজা হচ্ছে…',
     clearMessage:   'Session cleared. রবীন্দ্রসঙ্গীত বিষয়ে কিছু জানতে চাইলে বলুন।',
     footerText:     'Powered by Adar · গীতবিতান',
+    evalLabels: {
+      accuracy: 'যথার্থতা',
+      completeness: 'সম্পূর্ণতা',
+      relevance: 'প্রাসঙ্গিক',
+      format: 'বিন্যাস',
+      overall: 'সামগ্রিক',
+      scale: '৫',
+    },
+    voice: {
+      lang: 'bn-IN',
+      startTooltip: 'বাংলায় বলুন',
+      stopTooltip: 'ভয়েস কথোপকথন বন্ধ করুন',
+      noSpeech: 'কথা শোনা যায়নি — আবার চেষ্টা করুন।',
+      micPermission: 'মাইক্রোফোন অ্যাক্সেস দিন।',
+      network: 'নেটওয়ার্ক সমস্যা।',
+      speechErrorPrefix: 'ভয়েস এরর',
+      notUnderstood: 'কথা বোঝা যায়নি, আবার চেষ্টা করুন।',
+      voiceServerProblemPrefix: 'ভয়েস সার্ভার সমস্যা',
+      micStartProblemPrefix: 'মাইক্রোফোন চালু করা যায়নি',
+    },
 
     // Suggested questions — full scope across all categories, rotated randomly in UI
     suggestedQuestions: [
@@ -180,6 +220,26 @@ const TENANTS = {
     typingText:     'Searching restaurants, menus, prices, and reviews…',
     clearMessage:   'Session cleared. What food should we compare next?',
     footerText:     'Powered by Adar · Restaurant menu data includes source freshness and confidence',
+    evalLabels: {
+      accuracy: 'Accuracy',
+      completeness: 'Completeness',
+      relevance: 'Relevance',
+      format: 'Format',
+      overall: 'Overall',
+      scale: '5',
+    },
+    voice: {
+      lang: 'en-US',
+      startTooltip: 'Speak',
+      stopTooltip: 'Stop voice conversation',
+      noSpeech: 'No speech heard. Please try again.',
+      micPermission: 'Please allow microphone access.',
+      network: 'Network problem.',
+      speechErrorPrefix: 'Voice error',
+      notUnderstood: 'Could not understand speech. Please try again.',
+      voiceServerProblemPrefix: 'Voice server problem',
+      micStartProblemPrefix: 'Could not start microphone',
+    },
 
     suggestedQuestions: [
       'Find Indian restaurants near Seattle',

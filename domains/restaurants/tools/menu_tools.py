@@ -1,5 +1,7 @@
 """Menu search and ingestion tools."""
 
+import re
+
 from domains.restaurants.db import connect
 from domains.restaurants.ingestion.menu_scraper import scrape_menu_url
 from domains.restaurants.tools.query_utils import (
@@ -28,6 +30,15 @@ def _strict_item_rows(query: str, rows: list) -> list:
         if all(token in haystack for token in tokens):
             strict.append(row)
     return strict
+
+
+def _is_non_menu_charge(row) -> bool:
+    name = str(row["name"] or "").lower()
+    category = str(row["category"] or "").lower()
+    haystack = f"{category} {name}"
+    if re.search(r"\b(delivery fee|service fee|catering delivery|gratuity|tip|subtotal|minimum order|sales tax)\b", haystack):
+        return True
+    return False
 
 
 async def get_restaurant_menu(
@@ -87,6 +98,8 @@ async def get_restaurant_menu(
     deduped_rows = []
     seen = set()
     for row in rows:
+        if _is_non_menu_charge(row):
+            continue
         key = (
             str(row["name"] or "").lower(),
             str(row["category"] or "").lower(),

@@ -194,7 +194,7 @@ export default function Login({ onLogin }) {
 
           <Divider sx={{ my:2 }}>
             <Box component="a"
-              href={tenant.id === 'geetabitan' ? '/demo.geetabitan.html' : '/demo.html'}
+              href={tenant.id === 'geetabitan' ? '/demo.geetabitan.html' : tenant.id === 'restaurants' ? '/demo.restaurants.html' : '/demo.html'}
               target="_blank" rel="noopener noreferrer"
               sx={{
                 display:'inline-flex', alignItems:'center', gap:0.75,

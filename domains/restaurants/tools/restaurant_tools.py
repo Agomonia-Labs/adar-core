@@ -4,6 +4,7 @@ import json
 
 from domains.restaurants.tools.query_utils import (
     cuisine_filter,
+    cuisine_filter_requires_all,
     extract_budget,
     extract_cuisine,
     extract_location,
@@ -50,6 +51,7 @@ async def find_restaurants(
         return {"status": "error", "message": "Unknown location."}
     lat, lng = coords
     cuisine_tags = cuisine_filter(cuisine)
+    cuisine_match_all = cuisine_filter_requires_all(cuisine)
     meal_tags = [meal] if meal else []
     distance_sql = haversine_sql("$1", "$2")
 
@@ -62,7 +64,10 @@ async def find_restaurants(
             from restaurants r
             where r.latitude is not null and r.longitude is not null
               and ({distance_sql}) <= $3
-              and ($4::text[] = '{{}}'::text[] or r.cuisine_tags && $4::text[])
+              and (
+                $7::boolean = false and ($4::text[] = '{{}}'::text[] or r.cuisine_tags && $4::text[])
+                or $7::boolean = true and r.cuisine_tags @> $4::text[]
+              )
               and ($5::text[] = '{{}}'::text[] or r.meal_tags && $5::text[])
             order by rating desc nulls last, review_count desc nulls last
             limit $6
@@ -73,6 +78,7 @@ async def find_restaurants(
             cuisine_tags,
             meal_tags,
             limit,
+            cuisine_match_all,
         )
     finally:
         await conn.close()
@@ -247,7 +253,14 @@ async def list_restaurants(
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
-    """List restaurants in the system, optionally filtered by cuisine and location."""
+    """List restaurants in the system, optionally filtered by cuisine, location, and menu coverage.
+
+    Use this for restaurant inventory/list questions such as "Indian restaurants",
+    "restaurants with menu items", "restaurants that have menus", or
+    "restaurants without menu attached". Set menu_status to "with" when the user
+    asks for restaurants that have menus/menu items, and "without" when they ask
+    for missing/no menus. This returns restaurants, not individual dish rows.
+    """
     cuisine_tags = primary_cuisine_filter(cuisine)
     use_location = bool(location and radius_miles)
     coords = resolve_location(location) if use_location else None
@@ -289,7 +302,7 @@ async def list_restaurants(
             )
             rows = await conn.fetch(
                 f"""
-                select r.id::text, r.name, r.city, r.address, r.rating, r.review_count,
+                select r.id::text, r.name, r.city, r.address, r.phone, r.rating, r.review_count,
                        r.cuisine_tags, r.website_url,
                        count(mi.id)::int as menu_items_ingested,
                        {distance_sql} as distance_miles
@@ -299,12 +312,12 @@ async def list_restaurants(
                   and ({distance_sql}) <= $3
                   and ($4::text[] = '{{}}'::text[] or r.cuisine_tags && $4::text[])
                   {menu_filter_sql_rows}
-                group by r.id, r.name, r.city, r.address, r.rating, r.review_count,
+                group by r.id, r.name, r.city, r.address, r.phone, r.rating, r.review_count,
                          r.cuisine_tags, r.website_url, r.latitude, r.longitude
                 order by r.rating desc nulls last, r.review_count desc nulls last, r.name asc
                 limit $5 offset $6
                 """,
-                lat, lng, radius_miles, cuisine_tags, limit, offset,
+                lat, lng, radius_miles, cuisine_tags, limit, offset, normalized_menu_status,
             )
         else:
             total_row = await conn.fetchrow(
@@ -322,7 +335,7 @@ async def list_restaurants(
             )
             rows = await conn.fetch(
                 """
-                select r.id::text, r.name, r.city, r.address, r.rating, r.review_count,
+                select r.id::text, r.name, r.city, r.address, r.phone, r.rating, r.review_count,
                        r.cuisine_tags, r.website_url,
                        count(mi.id)::int as menu_items_ingested,
                        null::float as distance_miles
@@ -334,7 +347,7 @@ async def list_restaurants(
                     or ($4::text = 'with' and exists (select 1 from menu_items m where m.restaurant_id = r.id))
                     or ($4::text = 'without' and not exists (select 1 from menu_items m where m.restaurant_id = r.id))
                   )
-                group by r.id, r.name, r.city, r.address, r.rating, r.review_count,
+                group by r.id, r.name, r.city, r.address, r.phone, r.rating, r.review_count,
                          r.cuisine_tags, r.website_url
                 order by r.rating desc nulls last, r.review_count desc nulls last, r.name asc
                 limit $2 offset $3
