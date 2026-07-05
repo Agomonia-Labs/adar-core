@@ -392,7 +392,6 @@ async def get_player_season_records(
     season: Optional[str] = None,
 ) -> list[dict]:
     """Direct lookup for player season stats by exact player_name."""
-    from config import ARCL_PLAYER_SEASON_COLLECTION
     filters = {"player_name": player_name}
     if season:
         filters["season"] = season

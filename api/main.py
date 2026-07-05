@@ -1148,7 +1148,7 @@ async def chat(
         if not response_text:
             response_text = "I couldn't find an answer. Please try rephrasing your question."
         response_text = _strip_song_ids(response_text)
-        if _is_youtube_play_request(message) and not _has_youtube_url(response_text):
+        if DOMAIN == "geetabitan" and _is_youtube_play_request(message) and not _has_youtube_url(response_text):
             try:
                 from domains.geetabitan.tools.song_tools import play_youtube_song
                 response_text = _strip_song_ids(await play_youtube_song(message))
@@ -1398,7 +1398,7 @@ async def speech_to_text(
 
     body  = await request.json()
     audio = body.get("audio", "")
-    lang  = body.get("lang", "bn-IN")
+    lang  = body.get("lang", "en-IN")
     mime  = body.get("mime", "audio/webm")   # Firefox sends audio/ogg
 
     if not audio:

@@ -59,7 +59,7 @@ const TENANTS = {
       scale: '5',
     },
     voice: {
-      lang: 'en-US',
+      lang: 'en-IN',
       startTooltip: 'Speak',
       stopTooltip: 'Stop voice conversation',
       noSpeech: 'No speech heard. Please try again.',

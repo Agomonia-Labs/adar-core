@@ -397,6 +397,7 @@ function YouTubeMiniPlayer({ player, onClose }) {
 function ChatTab({ onUsageIncrement }) {
   const voiceLabels = tenant.voice || {}
   // ── Speech to text ──────────────────────────────────────────────────────
+  const sendMessageRef = useRef(null)
   const { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking } = useSpeech({
     lang:     voiceLabels.lang || 'bn-IN',
     labels:   voiceLabels,
@@ -407,7 +408,7 @@ function ChatTab({ onUsageIncrement }) {
         stopListening()
         return
       }
-      if (text.trim()) sendMessage(text.trim(), { speakResponse:true })
+      if (text.trim()) sendMessageRef.current?.(text.trim(), { speakResponse:true })
     },
     onError: (e) => {
       console.warn('Speech error:', e)
@@ -531,6 +532,8 @@ function ChatTab({ onUsageIncrement }) {
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }, [input, loading, onUsageIncrement, playYouTubeInsideApp, restartVoiceListening, sessionId, speakWithTimeout, userId])
+
+  useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
 
   const handleKeyDown = (e) => {
     if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }

@@ -93,6 +93,7 @@ else:
     # Maps numeric season IDs (as used in arcl.org URLs) to human-readable names.
     # Update this dict whenever a new ARCL season is added.
     ARCL_SEASON_MAP: dict = {
+        70: "Summer 2026",
         69: "Spring 2026",
         68: "Fall 2025",
         67: "Spring 2025",
@@ -167,9 +168,10 @@ OFFTOPIC_GUARD: dict = {
             "arcl", "cricket", "batting", "bowling", "wicket", "runs",
             "overs", "innings", "umpire", "wide", "lbw", "caught",
             "bowled", "dismissed", "scorecard", "schedule", "standing",
-            "division", "season", "player", "team", "match", "league",
-            "spring", "summer", "rule", "eligible", "stats", "average",
-            "strike rate", "economy", "agomoni", "tigers", "spring 2026",
+            "division", "season", "player", "team", "two teams","match",
+            "league", "spring", "summer", "rule", "eligible", "stats", "average",
+            "strike rate", "economy", "agomoni", "tigers", "spring 2026", "summer 2026",
+            "same season", "eligible to play"
         ],
         "reject_msg": (
             "I'm Adar, the ARCL cricket assistant. I can only help with "

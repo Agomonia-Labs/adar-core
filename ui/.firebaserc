@@ -11,12 +11,11 @@
         "geetabitan": [
           "geetabitan-adar"
         ],
-        "arcl": [
-          "adar-arcl",
-          "bdas-493785"
-        ],
         "restaurants": [
           "restaurants-adar"
+        ],
+        "arcl": [
+          "bdas-493785"
         ]
       }
     }
