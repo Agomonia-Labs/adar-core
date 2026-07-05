@@ -23,6 +23,14 @@ const api = axios.create({
 })
 
 const REFRESH_INTERVAL = 15000
+const POLL_VISIBLE_DAYS = 14
+
+function isPollVisible(poll) {
+  if (!poll?.created_at) return true
+  const createdAt = new Date(poll.created_at)
+  if (Number.isNaN(createdAt.getTime())) return true
+  return Date.now() - createdAt.getTime() <= POLL_VISIBLE_DAYS * 24 * 60 * 60 * 1000
+}
 
 // ── Tenant strings ────────────────────────────────────────────────────────────
 
@@ -406,7 +414,7 @@ export default function PollsPage() {
     if (!silent) setLoading(true)
     try {
       const { data } = await api.get('/api/polls')
-      setPolls(data)
+      setPolls(data.filter(isPollVisible))
     } catch {
       if (!silent) setPolls([])
     } finally {
@@ -420,12 +428,14 @@ export default function PollsPage() {
     return () => clearInterval(timerRef.current)
   }, [loadPolls])
 
-  const handleCreated = (poll) => setPolls(prev => [poll, ...prev])
+  const handleCreated = (poll) => setPolls(prev => isPollVisible(poll) ? [poll, ...prev] : prev)
   const handleFound   = (poll) => setPolls(prev =>
-    prev.find(p => p.poll_id === poll.poll_id) ? prev : [poll, ...prev]
+    !isPollVisible(poll) || prev.find(p => p.poll_id === poll.poll_id) ? prev : [poll, ...prev]
   )
   const handleUpdate  = (updated) => setPolls(prev =>
-    prev.map(p => p.poll_id === updated.poll_id ? updated : p)
+    prev
+      .map(p => p.poll_id === updated.poll_id ? updated : p)
+      .filter(isPollVisible)
   )
 
   return (
