@@ -5,7 +5,7 @@ Polls stored in Firestore under {DOMAIN}_polls collection.
 Works for both ARCL (cricket) and Geetabitan (Tagore songs) with no code duplication.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/polls", tags=["polls"])
 
 # ── CHANGE 2: collection name is domain-scoped ────────────────────────────────
 POLLS_COLLECTION = f"{DOMAIN}_polls"
+POLL_VISIBLE_DAYS = 14
 
 
 def get_db():
@@ -53,6 +54,36 @@ class PollResponse(BaseModel):
     created_by: str
     created_at: str
     total_votes: int
+
+
+def _parse_created_at(value: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def _is_poll_visible(data: dict) -> bool:
+    if not data.get("active", True):
+        return False
+    created_at = _parse_created_at(data.get("created_at", ""))
+    if not created_at:
+        return True
+    return datetime.utcnow() - created_at <= timedelta(days=POLL_VISIBLE_DAYS)
+
+
+def _to_poll_response(data: dict) -> PollResponse:
+    total = sum(len(o.get("votes", [])) for o in data["options"])
+    return PollResponse(
+        poll_id=data["poll_id"],
+        question=data["question"],
+        options=[PollOption(**o) for o in data["options"]],
+        created_by=data["created_by"],
+        created_at=data["created_at"],
+        total_votes=total,
+    )
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -100,16 +131,10 @@ async def get_poll(poll_id: str):
         raise HTTPException(status_code=404, detail="Poll not found")
 
     data = doc.to_dict()
-    total = sum(len(o.get("votes", [])) for o in data["options"])
+    if not _is_poll_visible(data):
+        raise HTTPException(status_code=404, detail="Poll not found")
 
-    return PollResponse(
-        poll_id=data["poll_id"],
-        question=data["question"],
-        options=[PollOption(**o) for o in data["options"]],
-        created_by=data["created_by"],
-        created_at=data["created_at"],
-        total_votes=total,
-    )
+    return _to_poll_response(data)
 
 
 @router.post("/{poll_id}/vote", response_model=PollResponse)
@@ -125,6 +150,8 @@ async def vote(poll_id: str, request: VoteRequest):
     data = doc.to_dict()
 
     if not data.get("active", True):
+        raise HTTPException(status_code=400, detail="This poll is closed")
+    if not _is_poll_visible(data):
         raise HTTPException(status_code=400, detail="This poll is closed")
 
     options = data["options"]
@@ -143,16 +170,7 @@ async def vote(poll_id: str, request: VoteRequest):
     options[request.option_index]["votes"].append(voter)
     await ref.update({"options": options})
 
-    total = sum(len(o.get("votes", [])) for o in options)
-
-    return PollResponse(
-        poll_id=data["poll_id"],
-        question=data["question"],
-        options=[PollOption(**o) for o in options],
-        created_by=data["created_by"],
-        created_at=data["created_at"],
-        total_votes=total,
-    )
+    return _to_poll_response({**data, "options": options})
 
 
 @router.get("", response_model=list[PollResponse])
@@ -162,21 +180,13 @@ async def list_polls():
     polls = []
     async for doc in db.collection(POLLS_COLLECTION) \
                        .where("active", "==", True) \
-                       .limit(5) \
                        .stream():
         data = doc.to_dict()
-        total = sum(len(o.get("votes", [])) for o in data["options"])
-        polls.append(PollResponse(
-            poll_id=data["poll_id"],
-            question=data["question"],
-            options=[PollOption(**o) for o in data["options"]],
-            created_by=data["created_by"],
-            created_at=data["created_at"],
-            total_votes=total,
-        ))
+        if _is_poll_visible(data):
+            polls.append(_to_poll_response(data))
 
     polls.sort(key=lambda p: p.created_at, reverse=True)
-    return polls
+    return polls[:5]
 
 
 @router.post("/{poll_id}/close")

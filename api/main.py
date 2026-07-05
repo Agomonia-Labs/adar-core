@@ -1306,9 +1306,8 @@ async def demo_tts_options():
 @app.post("/api/demo/tts")
 async def demo_tts(request: Request):
     """
-    Text-to-speech for the Geetabitan demo.
-    Uses GEETABITAN_TTS_API_KEY (restricted to texttospeech.googleapis.com).
-    Voice: bn-BD-Standard-B (Bangladeshi male).
+    Text-to-speech for voice chat.
+    Uses tenant-provided language to choose English or Bangla voice.
     Returns base64-encoded MP3. Cached in memory.
     """
     import base64, hashlib
@@ -1316,6 +1315,7 @@ async def demo_tts(request: Request):
 
     body = await request.json()
     raw_text = (body.get("text") or "").strip()
+    lang = (body.get("lang") or "bn-IN").strip()
     text = raw_text[:1200].strip()
     if len(text) > 380:
         parts = []
@@ -1335,7 +1335,7 @@ async def demo_tts(request: Request):
 
     if not hasattr(app.state, "tts_cache"):
         app.state.tts_cache = {}
-    cache_key = hashlib.md5(text.encode()).hexdigest()
+    cache_key = hashlib.md5(f"{lang}:{text}".encode()).hexdigest()
     if cache_key in app.state.tts_cache:
         from fastapi.responses import JSONResponse as _JR
         return _JR(
@@ -1348,16 +1348,25 @@ async def demo_tts(request: Request):
     if not api_key:
         raise HTTPException(status_code=500, detail="TTS API key not configured")
 
+    voice = (
+        {
+            "languageCode": "en-US",
+            "name":         "en-US-Chirp3-HD-Fenrir",
+        }
+        if lang.lower().startswith("en")
+        else {
+            "languageCode": "bn-IN",
+            "name":         "bn-IN-Chirp3-HD-Fenrir",
+        }
+    )
+
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 f"https://texttospeech.googleapis.com/v1/text:synthesize?key={api_key}",
                 json={
                     "input": {"text": text},
-                    "voice": {
-                        "languageCode": "bn-IN",
-                        "name":         "bn-IN-Chirp3-HD-Fenrir",  # best quality Bengali male
-                    },
+                    "voice": voice,
                     "audioConfig": {
                         "audioEncoding": "MP3",
                         # speakingRate and pitch not supported by Chirp3-HD

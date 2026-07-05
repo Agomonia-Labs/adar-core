@@ -364,7 +364,7 @@ export function useSpeech({ lang = 'bn-BD', labels = {}, onResult, onError } = {
     setListening(false)
   }, [])
 
-  // ── TTS: speak reply with the same Google Fenrir voice used by the demo ───
+  // ── TTS: speak reply using the tenant language selected in tenant.js ──────
   const speakBangla = useCallback(async (text) => {
     const chunks = splitSpeechText(toSpeechText(text))
     if (!chunks.length) return false
@@ -392,7 +392,7 @@ export function useSpeech({ lang = 'bn-BD', labels = {}, onResult, onError } = {
         const resp = await fetch(`${API_URL}/api/demo/tts`, {
           method: 'POST',
           headers: { 'Content-Type':'application/json' },
-          body: JSON.stringify({ text:chunks[index] }),
+          body: JSON.stringify({ text:chunks[index], lang }),
         })
         if (!resp.ok) throw new Error(`TTS HTTP ${resp.status}`)
         const data = await resp.json()
@@ -443,7 +443,7 @@ export function useSpeech({ lang = 'bn-BD', labels = {}, onResult, onError } = {
       stopInterruptListening()
       return false
     }
-  }, [getAudio, startInterruptListening, stopInterruptListening])
+  }, [getAudio, lang, startInterruptListening, stopInterruptListening])
 
   const stopSpeaking = useCallback(() => {
     speakRunRef.current += 1
