@@ -3,6 +3,12 @@ domains/geetabitan/tools/song_tools.py
 Song retrieval and summary tools.
 """
 
+import json
+import re
+import unicodedata
+from functools import lru_cache
+from pathlib import Path
+
 from src.adar.db import direct_query, get_documents_by_field, get_db, vector_search
 from domains.geetabitan.config import FIRESTORE_COLLECTION
 from domains.geetabitan.data.raag_metadata import TAAL_DATA
@@ -17,17 +23,124 @@ def _taal_meta(taal: str) -> dict:
     )
 
 
+def _normalize_text(text: str) -> str:
+    text = unicodedata.normalize("NFC", text or "")
+    text = text.replace("\u200c", "").replace("\u200d", "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _compact_bengali(text: str) -> str:
+    return re.sub(r"[^\w\u0980-\u09ff]+", "", _normalize_text(text).lower())
+
+
+def _clean_song_query(query: str) -> str:
+    """Remove analysis/request words so title resolution sees the song phrase."""
+    text = _normalize_text(query)
+    text = re.sub(r"\[song_id:([^\]]+)\]", r"\1", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bsong_id\b\s*[:=]\s*", "", text, flags=re.IGNORECASE)
+    for phrase in (
+        "গানের প্রেক্ষাপট বলো", "গানের প্রেক্ষাপট", "প্রেক্ষাপট বলো",
+        "প্রেক্ষাপট", "গানের অর্থ বলো", "গানের অর্থ", "অর্থ বলো", "অর্থ",
+        "আবেগ বলো", "আবেগ", "চিত্রকল্প বলো", "চিত্রকল্প", "সারসংক্ষেপ",
+        "summary", "context", "meaning", "emotion", "imagery", "song",
+    ):
+        text = text.replace(phrase, " ")
+    return _normalize_text(text.strip(" ।.!?\"'‘’“”"))
+
+
+def _doc_id_from_doc(doc: dict) -> str:
+    return doc.get("doc_id") or doc.get("firestore_id") or doc.get("id") or ""
+
+
+@lru_cache(maxsize=1)
+def _local_songs() -> tuple[dict, ...]:
+    data_path = Path(__file__).resolve().parents[1] / "data" / "songs.json"
+    try:
+        with data_path.open(encoding="utf-8") as f:
+            songs = json.load(f)
+    except Exception:
+        return ()
+    return tuple(s for s in songs if isinstance(s, dict))
+
+
+def _find_local_song(query: str) -> dict | None:
+    query_key = _compact_bengali(query)
+    if not query_key:
+        return None
+
+    best_prefix = None
+    for song in _local_songs():
+        fields = (
+            song.get("title", ""),
+            song.get("first_line", ""),
+            song.get("lyrics_full", ""),
+        )
+        keys = [_compact_bengali(value) for value in fields if value]
+        if any(query_key == key for key in keys):
+            return dict(song)
+        if not best_prefix and any(key.startswith(query_key) for key in keys):
+            best_prefix = song
+        if not best_prefix and any(query_key in key for key in keys):
+            best_prefix = song
+    return dict(best_prefix) if best_prefix else None
+
+
 # ── Internal: fetch one doc by its Firestore document ID ─────────────────────
 
 async def _get_doc_by_id(doc_id: str) -> dict | None:
-    db  = get_db()
-    doc = await db.collection(FIRESTORE_COLLECTION).document(doc_id).get()
+    try:
+        db  = get_db()
+        doc = await db.collection(FIRESTORE_COLLECTION).document(doc_id).get()
+    except Exception:
+        return None
     if not doc.exists:
         return None
     data = doc.to_dict()
     data["doc_id"] = doc.id
     data.pop("embedding", None)
     return data
+
+
+async def _resolve_song_doc(song_id_or_query: str) -> dict | None:
+    """Resolve a Firestore ID, visible title, first line, or user query to a song."""
+    raw = _normalize_text(song_id_or_query)
+    if not raw:
+        return None
+
+    marker = re.search(r"\[song_id:([^\]]+)\]", raw, flags=re.IGNORECASE)
+    if marker:
+        raw = marker.group(1).strip()
+
+    doc = await _get_doc_by_id(raw)
+    if doc:
+        return doc
+
+    query = _clean_song_query(raw)
+    if not query:
+        return None
+
+    for field in ("title", "first_line"):
+        matches = await get_documents_by_field(
+            collection=FIRESTORE_COLLECTION,
+            field=field,
+            value=query,
+            limit=1,
+        )
+        if matches:
+            return matches[0]
+
+    local_match = _find_local_song(query)
+    if local_match:
+        local_id = _doc_id_from_doc(local_match)
+        firestore_doc = await _get_doc_by_id(local_id) if local_id else None
+        return firestore_doc or local_match
+
+    matches = await vector_search(
+        collection=FIRESTORE_COLLECTION,
+        query=query,
+        top_k=1,
+    )
+    return matches[0] if matches else None
 
 
 # ── Lyrics formatter ──────────────────────────────────────────────────────────
@@ -77,8 +190,10 @@ def _song_card(doc: dict) -> str:
     taal    = doc.get("taal", "") or "—"
     beats   = tm.get("beats", "")
     beats_str = f" | {beats} মাত্রা" if beats else ""
+    song_id = _doc_id_from_doc(doc)
 
     lines = [
+        f"[song_id:{song_id}]" if song_id else "",
         "─────────────────────────────",
         f"🎵 **{doc['title']}**",
         "─────────────────────────────",
@@ -86,22 +201,17 @@ def _song_card(doc: dict) -> str:
         "",
         _format_lyrics(doc),
     ]
-    return "\n".join(lines)
+    return "\n".join(line for line in lines if line)
 
 
 # ── Song retrieval tools ──────────────────────────────────────────────────────
 
 async def get_song_by_title(title: str) -> str:
-    """Fetch a Tagore song by its Bengali title (exact match).
+    """Fetch a Tagore song by title, first line, or close query.
     Returns complete song with formatted lyrics."""
-    results = await get_documents_by_field(
-        collection=FIRESTORE_COLLECTION,
-        field="title",
-        value=title,
-        limit=1,
-    )
-    if results:
-        return _song_card(results[0])
+    doc = await _resolve_song_doc(title)
+    if doc:
+        return _song_card(doc)
     return (
         f"'{title}' শিরোনামে সরাসরি কোনো গান পাওয়া যায়নি। "
         f"vector_search_songs দিয়ে খোঁজার চেষ্টা করুন।"
@@ -414,9 +524,9 @@ async def play_youtube_song(query: str = "") -> str:
 
 async def get_song_summary(song_id: str) -> str:
     """Return the full pre-generated summary — context, meaning, emotion, imagery."""
-    doc = await _get_doc_by_id(song_id)
+    doc = await _resolve_song_doc(song_id)
     if not doc:
-        return "গান পাওয়া যায়নি।"
+        return "গান পাওয়া যায়নি। অনুগ্রহ করে গানের নাম দিয়ে আবার চেষ্টা করুন।"
     summary = doc.get("summary")
     if not summary:
         return (
@@ -434,10 +544,11 @@ async def get_song_summary(song_id: str) -> str:
 
 async def summarize_aspect(song_id: str, aspect: str) -> str:
     """Return or generate one aspect of a song summary.
+    song_id can be a Firestore song_id, a [song_id:...] marker, or a song title/query.
     aspect: context | meaning | emotion | imagery | all"""
-    doc = await _get_doc_by_id(song_id)
+    doc = await _resolve_song_doc(song_id)
     if not doc:
-        return "গান পাওয়া যায়নি।"
+        return "গান পাওয়া যায়নি। অনুগ্রহ করে গানের নাম দিয়ে আবার চেষ্টা করুন।"
 
     cached    = doc.get("summary", {})
     label_map = {
