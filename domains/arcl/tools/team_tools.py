@@ -140,7 +140,22 @@ async def get_team_season(team_name: str, season: str) -> dict:
         records = [r for r in all_rec if season.lower() in r.get("season", "").lower()]
     if not records:
         return {"message": f"No data for {team_name} in {season}. Run standings ingestion."}
-    r = records[0]
+
+    def _as_int(value) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    # Re-ingesting active seasons can leave older snapshots in Firestore.
+    # Prefer the most complete/current standings row over arbitrary query order.
+    r = max(
+        records,
+        key=lambda rec: (
+            _as_int(rec.get("wins")) + _as_int(rec.get("losses")) + _as_int(rec.get("tied")),
+            _as_int(rec.get("points")),
+        ),
+    )
     return {
         "team_name": r.get("team_name", team_name), "season": r.get("season", season),
         "division": r.get("division"), "wins": r.get("wins", 0),
