@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   ThemeProvider, CssBaseline, Box, Paper, Typography,
   TextField, IconButton, Chip, Avatar, Divider, Button,
-  CircularProgress, Tooltip, Stack, Tab, Tabs,
+  CircularProgress, Tooltip, Stack, Tab, Tabs, MenuItem,
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import MicIcon from '@mui/icons-material/Mic'
@@ -396,10 +396,17 @@ function YouTubeMiniPlayer({ player, onClose }) {
 
 function ChatTab({ onUsageIncrement }) {
   const voiceLabels = tenant.voice || {}
+  const voiceLanguages = voiceLabels.languages || [{ code:voiceLabels.lang || 'bn-IN', label:'Voice' }]
+  const [voiceLang, setVoiceLang] = useState(() => {
+    const stored = localStorage.getItem(`adar_voice_lang_${tenant.id}`)
+    return voiceLanguages.some(language => language.code === stored)
+      ? stored
+      : (voiceLabels.lang || voiceLanguages[0]?.code || 'bn-IN')
+  })
   // ── Speech to text ──────────────────────────────────────────────────────
   const sendMessageRef = useRef(null)
   const { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking } = useSpeech({
-    lang:     voiceLabels.lang || 'bn-IN',
+    lang:     voiceLang,
     labels:   voiceLabels,
     onResult: (text) => {
       if (VOICE_STOP_COMMAND_RE.test(text)) {
@@ -437,6 +444,7 @@ function ChatTab({ onUsageIncrement }) {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [messages, loading])
   useEffect(() => { startListeningRef.current = startListening }, [startListening])
   useEffect(() => { voiceConversationRef.current = voiceModeActive }, [voiceModeActive])
+  useEffect(() => { localStorage.setItem(`adar_voice_lang_${tenant.id}`, voiceLang) }, [voiceLang])
 
   useEffect(() => {
     if (!voiceModeActive || listening || isSpeaking || loading || sendingRef.current) return
@@ -632,8 +640,32 @@ function ChatTab({ onUsageIncrement }) {
               },
             }}
           />
+          {supported && voiceLanguages.length > 1 && (
+            <TextField
+              select
+              size="small"
+              value={voiceLang}
+              onChange={e => setVoiceLang(e.target.value)}
+              disabled={loading || listening || isSpeaking}
+              sx={{
+                width: 112,
+                flexShrink: 0,
+                '& .MuiSelect-select': { fontSize:'0.78rem', py:1 },
+                '& .MuiOutlinedInput-root': {
+                  bgcolor:'background.default',
+                  '& fieldset': { borderColor:tenant.divider },
+                },
+              }}
+            >
+              {voiceLanguages.map(language => (
+                <MenuItem key={language.code} value={language.code}>
+                  {language.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
           {supported && (
-            <Tooltip title={voiceModeActive ? (voiceLabels.stopTooltip || 'ভয়েস কথোপকথন বন্ধ করুন') : (voiceLabels.startTooltip || 'বাংলায় বলুন')}>
+            <Tooltip title={voiceModeActive ? (voiceLabels.stopTooltip || 'ভয়েস কথোপকথন বন্ধ করুন') : `${voiceLabels.startTooltip || 'বাংলায় বলুন'} (${voiceLang})`}>
               <IconButton
                 onClick={handleVoiceClick}
                 sx={{

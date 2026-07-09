@@ -1,5 +1,5 @@
 // hooks/useSpeech.js
-// STT (speech-to-text) + TTS (text-to-speech) in Bangla
+// STT (speech-to-text) + TTS (text-to-speech) using tenant-selected language
 // Used by ChatTab in App.jsx
 
 import { useState, useRef, useCallback, useEffect } from 'react'
@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 const API_URL = import.meta.env.VITE_API_URL || ''
 const SILENT_AUDIO =
   'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
-const STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল/i
+const STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet|detener|para|silencio)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল|रुको|बंद करो|चुप|توقف|أوقف|صمت/i
 
 function audioUrlFromBase64(base64Audio) {
   const raw = atob(base64Audio)
@@ -72,15 +72,16 @@ function splitSpeechText(text, maxLength = 360) {
  *   supported      — bool, browser supports STT
  *   startListening — fn()
  *   stopListening  — fn()
- *   speakBangla    — fn(text: string) — speaks text in Bangla voice
+ *   speakBangla    — fn(text: string) — speaks text in the selected voice.
+ *                    Name kept for compatibility with existing App.jsx.
  *   stopSpeaking   — fn()
  *
  * Options:
- *   lang      — STT language (default 'bn-BD')
+ *   lang      — STT/TTS language (default 'en-US')
  *   onResult  — fn(transcript: string) called when speech recognised
  *   onError   — fn(errorMessage: string)
  */
-export function useSpeech({ lang = 'bn-BD', labels = {}, onResult, onError } = {}) {
+export function useSpeech({ lang = 'en-US', labels = {}, onResult, onError } = {}) {
   const [listening,  setListening]  = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const recognitionRef = useRef(null)

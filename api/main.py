@@ -1307,7 +1307,9 @@ async def demo_tts_options():
 async def demo_tts(request: Request):
     """
     Text-to-speech for voice chat.
-    Uses tenant-provided language to choose English or Bangla voice.
+    Uses tenant-provided language to choose the matching voice.
+    ARCL can send English, Bangla, Hindi, Arabic, or Spanish.
+    Geetabitan and Restaurants keep sending their fixed tenant language.
     Returns base64-encoded MP3. Cached in memory.
     """
     import base64, hashlib
@@ -1315,7 +1317,7 @@ async def demo_tts(request: Request):
 
     body = await request.json()
     raw_text = (body.get("text") or "").strip()
-    lang = (body.get("lang") or "bn-IN").strip()
+    lang = (body.get("lang") or "en-US").strip()
     text = raw_text[:1200].strip()
     if len(text) > 380:
         parts = []
@@ -1348,17 +1350,27 @@ async def demo_tts(request: Request):
     if not api_key:
         raise HTTPException(status_code=500, detail="TTS API key not configured")
 
-    voice = (
-        {
+    primary_lang = lang.lower().split("-")[0]
+    voice_by_language = {
+        "en": {
             "languageCode": "en-US",
             "name":         "en-US-Chirp3-HD-Fenrir",
-        }
-        if lang.lower().startswith("en")
-        else {
+        },
+        "bn": {
             "languageCode": "bn-IN",
             "name":         "bn-IN-Chirp3-HD-Fenrir",
-        }
-    )
+        },
+        "hi": {
+            "languageCode": "hi-IN",
+        },
+        "ar": {
+            "languageCode": "ar-XA",
+        },
+        "es": {
+            "languageCode": "es-US",
+        },
+    }
+    voice = voice_by_language.get(primary_lang, voice_by_language["en"])
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:

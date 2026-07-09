@@ -16,6 +16,14 @@ const _domain =
     : import.meta.env.VITE_API_URL?.includes('restaurant') ? 'restaurants'
     : 'arcl')
 
+const ARCL_VOICE_LANGUAGES = [
+  { code:'en-US', label:'English' },
+  { code:'bn-IN', label:'Bangla' },
+  { code:'hi-IN', label:'Hindi' },
+  { code:'ar-XA', label:'Arabic' },
+  { code:'es-US', label:'Spanish' },
+]
+
 const TENANTS = {
 
   arcl: {
@@ -59,7 +67,8 @@ const TENANTS = {
       scale: '5',
     },
     voice: {
-      lang: 'en-IN',
+      lang: 'en-US',
+      languages: ARCL_VOICE_LANGUAGES,
       startTooltip: 'Speak',
       stopTooltip: 'Stop voice conversation',
       noSpeech: 'No speech heard. Please try again.',
