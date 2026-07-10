@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 const API_URL = import.meta.env.VITE_API_URL || ''
 const SILENT_AUDIO =
   'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
-const STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet|detener|para|silencio)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল|रुको|बंद करो|चुप|توقف|أوقف|صمت/i
+const STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet|detener|para|silencio)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল|रुको|बंद करो|चुप|رکو|بند کرو|خاموش|توقف|أوقف|صمت/i
 
 function audioUrlFromBase64(base64Audio) {
   const raw = atob(base64Audio)

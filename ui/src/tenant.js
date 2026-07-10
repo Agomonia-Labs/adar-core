@@ -20,6 +20,7 @@ const ARCL_VOICE_LANGUAGES = [
   { code:'en-US', label:'English' },
   { code:'bn-IN', label:'Bangla' },
   { code:'hi-IN', label:'Hindi' },
+  { code:'ur-IN', label:'Urdu' },
   { code:'ar-XA', label:'Arabic' },
   { code:'es-US', label:'Spanish' },
 ]

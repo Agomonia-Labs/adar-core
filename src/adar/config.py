@@ -95,19 +95,25 @@ else:
     ARCL_SEASON_MAP: dict = {
         70: "Summer 2026",
         69: "Spring 2026",
-        68: "Fall 2025",
-        67: "Spring 2025",
-        66: "Fall 2024",
-        65: "Spring 2024",
+        68: "Winter 2025",
+        67: "Fall 2025",
+        66: "Summer 2025",
+        65: "Spring 2025",
+        64: "Fall 2024",
+        63: "Summer 2024",
+        62: "Spring 2024",
     }
 
     # Reverse lookup: season name → season ID
     ARCL_SEASON_NAME_TO_ID: dict = {v: k for k, v in {
         69: "Spring 2026",
-        68: "Fall 2025",
-        67: "Spring 2025",
-        66: "Fall 2024",
-        65: "Spring 2024",
+        68: "Winter 2025",
+        67: "Fall 2025",
+        66: "Summer 2025",
+        65: "Spring 2025",
+        64: "Fall 2024",
+        63: "Summer 2024",
+        62: "Spring 2024",
     }.items()}
 
     # ── Scrape pages ──────────────────────────────────────────────────────────

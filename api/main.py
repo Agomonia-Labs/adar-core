@@ -1308,7 +1308,7 @@ async def demo_tts(request: Request):
     """
     Text-to-speech for voice chat.
     Uses tenant-provided language to choose the matching voice.
-    ARCL can send English, Bangla, Hindi, Arabic, or Spanish.
+    ARCL can send English, Bangla, Hindi, Urdu, Arabic, or Spanish.
     Geetabitan and Restaurants keep sending their fixed tenant language.
     Returns base64-encoded MP3. Cached in memory.
     """
@@ -1362,6 +1362,9 @@ async def demo_tts(request: Request):
         },
         "hi": {
             "languageCode": "hi-IN",
+        },
+        "ur": {
+            "languageCode": "ur-IN",
         },
         "ar": {
             "languageCode": "ar-XA",
