@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from api.routes.auth import get_current_team
+from src.adar.db import get_db
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
@@ -56,25 +57,11 @@ def _plan_catalogue() -> dict:
         }
     return {
         "basic": {
-            "name":        "ARCL Basic",
-            "price_id":    os.getenv("STRIPE_PRICE_BASIC", ""),
-            "trial_days":  14,
-            "quota":       50,
-            "description": "Basic plan",
-        },
-        "standard": {
-            "name":        "ARCL Standard",
+            "name":        "Adar ARCL",
             "price_id":    os.getenv("STRIPE_PRICE_STANDARD", ""),
-            "trial_days":  14,
-            "quota":       200,
-            "description": "Standard plan",
-        },
-        "unlimited": {
-            "name":        "ARCL Unlimited",
-            "price_id":    os.getenv("STRIPE_PRICE_UNLIMITED", ""),
-            "trial_days":  14,
+            "trial_days":  30,
             "quota":       1000,
-            "description": "Unlimited plan",
+            "description": "$12/month · 30-day free trial · Full access",
         },
     }
 
@@ -99,10 +86,24 @@ def _frontend_url() -> str:
 def _fs_update(team_id: str, updates: dict):
     """Sync Firestore upsert — creates document if it doesn't exist."""
     from google.cloud import firestore
-    db  = firestore.Client(database=os.getenv("AUTH_FIRESTORE_DATABASE", "(default)"))
+    db  = firestore.Client(database=os.getenv("FIRESTORE_DATABASE", "tigers-arcl"))
     ref = db.collection(TEAMS_COLLECTION).document(team_id)
     # set(merge=True) creates the doc if missing, updates fields if it exists
     ref.set(updates, merge=True)
+
+
+async def _get_team_from_db(team_id: str) -> dict:
+    """Fetch fresh team data from Firestore — JWT doesn't contain stripe_customer_id."""
+    db = get_db()
+    doc = await db.collection(TEAMS_COLLECTION).document(team_id).get()
+    return doc.to_dict() or {} if doc.exists else {}
+
+
+async def _get_team_from_db(team_id: str) -> dict:
+    """Fetch fresh team data from Firestore — JWT doesn't contain stripe_customer_id."""
+    db = get_db()
+    doc = await db.collection(TEAMS_COLLECTION).document(team_id).get()
+    return doc.to_dict() or {} if doc.exists else {}
 
 
 async def _update_team(team_id: str, updates: dict):
@@ -188,7 +189,10 @@ async def create_checkout(req: CheckoutRequest, team: dict = Depends(get_current
 async def billing_portal(team: dict = Depends(get_current_team)):
     if not _billing_enabled():
         raise HTTPException(400, "Billing is disabled for this environment")
-    customer_id = team.get("stripe_customer_id")
+    # Fetch from Firestore — stripe_customer_id is not in JWT
+    team_id = team.get("team_id", "")
+    team_db = await _get_team_from_db(team_id)
+    customer_id = team_db.get("stripe_customer_id") or team.get("stripe_customer_id")
     if not customer_id:
         raise HTTPException(400, "No Stripe customer found")
     session = stripe.billing_portal.Session.create(customer=customer_id, return_url=_frontend_url())
@@ -216,50 +220,65 @@ async def get_billing(team: dict = Depends(get_current_team)):
             "daily_quota": catalogue.get(plan_key, {}).get("quota", 500),
             "billing_disabled": True,
         }
-    customer_id = team.get("stripe_customer_id")
+    # Fetch fresh from Firestore — stripe_customer_id is not in JWT
+    team_id  = team.get("team_id", "")
+    team_db  = await _get_team_from_db(team_id)
+    customer_id = team_db.get("stripe_customer_id") or team.get("stripe_customer_id")
     if not customer_id:
-        return {"status": "inactive", "domain": DOMAIN}
+        return {"status": "inactive", "domain": DOMAIN,
+                "message": "No billing account found. Please subscribe first."}
     try:
+        import logging as _log
+        _log.info(f"[billing] Fetching Stripe subs for customer={customer_id}")
         subs = stripe.Subscription.list(customer=customer_id, status="all", limit=1)
+        _log.info(f"[billing] Found {len(subs.data)} subscriptions")
         if not subs.data:
             return {"status": "inactive", "domain": DOMAIN}
         sub      = subs.data[0]
-        plan_key = sub.get("metadata", {}).get("plan", "standard")
-        trial_end = sub.get("trial_end")
+        # Stripe SDK returns objects — use attribute access with fallbacks
+        # Use Firestore subscription_plan — more reliable than Stripe metadata
+        plan_key = team_db.get("subscription_plan", "standard") or "standard"
+        trial_end = getattr(sub, "trial_end", None)
         trial_days = max(0, int((trial_end - time.time()) / 86400)) if trial_end and trial_end > time.time() else None
-        next_date  = datetime.utcfromtimestamp(sub["current_period_end"]).isoformat() if sub.get("current_period_end") else None
+        period_end = getattr(sub, "current_period_end", None)
+        next_date  = datetime.utcfromtimestamp(period_end).isoformat() if period_end else None
         # Fetch invoices
         invoices = []
         try:
             inv_list = stripe.Invoice.list(customer=customer_id, limit=10)
             for inv in inv_list.data:
-                if inv.get("amount_paid", 0) > 0 or inv.get("amount_due", 0) > 0:
+                amount_paid = getattr(inv, "amount_paid", 0) or 0
+                amount_due  = getattr(inv, "amount_due",  0) or 0
+                if amount_paid > 0 or amount_due > 0:
                     invoices.append({
-                        "id":       inv["id"],
-                        "date":     datetime.utcfromtimestamp(inv["created"]).strftime("%b %d, %Y"),
-                        "amount":   (inv.get("amount_paid") or inv.get("amount_due", 0)) / 100,
-                        "currency": inv.get("currency", "usd").upper(),
-                        "status":   inv.get("status", ""),
-                        "pdf_url":  inv.get("invoice_pdf", ""),
+                        "id":       getattr(inv, "id", ""),
+                        "date":     datetime.utcfromtimestamp(getattr(inv, "created", 0)).strftime("%b %d, %Y"),
+                        "amount":   (amount_paid or amount_due) / 100,
+                        "currency": (getattr(inv, "currency", "usd") or "usd").upper(),
+                        "status":   getattr(inv, "status", ""),
+                        "pdf_url":  getattr(inv, "invoice_pdf", "") or "",
                     })
-        except stripe.StripeError:
+        except Exception:
             pass
 
         trial_end_date = None
         if trial_end and trial_end > time.time():
-            trial_end_date = datetime.utcfromtimestamp(trial_end).strftime("%Y-%m-%d")
+            try:
+                trial_end_date = datetime.utcfromtimestamp(trial_end).strftime("%Y-%m-%d")
+            except Exception:
+                trial_end_date = None
 
         return {
             # New field names
-            "status":               sub["status"],
+            "status":               getattr(sub, "status", "unknown"),
             "domain":               DOMAIN,
             "plan":                 plan_key,
             "plan_name":            catalogue.get(plan_key, {}).get("name", plan_key),
             "trial_days_remaining": trial_days,
             "next_billing_date":    next_date,
-            "cancel_at_period_end": sub.get("cancel_at_period_end", False),
+            "cancel_at_period_end": getattr(sub, "cancel_at_period_end", False),
             # Legacy field names (Billing.jsx compatibility)
-            "subscription_status":  sub["status"],
+            "subscription_status":  getattr(sub, "status", "unknown"),
             "subscription_plan":    plan_key,
             "trial_end_date":       trial_end_date,
             "trial_ends_at":        trial_end_date,
@@ -269,7 +288,13 @@ async def get_billing(team: dict = Depends(get_current_team)):
             "daily_quota":          catalogue.get(plan_key, {}).get("quota", 200),
         }
     except stripe.StripeError as e:
+        import logging as _log
+        _log.error(f"[billing] Stripe error: {e}")
         raise HTTPException(500, str(e))
+    except Exception as e:
+        import logging as _log
+        _log.error(f"[billing] Unexpected error: {e}", exc_info=True)
+        raise HTTPException(500, f"Billing error: {str(e)}")
 
 
 # ── Plan catalogue (public) ───────────────────────────────────────────────────
@@ -301,19 +326,13 @@ async def get_plans():
                 "interval":    "month",
             }],
         }
-    # ARCL — three plans with hardcoded amounts
+    # ARCL — single plan $12/month, 30-day trial
     return {
         "domain": "arcl",
         "plans": [
-            {"id": "basic",     "name": "ARCL Basic",
-             "description": "Basic plan",
-             "amount": 0, "currency": "USD", "interval": "month"},
-            {"id": "standard",  "name": "ARCL Standard",
-             "description": "Standard plan",
-             "amount": 0, "currency": "USD", "interval": "month"},
-            {"id": "unlimited", "name": "ARCL Unlimited",
-             "description": "Unlimited plan",
-             "amount": 0, "currency": "USD", "interval": "month"},
+            {"id": "standard", "name": "Adar ARCL",
+             "description": "$12/month · 30-day free trial · Full access",
+             "amount": 1200, "currency": "USD", "interval": "month"},
         ],
     }
 
@@ -321,31 +340,74 @@ async def get_plans():
 # ── Activate ──────────────────────────────────────────────────────────────────
 @router.post("/activate")
 async def activate(team: dict = Depends(get_current_team)):
-    """Called after Stripe payment success. Updates team status to active."""
-    import logging
-    team_id  = team.get("team_id", "")
-    plan_key = team.get("subscription_plan", "standard")
+    """Called after Stripe payment success. Updates team status to active and sends confirmation email."""
+    import logging, time as _time
+    logger    = logging.getLogger(__name__)
+    team_id   = team.get("team_id", "")
+    plan_key  = team.get("subscription_plan", "standard")
+    team_email = team.get("email", "")
+    team_name  = team.get("team_name", team_id)
 
     if not team_id:
         raise HTTPException(400, "Missing team_id")
 
     try:
+        # Get trial end date from Stripe
+        trial_end_date = ""
+        customer_id = team.get("stripe_customer_id")
+        if customer_id and stripe.api_key:
+            try:
+                subs = stripe.Subscription.list(
+                    customer=customer_id, status="all", limit=1
+                )
+                for sub in subs.auto_paging_iter():
+                    if getattr(sub, "trial_end", None) and sub.trial_end > _time.time():
+                        from datetime import datetime
+                        trial_end_date = datetime.utcfromtimestamp(
+                            sub.trial_end
+                        ).strftime("%B %d, %Y")
+                    break
+            except Exception as se:
+                logger.warning(f"Could not fetch trial_end from Stripe: {se}")
+
         await _update_team(team_id, {
             "status":            "active",
             "subscription_plan": plan_key,
         })
-        return {"status": "activated", "plan": plan_key, "team_id": team_id}
+
+        # Send confirmation email if not already sent
+        if team_email and not team.get("welcome_email_sent"):
+            try:
+                from src.adar.notify import send_welcome_email
+                await send_welcome_email(
+                    to=team_email,
+                    team_name=team_name,
+                    plan=plan_key,
+                    trial_ends=trial_end_date,
+                )
+                await _update_team(team_id, {"welcome_email_sent": True})
+                logger.info(f"Welcome email sent to {team_email} (trial ends {trial_end_date})")
+            except Exception as mail_err:
+                logger.warning(f"Welcome email failed (non-fatal): {mail_err}")
+
+        return {"status": "activated", "plan": plan_key, "team_id": team_id,
+                "trial_ends": trial_end_date}
     except Exception as e:
         raise HTTPException(500, f"Activation error: {str(e)}")
 
 
 # ── Stripe webhook (handles both domains) ────────────────────────────────────
 @router.post("/cancel")
-async def cancel_subscription(team: dict = Depends(get_current_team)):
+async def cancel_subscription(
+    team: dict = Depends(get_current_team),
+):
     """Cancel at period end."""
-    customer_id = team.get("stripe_customer_id")
+    import logging
+    team_id = team.get("team_id", "")
+    team_db = await _get_team_from_db(team_id)
+    customer_id = team_db.get("stripe_customer_id") or team.get("stripe_customer_id")
     if not customer_id:
-        raise HTTPException(400, "No Stripe customer found")
+        raise HTTPException(400, "No Stripe customer found — please contact support")
     try:
         subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
         if not subs.data:
@@ -353,22 +415,57 @@ async def cancel_subscription(team: dict = Depends(get_current_team)):
         if not subs.data:
             raise HTTPException(404, "No active subscription found")
         stripe.Subscription.modify(subs.data[0].id, cancel_at_period_end=True)
+        _period_end = getattr(subs.data[0], "current_period_end", None)
+        _ends_at = datetime.utcfromtimestamp(_period_end).strftime("%B %d, %Y") if _period_end else ""
+        logging.info(f"Subscription cancelled for team={team_id} ends_at={_ends_at}")
+        if team_db.get("email"):
+            from src.adar.notify import send_subscription_cancelled_email
+            try:
+                await send_subscription_cancelled_email(
+                    to=team_db["email"],
+                    team_name=team_db.get("team_name", team_id),
+                    ends_at=_ends_at,
+                )
+                logging.info(f"Cancel email sent to {team_db['email']}")
+            except Exception as _em:
+                logging.error(f"Cancel email failed: {_em}")
         return {"message": "Subscription will cancel at end of billing period."}
     except stripe.StripeError as e:
         raise HTTPException(500, str(e))
 
 
 @router.post("/reactivate")
-async def reactivate_subscription(team: dict = Depends(get_current_team)):
+async def reactivate_subscription(
+    team: dict = Depends(get_current_team),
+):
     """Undo cancel_at_period_end."""
-    customer_id = team.get("stripe_customer_id")
+    import logging
+    team_id = team.get("team_id", "")
+    team_db = await _get_team_from_db(team_id)
+    customer_id = team_db.get("stripe_customer_id") or team.get("stripe_customer_id")
     if not customer_id:
-        raise HTTPException(400, "No Stripe customer found")
+        raise HTTPException(400, "No Stripe customer found — please contact support")
     try:
         subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
         if not subs.data:
+            subs = stripe.Subscription.list(customer=customer_id, status="trialing", limit=1)
+        if not subs.data:
             raise HTTPException(404, "No active subscription found")
         stripe.Subscription.modify(subs.data[0].id, cancel_at_period_end=False)
+        _period_end = getattr(subs.data[0], "current_period_end", None)
+        _next_billing = datetime.utcfromtimestamp(_period_end).strftime("%B %d, %Y") if _period_end else ""
+        logging.info(f"Subscription reactivated for team={team_id}")
+        if team_db.get("email"):
+            from src.adar.notify import send_reactivation_email
+            try:
+                await send_reactivation_email(
+                    to=team_db["email"],
+                    team_name=team_db.get("team_name", team_id),
+                    next_billing=_next_billing,
+                )
+                logging.info(f"Reactivation email sent to {team_db['email']}")
+            except Exception as _em:
+                logging.error(f"Reactivation email failed: {_em}")
         return {"message": "Subscription reactivated successfully."}
     except stripe.StripeError as e:
         raise HTTPException(500, str(e))
@@ -404,7 +501,7 @@ async def stripe_webhook(request: Request):
     elif etype == "invoice.payment_succeeded":
         try:
             sub      = stripe.Subscription.retrieve(obj.get("subscription", ""))
-            meta     = sub.get("metadata", {})
+            meta     = dict(getattr(sub, "metadata", None) or {})
             plan_key = meta.get("plan", "standard")
             await _update(meta.get("team_id", ""), {"status": "active", "subscription_plan": plan_key})
         except stripe.StripeError:
@@ -413,7 +510,7 @@ async def stripe_webhook(request: Request):
     elif etype == "invoice.payment_failed":
         try:
             sub = stripe.Subscription.retrieve(obj.get("subscription", ""))
-            await _update(sub.get("metadata", {}).get("team_id", ""), {"status": "past_due"})
+            await _update(dict(getattr(sub, "metadata", None) or {}).get("team_id", ""), {"status": "past_due"})
         except stripe.StripeError:
             pass
 

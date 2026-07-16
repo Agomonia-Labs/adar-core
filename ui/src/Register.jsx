@@ -77,7 +77,7 @@ export default function Register({ onBack }) {
           Welcome to Adar, <strong>{form.team_name}</strong>!
         </Typography>
         <Typography variant="body2" sx={{ color:'text.secondary', mb:3 }}>
-          Next: subscribe to start your <strong>14-day free trial</strong>. No charge during trial. Cancel anytime.
+          Next: subscribe to start your <strong>30-day free trial</strong>. No charge during trial. Cancel anytime.
         </Typography>
         <Button variant="contained" fullWidth sx={{ py:1.2, mb:1.5 }} onClick={onBack}>
           Sign in to subscribe →

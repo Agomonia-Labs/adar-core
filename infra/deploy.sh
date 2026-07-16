@@ -11,6 +11,6 @@ docker push us-central1-docker.pkg.dev/bdas-493785/adar/arcl-api:latest
 echo "Deploying to Cloud Run..."
 gcloud run deploy adar-arcl-api \
   --image us-central1-docker.pkg.dev/bdas-493785/adar/arcl-api:latest \
-  --region us-central1
+  --region us-central1 --platform managed
 
 echo "Done."

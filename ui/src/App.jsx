@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   ThemeProvider, CssBaseline, Box, Paper, Typography,
   TextField, IconButton, Chip, Avatar, Divider, Button,
-  CircularProgress, Tooltip, Stack, Tab, Tabs, MenuItem,
+  CircularProgress, Tooltip, Stack, Tab, Tabs,
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import MicIcon from '@mui/icons-material/Mic'
@@ -63,7 +63,7 @@ const SHOW_EVAL = import.meta.env.VITE_SHOW_EVAL !== 'false'
 
 const YOUTUBE_PLAY_INTENT_RE = /youtube|youtu\.be|ইউটিউব|play|listen|শুন|শোন|লিংক/i
 const YOUTUBE_VIDEO_URL_RE = /https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[^\s)\]]+/i
-const VOICE_STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet|detener|para|silencio)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল|रुको|बंद करो|चुप|رکو|بند کرو|خاموش|توقف|أوقف|صمت/i
+const VOICE_STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল/i
 
 function shouldOpenYouTube(message = '') {
   return YOUTUBE_PLAY_INTENT_RE.test(message)
@@ -221,42 +221,26 @@ function MessageBubble({ msg, prevContent = '', onSpeak, onPlayYouTube, isSpeaki
     scale: '5',
   }
   return (
-    <Box sx={{
-      display:'flex',
-      flexDirection: isUser ? 'row-reverse' : 'row',
-      gap:{ xs:0.75, sm:1.5 },
-      alignItems:'flex-start',
-      mb:{ xs:1.25, sm:2 },
-    }}>
-      <Avatar sx={{
-        width:{ xs:28, sm:32 },
-        height:{ xs:28, sm:32 },
-        flexShrink:0,
-        bgcolor: isUser ? 'secondary.main' : 'primary.main',
-      }}>
-        {isUser ? <PersonOutlineIcon sx={{ fontSize:{ xs:16, sm:18 } }} /> : <SmartToyOutlinedIcon sx={{ fontSize:{ xs:16, sm:18 } }} />}
+    <Box sx={{ display:'flex', flexDirection: isUser ? 'row-reverse' : 'row', gap:1.5, alignItems:'flex-start', mb:2 }}>
+      <Avatar sx={{ width:32, height:32, flexShrink:0, bgcolor: isUser ? 'secondary.main' : 'primary.main' }}>
+        {isUser ? <PersonOutlineIcon sx={{ fontSize:18 }} /> : <SmartToyOutlinedIcon sx={{ fontSize:18 }} />}
       </Avatar>
 
       <Paper elevation={0} sx={{
-        px:{ xs:1.25, sm:2 },
-        py:{ xs:1, sm:1.5 },
-        maxWidth:{ xs:'calc(100% - 36px)', sm:'78%' },
-        minWidth:0,
+        px:2, py:1.5, maxWidth:'78%',
         background: isUser ? `${tenant.accentColor}14` : `${tenant.primaryColor}12`,
         border: '1px solid',
         borderColor: isUser ? `${tenant.accentColor}40` : `${tenant.primaryColor}40`,
         borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
       }}>
         <Box sx={{
-          fontSize:{ xs:'0.84rem', sm:'0.875rem' },
-          lineHeight:{ xs:1.55, sm:1.7 },
-          color:'text.primary',
+          fontSize:'0.875rem', lineHeight:1.7, color:'text.primary',
           '& p': { margin:'0 0 6px 0' },
           '& p:last-child': { margin:0 },
-          '& table': { borderCollapse:'collapse', width:'100%', fontSize:{ xs:'0.72rem', sm:'0.8rem' }, my:1, display:'block', overflowX:'auto' },
+          '& table': { borderCollapse:'collapse', width:'100%', fontSize:'0.8rem', my:1 },
           '& th': { bgcolor:`${tenant.primaryColor}20`, color:'primary.dark', fontWeight:600,
-                    padding:{ xs:'4px 6px', sm:'5px 10px' }, border:'1px solid', borderColor:`${tenant.primaryColor}40`, textAlign:'left' },
-          '& td': { padding:{ xs:'3px 6px', sm:'4px 10px' }, border:'1px solid', borderColor:'divider' },
+                    padding:'5px 10px', border:'1px solid', borderColor:`${tenant.primaryColor}40`, textAlign:'left' },
+          '& td': { padding:'4px 10px', border:'1px solid', borderColor:'divider' },
           '& tr:nth-of-type(even) td': { bgcolor:`${tenant.primaryColor}08` },
           '& strong': { color:'primary.dark', fontWeight:600 },
           '& code': { fontFamily:'monospace', bgcolor:`${tenant.primaryColor}14`, px:'4px', borderRadius:'3px', fontSize:'0.8rem' },
@@ -349,13 +333,12 @@ function MessageBubble({ msg, prevContent = '', onSpeak, onPlayYouTube, isSpeaki
 
 function TypingIndicator() {
   return (
-    <Box sx={{ display:'flex', gap:{ xs:0.75, sm:1.5 }, alignItems:'flex-start', mb:{ xs:1.25, sm:2 } }}>
-      <Avatar sx={{ width:{ xs:28, sm:32 }, height:{ xs:28, sm:32 }, bgcolor:'primary.main', flexShrink:0 }}>
-        <SmartToyOutlinedIcon sx={{ fontSize:{ xs:16, sm:18 } }} />
+    <Box sx={{ display:'flex', gap:1.5, alignItems:'flex-start', mb:2 }}>
+      <Avatar sx={{ width:32, height:32, bgcolor:'primary.main', flexShrink:0 }}>
+        <SmartToyOutlinedIcon sx={{ fontSize:18 }} />
       </Avatar>
       <Paper elevation={0} sx={{
-        px:{ xs:1.25, sm:2 },
-        py:{ xs:1, sm:1.5 },
+        px:2, py:1.5,
         background: `${tenant.primaryColor}12`,
         border: `1px solid ${tenant.primaryColor}40`,
         borderRadius:'4px 16px 16px 16px',
@@ -413,17 +396,10 @@ function YouTubeMiniPlayer({ player, onClose }) {
 
 function ChatTab({ onUsageIncrement }) {
   const voiceLabels = tenant.voice || {}
-  const voiceLanguages = voiceLabels.languages || [{ code:voiceLabels.lang || 'bn-IN', label:'Voice' }]
-  const [voiceLang, setVoiceLang] = useState(() => {
-    const stored = localStorage.getItem(`adar_voice_lang_${tenant.id}`)
-    return voiceLanguages.some(language => language.code === stored)
-      ? stored
-      : (voiceLabels.lang || voiceLanguages[0]?.code || 'bn-IN')
-  })
   // ── Speech to text ──────────────────────────────────────────────────────
   const sendMessageRef = useRef(null)
   const { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking } = useSpeech({
-    lang:     voiceLang,
+    lang:     voiceLabels.lang || 'bn-IN',
     labels:   voiceLabels,
     onResult: (text) => {
       if (VOICE_STOP_COMMAND_RE.test(text)) {
@@ -461,7 +437,6 @@ function ChatTab({ onUsageIncrement }) {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [messages, loading])
   useEffect(() => { startListeningRef.current = startListening }, [startListening])
   useEffect(() => { voiceConversationRef.current = voiceModeActive }, [voiceModeActive])
-  useEffect(() => { localStorage.setItem(`adar_voice_lang_${tenant.id}`, voiceLang) }, [voiceLang])
 
   useEffect(() => {
     if (!voiceModeActive || listening || isSpeaking || loading || sendingRef.current) return
@@ -592,12 +567,7 @@ function ChatTab({ onUsageIncrement }) {
 
   return (
     <>
-      <Box sx={{
-        flex:1,
-        overflowY:'auto',
-        px:{ xs:1.25, sm:2.5 },
-        py:{ xs:1, sm:2 },
-      }}>
+      <Box sx={{ flex:1, overflowY:'auto', px:2.5, py:2 }}>
         {messages.map((msg,i) => (
           <MessageBubble
             key={i}
@@ -613,7 +583,7 @@ function ChatTab({ onUsageIncrement }) {
       </Box>
 
       {messages.length <= 1 && (
-        <Box sx={{ px:{ xs:1.25, sm:2.5 }, pb:{ xs:1, sm:1.5 } }}>
+        <Box sx={{ px:2.5, pb:1.5 }}>
           <Typography variant="caption" sx={{ color:'text.secondary', mb:1, display:'block' }}>
             Try asking:
           </Typography>
@@ -637,7 +607,7 @@ function ChatTab({ onUsageIncrement }) {
       <YouTubeMiniPlayer player={youtubePlayer} onClose={() => setYoutubePlayer(null)} />
 
       {sessionId && (
-        <Box sx={{ px:{ xs:1.25, sm:2.5 }, pt:{ xs:0.5, sm:1 }, display:'flex', justifyContent:'flex-end' }}>
+        <Box sx={{ px:2.5, pt:1, display:'flex', justifyContent:'flex-end' }}>
           <Tooltip title="Clear session">
             <IconButton size="small" onClick={clearSession} sx={{ color:'text.secondary' }}>
               <DeleteOutlineIcon fontSize="small" />
@@ -646,63 +616,24 @@ function ChatTab({ onUsageIncrement }) {
         </Box>
       )}
 
-      <Box sx={{
-        px:{ xs:1, sm:2.5 },
-        py:{ xs:1, sm:2 },
-        bgcolor:'background.paper',
-        pb:{ xs:'max(8px, env(safe-area-inset-bottom))', sm:2 },
-      }}>
-        <Box sx={{
-          display:'flex',
-          gap:{ xs:0.75, sm:1.5 },
-          alignItems:'flex-end',
-          flexWrap:{ xs:'wrap', sm:'nowrap' },
-        }}>
+      <Box sx={{ px:2.5, py:2, bgcolor:'background.paper' }}>
+        <Box sx={{ display:'flex', gap:1.5, alignItems:'flex-end' }}>
           <TextField
             inputRef={inputRef} fullWidth multiline maxRows={4} variant="outlined"
             placeholder={tenant.placeholder}
             value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown} disabled={loading} size="small"
             sx={{
-              flex:{ xs:'1 1 100%', sm:'1 1 auto' },
               '& .MuiOutlinedInput-root': {
                 bgcolor:'background.default',
-                fontSize:{ xs:'0.92rem', sm:'0.95rem' },
                 '& fieldset':            { borderColor:tenant.divider },
                 '&:hover fieldset':      { borderColor:'primary.light' },
                 '&.Mui-focused fieldset':{ borderColor:'primary.main' },
               },
-              '& .MuiInputBase-inputMultiline': {
-                minHeight:{ xs:46, sm:20 },
-              },
             }}
           />
-          {supported && voiceLanguages.length > 1 && (
-            <TextField
-              select
-              size="small"
-              value={voiceLang}
-              onChange={e => setVoiceLang(e.target.value)}
-              disabled={loading || listening || isSpeaking}
-              sx={{
-                width:{ xs:96, sm:112 },
-                flexShrink: 0,
-                '& .MuiSelect-select': { fontSize:'0.78rem', py:1 },
-                '& .MuiOutlinedInput-root': {
-                  bgcolor:'background.default',
-                  '& fieldset': { borderColor:tenant.divider },
-                },
-              }}
-            >
-              {voiceLanguages.map(language => (
-                <MenuItem key={language.code} value={language.code}>
-                  {language.label}
-                </MenuItem>
-              ))}
-            </TextField>
-          )}
           {supported && (
-            <Tooltip title={voiceModeActive ? (voiceLabels.stopTooltip || 'ভয়েস কথোপকথন বন্ধ করুন') : `${voiceLabels.startTooltip || 'বাংলায় বলুন'} (${voiceLang})`}>
+            <Tooltip title={voiceModeActive ? (voiceLabels.stopTooltip || 'ভয়েস কথোপকথন বন্ধ করুন') : (voiceLabels.startTooltip || 'বাংলায় বলুন')}>
               <IconButton
                 onClick={handleVoiceClick}
                 sx={{
@@ -717,8 +648,6 @@ function ChatTab({ onUsageIncrement }) {
                     '0%,100%': { transform: 'scale(1)' },
                     '50%':     { transform: 'scale(1.25)' },
                   },
-                  width:{ xs:40, sm:40 },
-                  height:{ xs:40, sm:40 },
                 }}>
                 {voiceModeActive ? <StopCircleIcon /> : <MicIcon />}
               </IconButton>
@@ -733,12 +662,7 @@ function ChatTab({ onUsageIncrement }) {
             <SendIcon fontSize="small" />
           </IconButton>
         </Box>
-        <Typography variant="caption" sx={{
-          color:'text.secondary',
-          mt:0.75,
-          display:{ xs:'none', sm:'block' },
-          textAlign:'center',
-        }}>
+        <Typography variant="caption" sx={{ color:'text.secondary', mt:0.75, display:'block', textAlign:'center' }}>
           {tenant.footerText}
         </Typography>
       </Box>
@@ -866,7 +790,7 @@ export default function App() {
           <Typography variant="h6" sx={{ color:'#fff', fontWeight:600 }}>Subscription required</Typography>
           <Typography sx={{ color:'rgba(255,255,255,0.5)', fontSize:'0.9rem', maxWidth:340 }}>
             Please complete your subscription to start using Adar.
-            Your 14-day free trial begins immediately after subscribing.
+            Your 30-day free trial begins immediately after subscribing.
           </Typography>
           <Button variant="contained" onClick={() => setPage('checkout')}
             sx={{ background:tenant.primaryColor, '&:hover':{ background:tenant.primaryDark }, mt:1 }}>
@@ -890,89 +814,45 @@ export default function App() {
       <Box sx={{ height:'100dvh', display:'flex', flexDirection:'column', bgcolor:'background.default', maxWidth:800, mx:'auto' }}>
 
         {/* Header */}
-        <Paper elevation={0} sx={{
-          px:{ xs:1, sm:2.5 },
-          py:{ xs:0.75, sm:1.5 },
-          borderRadius:0,
-          borderBottom:'1px solid',
-          borderColor:'divider',
-          display:'flex',
-          alignItems:'center',
-          bgcolor:'background.paper',
-        }}>
-          <Stack direction="row" alignItems="center" spacing={{ xs:0.75, sm:1.5 }} sx={{ flex:1, minWidth:0 }}>
+        <Paper elevation={0} sx={{ px:2.5, py:1.5, borderRadius:0, borderBottom:'1px solid', borderColor:'divider', display:'flex', alignItems:'center', bgcolor:'background.paper' }}>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ flex:1 }}>
             <Box sx={{
-              width:{ xs:30, sm:36 },
-              height:{ xs:30, sm:36 },
-              borderRadius:{ xs:'8px', sm:'10px' },
-              bgcolor:'primary.main',
+              width:36, height:36, borderRadius:'10px', bgcolor:'primary.main',
               display:'flex', alignItems:'center', justifyContent:'center',
-              fontSize:{ xs:'0.68rem', sm:'0.8rem' },
-              fontWeight:700, color:'#fff', letterSpacing:'-0.5px', userSelect:'none',
-              flexShrink:0,
+              fontSize:'0.8rem', fontWeight:700, color:'#fff', letterSpacing:'-0.5px', userSelect:'none',
             }}>
               {tenant.logoText}
             </Box>
-            <Box sx={{ flex:1, minWidth:0 }}>
-              <Typography
-                variant="subtitle1"
-                fontWeight={600}
-                lineHeight={1.1}
-                sx={{
-                  color:'text.primary',
-                  fontSize:{ xs:'0.9rem', sm:'1rem' },
-                  overflow:'hidden',
-                  textOverflow:'ellipsis',
-                  whiteSpace:'nowrap',
-                }}
-              >
+            <Box sx={{ flex:1 }}>
+              <Typography variant="subtitle1" fontWeight={600} lineHeight={1.2} sx={{ color:'text.primary' }}>
                 {tenant.appTitle}
               </Typography>
-              <Typography variant="caption" sx={{
-                color:'text.secondary',
-                display:{ xs:'none', sm:'block' },
-                overflow:'hidden',
-                textOverflow:'ellipsis',
-                whiteSpace:'nowrap',
-              }}>
+              <Typography variant="caption" sx={{ color:'text.secondary' }}>
                 {teamName || tenant.subtitle}
               </Typography>
             </Box>
             <Box onClick={() => setPage('billing')} sx={{
-              cursor:'pointer',
-              px:{ xs:0.75, sm:1.5 },
-              py:{ xs:0.4, sm:0.5 },
-              borderRadius:1.5,
-              border:'1px solid', borderColor:'divider',
-              fontSize:{ xs:'0.72rem', sm:'0.82rem' },
+              cursor:'pointer', px:1.5, py:0.5, borderRadius:1.5,
+              border:'1px solid', borderColor:'divider', fontSize:'0.82rem',
               fontWeight:600, color:'text.secondary', userSelect:'none',
               display:'flex', alignItems:'center', gap:0.5,
               '&:hover':{ borderColor:'primary.main', color:'primary.main', bgcolor:`${tenant.primaryColor}10` },
             }}>
-              <span style={{ fontSize:'1rem' }}>💳</span>
-              <Box component="span" sx={{ display:{ xs:'none', sm:'inline' } }}>Billing</Box>
+              <span style={{ fontSize:'1rem' }}>💳</span> Billing
             </Box>
             {usage !== null && (
               <Box sx={{
-                px:{ xs:0.75, sm:1.2 },
-                py:{ xs:0.25, sm:0.3 },
-                borderRadius:2, border:'1px solid',
+                px:1.2, py:0.3, borderRadius:2, border:'1px solid',
                 borderColor:(usage.used_today||0)>=usage.daily_quota?'error.main':(usage.used_today||0)>=usage.daily_quota*0.8?'warning.main':'primary.main',
-                fontSize:{ xs:'0.62rem', sm:'0.7rem' },
-                fontWeight:600, lineHeight:1.25, whiteSpace:'nowrap',
+                fontSize:'0.7rem', fontWeight:600, lineHeight:1.4, whiteSpace:'nowrap',
                 color:(usage.used_today||0)>=usage.daily_quota?'error.main':(usage.used_today||0)>=usage.daily_quota*0.8?'warning.main':'primary.main',
               }}>
-                {usage.used_today||0}/{usage.daily_quota}<Box component="span" sx={{ display:{ xs:'none', sm:'inline' } }}> msgs</Box>
+                {usage.used_today||0}/{usage.daily_quota} msgs
               </Box>
             )}
             <Tooltip title="Sign out">
               <IconButton size="small" onClick={handleLogout}
-                sx={{
-                  color:'text.secondary',
-                  width:{ xs:32, sm:34 },
-                  height:{ xs:32, sm:34 },
-                  '&:hover':{ color:'error.main', bgcolor:'rgba(211,47,47,0.08)' },
-                }}>
+                sx={{ color:'text.secondary', '&:hover':{ color:'error.main', bgcolor:'rgba(211,47,47,0.08)' } }}>
                 <LogoutIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -981,17 +861,8 @@ export default function App() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{
-          borderBottom:'1px solid',
-          borderColor:'divider',
-          bgcolor:'background.paper',
-          minHeight:{ xs:34, sm:42 },
-          '& .MuiTab-root':{
-            minHeight:{ xs:34, sm:42 },
-            py:{ xs:0.25, sm:0.75 },
-            fontSize:{ xs:'0.74rem', sm:'0.8rem' },
-            textTransform:'none',
-            fontWeight:500,
-          },
+          borderBottom:'1px solid', borderColor:'divider', bgcolor:'background.paper', minHeight:42,
+          '& .MuiTab-root':{ minHeight:42, fontSize:'0.8rem', textTransform:'none', fontWeight:500 },
         }}>
           <Tab label="💬 Chat" />
           <Tab label="📊 Polls" />

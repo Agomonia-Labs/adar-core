@@ -231,7 +231,7 @@ export default function AdminDashboard({ token, onLogout }) {
                         onChange={e => setNewTeam(t => ({ ...t, [field]:e.target.value }))} />
                     ))}
                     <Stack direction="row" spacing={1}>
-                      {['complimentary','basic','standard','unlimited'].map(p => (
+                      {['complimentary','standard','standard','unlimited'].map(p => (
                         <Chip key={p} label={p} size="small" clickable
                           onClick={() => setNewTeam(t => ({ ...t, plan:p }))}
                           sx={{ bgcolor: newTeam.plan===p ? 'primary.main' : undefined,

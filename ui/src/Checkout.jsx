@@ -65,10 +65,10 @@ export default function Checkout({ token, onBack, onSuccess }) {
         {DOMAIN === 'geetabitan' ? 'গী' : 'আদর'}
       </Box>
       <Typography variant="h6" sx={{color:'#fff',fontWeight:600}}>
-        DOMAIN === 'geetabitan' ? 'ট্রায়াল শুরু হচ্ছে...' : 'Starting your free trial...'
+        Starting your 30-day free trial...
       </Typography>
       <Typography sx={{color:'rgba(255,255,255,0.45)',fontSize:'0.88rem',maxWidth:320}}>
-        Setting up your 14-day free trial. Taking you to our secure payment page.
+        Setting up your 30-day free trial. Taking you to our secure payment page.
       </Typography>
       <CircularProgress sx={{color:'#2EB87E',mt:1}} />
       <Typography sx={{color:'rgba(255,255,255,0.3)',fontSize:'0.74rem',mt:1}}>
@@ -88,7 +88,7 @@ export default function Checkout({ token, onBack, onSuccess }) {
         }}>আদর</Box>
         <Typography variant="h5" fontWeight={600}>Choose your plan</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          14-day free trial · Cancel anytime · Auto-renews monthly
+          30-day free trial · Cancel anytime · Auto-renews monthly
         </Typography>
       </Stack>
 
@@ -208,7 +208,7 @@ export default function Checkout({ token, onBack, onSuccess }) {
       </Button>
 
       <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', textAlign: 'center', mt: 1.5 }}>
-        Your card won't be charged during the 14-day trial.
+        Your card won't be charged during the 30-day trial.
         Cancel before the trial ends and you pay nothing.
       </Typography>
 

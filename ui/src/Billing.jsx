@@ -119,7 +119,7 @@ export default function Billing({ token, onSubscribe, onBack }) {
             </Typography>
             <Stack direction="row" spacing={1} alignItems="center">
               <Typography variant="h5" fontWeight={700} sx={{ textTransform: 'capitalize' }}>
-                {billing?.plan || 'None'}
+                {billing?.plan_name || billing?.plan || 'None'}
               </Typography>
               <Chip
                 label={STATUS_LABELS[billing?.status] || 'Unknown'}
@@ -188,9 +188,7 @@ export default function Billing({ token, onSubscribe, onBack }) {
                 </Button>
               )}
 
-              <Button variant="outlined" size="small" onClick={onSubscribe}>
-                Change plan
-              </Button>
+
             </>
           )}
         </Stack>

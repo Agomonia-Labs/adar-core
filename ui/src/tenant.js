@@ -16,15 +16,6 @@ const _domain =
     : import.meta.env.VITE_API_URL?.includes('restaurant') ? 'restaurants'
     : 'arcl')
 
-const ARCL_VOICE_LANGUAGES = [
-  { code:'en-US', label:'English' },
-  { code:'bn-IN', label:'Bangla' },
-  { code:'hi-IN', label:'Hindi' },
-  { code:'ur-IN', label:'Urdu' },
-  { code:'ar-XA', label:'Arabic' },
-  { code:'es-US', label:'Spanish' },
-]
-
 const TENANTS = {
 
   arcl: {
@@ -68,8 +59,7 @@ const TENANTS = {
       scale: '5',
     },
     voice: {
-      lang: 'en-US',
-      languages: ARCL_VOICE_LANGUAGES,
+      lang: 'en-IN',
       startTooltip: 'Speak',
       stopTooltip: 'Stop voice conversation',
       noSpeech: 'No speech heard. Please try again.',
@@ -92,7 +82,7 @@ const TENANTS = {
     ],
 
     // Register page
-    registerSubtitle:    'ARCL teams · 14-day free trial · No credit card until trial ends',
+    registerSubtitle:    'ARCL teams · 30-day free trial · No credit card until trial ends',
     showTeamDropdown:    true,      // fetches /api/arcl/teams for autocomplete
     teamDropdownLabel:   'Your ARCL team',
     teamDropdownHelper:  'Select your team or type if not found',

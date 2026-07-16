@@ -117,7 +117,7 @@ async def email_trial_started(to: str, team_name: str, trial_end_date: str, plan
     """Welcome email when trial starts after checkout."""
     body = f"""
     <h2 style="color:#1A3326; margin-top:0;">Welcome to Adar ARCL, {team_name}! 🏏</h2>
-    <p>Your <strong>14-day free trial</strong> has started on the <strong>{plan.capitalize()} plan</strong>.</p>
+    <p>Your <strong>30-day free trial</strong> has started on the <strong>{plan.capitalize()} plan</strong>.</p>
     <p>Here's what you can do:</p>
     <ul style="color:#1A3326; padding-left:20px;">
       <li>Ask about player stats, career history, and dismissals</li>
@@ -213,25 +213,77 @@ async def email_subscription_cancelled(to: str, team_name: str, ends_at: str):
     await send_email(to, "Your Adar ARCL subscription has been cancelled", _base_template("Subscription cancelled", body))
 
 
+async def send_subscription_cancelled_email(to: str, team_name: str, ends_at: str = ""):
+    """Email sent when a team cancels their subscription."""
+    ends_line = f"<p>You keep full access until <strong>{ends_at}</strong>.</p>" if ends_at else ""
+    body = f"""
+    <h2 style="color:#1A3326; margin-top:0;">Subscription cancelled</h2>
+    <p>Hi {team_name},</p>
+    <p>Your Adar ARCL subscription has been <strong>cancelled</strong>.</p>
+    {ends_line}
+    <div style="background:#F5F5F5; border:1px solid #E0E0E0; border-radius:8px; padding:16px; margin:20px 0;">
+      You keep full access until the end of your billing period.<br>
+      After that, your account will be deactivated.
+    </div>
+    <p>Changed your mind? You can reactivate anytime before the period ends.</p>
+    {_btn("Reactivate Subscription", f"{APP_URL}?page=billing", "#5A8A70")}
+    <p style="color:#5A8A70; font-size:0.85rem;">
+      We're sorry to see you go. Thank you for being part of the ARCL community.
+    </p>"""
+    await send_email(to, "Your Adar ARCL subscription has been cancelled", _base_template("Subscription cancelled", body))
+
+
+async def send_reactivation_email(to: str, team_name: str, next_billing: str = ""):
+    """Email sent when a team reactivates their cancelled subscription."""
+    next_line = f"<p>Your next billing date is <strong>{next_billing}</strong>.</p>" if next_billing else ""
+    body = f"""
+    <h2 style="color:#1A3326; margin-top:0;">Subscription reactivated 🎉</h2>
+    <p>Hi {team_name},</p>
+    <p>Great news — your Adar ARCL subscription has been <strong>reactivated</strong>.
+       Your access continues uninterrupted.</p>
+    {next_line}
+    <p>You can manage your billing anytime from inside Adar.</p>
+    {_btn("Open Adar", APP_URL)}
+    <p style="color:#5A8A70; font-size:0.85rem;">
+      Welcome back! We're glad you're staying.
+    </p>"""
+    await send_email(to, "Your Adar ARCL subscription has been reactivated", _base_template("Subscription reactivated", body))
+
+
 async def send_welcome_email(to: str, team_name: str, plan: str = "standard", trial_ends: str = ""):
     """Send welcome email after successful Stripe checkout."""
-    plan_names = {"basic": "Basic ($10/mo)", "standard": "Standard ($15/mo)", "unlimited": "Unlimited ($30/mo)"}
-    plan_label = plan_names.get(plan, plan.title())
-    trial_line = f"<p>Your free trial ends on <strong>{trial_ends[:10]}</strong>.</p>" if trial_ends else ""
+    trial_end_line = (
+        f"<div style='background:#E8F5EE;border-left:4px solid #2EB87E;padding:12px 16px;"
+        f"border-radius:6px;margin:16px 0'>"
+        f"<strong>🎉 Your 30-day free trial is active</strong><br>"
+        f"<span style='color:#5A8A70;font-size:0.88rem'>Trial ends: <strong>{trial_ends}</strong>"
+        f" · No charge until then · Cancel anytime</span></div>"
+    ) if trial_ends else (
+        "<div style='background:#E8F5EE;border-left:4px solid #2EB87E;padding:12px 16px;"
+        "border-radius:6px;margin:16px 0'>"
+        "<strong>🎉 Your 30-day free trial is active</strong><br>"
+        "<span style='color:#5A8A70;font-size:0.88rem'>No charge for 30 days · Cancel anytime</span></div>"
+    )
 
-    subject = f"Welcome to Adar, {team_name}! 🏏"
+    subject = f"Welcome to Adar ARCL, {team_name}! 🏏"
     html = f"""
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1A3326">
       <div style="background:#2EB87E;padding:24px;border-radius:12px 12px 0 0;text-align:center">
-        <div style="width:52px;height:52px;background:#fff;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;color:#2EB87E;margin-bottom:12px">আদর</div>
-        <h1 style="color:#fff;margin:0;font-size:1.4rem">Welcome to Adar!</h1>
+        <div style="width:52px;height:52px;background:#fff;border-radius:14px;display:inline-flex;
+          align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;
+          color:#2EB87E;margin-bottom:12px">আদর</div>
+        <h1 style="color:#fff;margin:0;font-size:1.4rem">Welcome to Adar ARCL!</h1>
+        <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:0.9rem">
+          Your AI cricket assistant is ready
+        </p>
       </div>
-      <div style="background:#F5FBF7;padding:28px;border-radius:0 0 12px 12px;border:1px solid #C8E8D8;border-top:none">
+      <div style="background:#F5FBF7;padding:28px;border-radius:0 0 12px 12px;
+        border:1px solid #C8E8D8;border-top:none">
         <p>Hi <strong>{team_name}</strong>,</p>
-        <p>Your Adar account is ready. You're on the <strong>{plan_label}</strong> plan.</p>
-        {trial_line}
+        <p>Your Adar ARCL account is all set up and ready to go.</p>
+        {trial_end_line}
         <p style="font-weight:600;margin-bottom:8px">Try asking Adar:</p>
-        <ul style="padding-left:20px;color:#5A8A70;line-height:2">
+        <ul style="padding-left:20px;color:#5A8A70;line-height:2.2">
           <li>Show our batting stats for Spring 2026</li>
           <li>What is the wide rule in men's league?</li>
           <li>Show our schedule and umpiring assignments</li>
@@ -240,13 +292,14 @@ async def send_welcome_email(to: str, team_name: str, plan: str = "standard", tr
         </ul>
         <div style="text-align:center;margin:24px 0">
           <a href="{APP_URL}"
-            style="background:#2EB87E;color:#fff;padding:12px 28px;border-radius:10px;text-decoration:none;font-weight:600">
+            style="background:#2EB87E;color:#fff;padding:12px 28px;border-radius:10px;
+            text-decoration:none;font-weight:600;font-size:1rem">
             Open Adar →
           </a>
         </div>
         <p style="font-size:0.82rem;color:#5A8A70;text-align:center">
           Manage billing at any time from the Billing page inside Adar.<br>
-          Questions? Reply to this email.
+          Questions? Reply to this email — we're happy to help.
         </p>
       </div>
     </div>
