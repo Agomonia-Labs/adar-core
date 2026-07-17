@@ -94,6 +94,24 @@ body{font-family:'DM Sans',sans-serif;background:#0d1f15;color:var(--text);overf
 .hstep.done{background:rgba(46,184,126,0.4)}
 .hstep.active{background:var(--g);width:38px}
 
+/* Nav buttons */
+.nav-btn{
+  width:32px;height:32px;border-radius:50%;border:1px solid rgba(46,184,126,0.3);
+  background:rgba(46,184,126,0.08);color:var(--g);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:1rem;
+  flex-shrink:0;transition:all 0.2s;font-weight:600;
+}
+.nav-btn:hover{background:rgba(46,184,126,0.2);border-color:var(--g)}
+.nav-btn:disabled{opacity:0.3;cursor:default}
+.auto-btn{
+  padding:4px 12px;border-radius:20px;border:1px solid rgba(46,184,126,0.3);
+  background:rgba(46,184,126,0.08);color:var(--g);cursor:pointer;
+  font-size:0.7rem;font-weight:600;flex-shrink:0;transition:all 0.2s;
+  font-family:'DM Sans',sans-serif;letter-spacing:0.04em;
+}
+.auto-btn.active{background:var(--g);color:#fff;border-color:var(--g)}
+.auto-btn:hover:not(.active){background:rgba(46,184,126,0.2);border-color:var(--g)}
+
 /* Wave indicator top-right */
 #wave-box{
   position:absolute;top:10px;right:28px;
@@ -322,7 +340,10 @@ tr:last-child td{border-bottom:none}
       <div class="htitle">Adar ARCL — Product Demo</div>
       <div class="hsub" id="hsub">Starting...</div>
     </div>
+    <button class="nav-btn" id="btn-prev" onclick="navSlide(-1)" title="Previous slide">&#8249;</button>
     <div class="hsteps" id="hsteps"></div>
+    <button class="nav-btn" id="btn-next" onclick="navSlide(1)" title="Next slide">&#8250;</button>
+    <button class="auto-btn" id="btn-auto" onclick="toggleAuto()" title="Auto-play demo">AUTO</button>
     <div id="wave-box"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
   </div>
 
@@ -563,12 +584,12 @@ tr:last-child td{border-bottom:none}
           <div style="font-weight:600;font-size:0.95rem;margin-bottom:16px">How teams get access</div>
           <div style="display:flex;flex-direction:column;gap:13px">
             <div style="display:flex;gap:10px"><div style="width:26px;height:26px;background:var(--gl);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--gd);font-size:0.8rem;flex-shrink:0">1</div><div><div style="font-weight:600;font-size:0.86rem">Picks ARCL team from dropdown</div><div style="color:var(--muted);font-size:0.8rem">Live list from arcl.org — no typos possible</div></div></div>
-            <div style="display:flex;gap:10px"><div style="width:26px;height:26px;background:var(--gl);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--gd);font-size:0.8rem;flex-shrink:0">2</div><div><div style="font-weight:600;font-size:0.86rem">Stripe checkout — 30-day free trial</div><div style="color:var(--muted);font-size:0.8rem">Card entered once · auto-renews monthly</div></div></div>
+            <div style="display:flex;gap:10px"><div style="width:26px;height:26px;background:var(--gl);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--gd);font-size:0.8rem;flex-shrink:0">2</div><div><div style="font-weight:600;font-size:0.86rem">Stripe checkout — 14-day free trial</div><div style="color:var(--muted);font-size:0.8rem">Card entered once · auto-renews monthly</div></div></div>
             <div style="display:flex;gap:10px"><div style="width:26px;height:26px;background:var(--gl);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--gd);font-size:0.8rem;flex-shrink:0">3</div><div><div style="font-weight:600;font-size:0.86rem">Auto-activated + welcome email sent</div><div style="color:var(--muted);font-size:0.8rem">Zero admin approval · ready to chat immediately</div></div></div>
             <div style="display:flex;gap:10px"><div style="width:26px;height:26px;background:rgba(239,159,39,0.15);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#BA7517;font-size:0.8rem;flex-shrink:0">✉</div><div><div style="font-weight:600;font-size:0.86rem">Forgot password?</div><div style="color:var(--muted);font-size:0.8rem">Reset link emailed · 1-hour expiry · no admin needed</div></div></div>
           </div>
           <div style="background:var(--gl);border:1px solid rgba(46,184,126,0.3);border-radius:10px;padding:13px;margin-top:18px;font-size:0.8rem">
-            <strong>Admin can also create accounts directly</strong> — Complimentary (free) or Standard ($12/mo)
+            <strong>Admin can also create accounts directly</strong> — Complimentary · Basic · Standard · Unlimited · or Pending payment for self-pay
           </div>
         </div>
       </div>
@@ -855,7 +876,7 @@ tr:last-child td{border-bottom:none}
           <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center">
             <div style="font-family:'DM Serif Display',serif;font-size:2.2rem;color:var(--g);line-height:1">$12</div>
             <div style="font-weight:600;font-size:0.82rem;margin:5px 0 3px">Per Team / Month</div>
-            <div style="font-size:0.74rem;color:var(--muted)">1,000 msg/day · 30-day trial</div>
+            <div style="font-size:0.74rem;color:var(--muted)">200 msg/day · 14-day trial</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
@@ -918,7 +939,7 @@ tr:last-child td{border-bottom:none}
             <div class="cta-box"><div class="num">$12</div><div class="lbl">Per team / month</div></div>
           </div>
           <div style="position:relative;display:flex;gap:14px;justify-content:center">
-            <button style="background:var(--g);color:#fff;padding:14px 30px;border-radius:12px;font-weight:700;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-shadow:0 0 30px rgba(46,184,126,0.3)">Register your team — 30-day free trial</button>
+            <button style="background:var(--g);color:#fff;padding:14px 30px;border-radius:12px;font-weight:700;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.95rem;box-shadow:0 0 30px rgba(46,184,126,0.3)">Register your team — free trial</button>
             <button style="background:transparent;color:#fff;padding:14px 30px;border-radius:12px;font-weight:600;border:1px solid rgba(255,255,255,0.25);cursor:pointer;font-family:'DM Sans',sans-serif" onclick="location.reload()">↩ Replay</button>
           </div>
         </div>
@@ -971,7 +992,7 @@ const NARRATION = [
 
   // S1 - Login
 
-  "Welcome to Adar — the AI cricket assistant for the American Recreational Cricket League. This is the login screen at arcl.tigers.agomoniai.com. Team captains can self-register in thirty seconds — no admin approval needed. They choose a plan, subscribe via Stripe, and get immediate access. There is a thirty-day free trial with no credit card charge during the trial.",
+  "Welcome to Adar — the AI cricket assistant for the American Recreational Cricket League. This is the login screen at arcl.tigers.agomoniai.com. Team captains can self-register in thirty seconds. After the ARCL admin approves them, they sign in and get immediate access to all features. There is a fourteen day free trial with no credit card required.",
 
   // S2 - Chat intro
   "After signing in, teams land in this clean chat interface. Adar greets them and shows suggested questions to get started. The experience is simple — you type a question in plain English, and Adar understands the cricket context automatically. No dashboards, no filters, no navigation required. Just ask.",
@@ -989,16 +1010,16 @@ const NARRATION = [
   "Adar also answers schedule questions. Here we see played matches — Agomoni Tigers won against Seattle Shouryangas at Marymoor Park with Royal Priesthood as umpires. Upcoming matches and umpiring assignments are shown separately. All of this is fetched live from the ARCL league schedule page — always current, always accurate.",
 
   // S7 - Billing
-  "Billing is handled entirely by Stripe. One simple plan — twelve dollars per month with full access to everything. Teams enter their card once for a thirty-day free trial, and Stripe auto-renews monthly. Invoice emails are sent automatically. PCI DSS compliant — no card data touches Adar's servers. The thirty-day trial gives teams a full month to experience Adar before committing.",
+  "Billing is handled entirely by Stripe. Three plans — Basic at five dollars, Standard at fifteen dollars, and Unlimited at thirty dollars per month. Teams enter their card once, and Stripe auto-renews monthly. Invoice emails are sent automatically. PCI DSS compliant — no card data touches Adar's servers. The fourteen day free trial gives teams a chance to experience Adar before committing.",
 
   // S8 - Eval
   "This is what makes Adar unique among cricket tools. Every single response is automatically scored by a second Gemini instance — we call it the Judge. It evaluates accuracy, completeness, relevance, and format. The scores appear as small badges below every chat response. The admin dashboard shows average scores over time and flags any response scoring below three out of five for review. The current average across all Agomoni Tigers responses is four point six five out of five. At roughly zero point zero zero zero four dollars per evaluation, the cost is negligible.",
 
   // S10 - Executive Summary
-  "Let us look at the executive summary. Adar is completely self-service — teams register with a live ARCL team picker, subscribe via Stripe, get a welcome email, their data auto-loaded, and start chatting. No admin approval. At twelve dollars per month with a thirty-day free trial, there is zero friction. Adar answers the questions ARCL teams ask every single week — who are our top batsmen, how was a player dismissed, what is the wide rule, show our schedule, what is our team strength. All answered in under two seconds with live data. The average quality score across all responses is four point six five out of five — graded automatically by a second AI. Built on Google ADK, Gemini two point five Flash, FastAPI, Cloud Run, Firestore, Firebase and Stripe. This is production-ready AI infrastructure for cricket leagues.",
+  "Let us look at the executive summary. Adar is completely self-service — teams register with a live ARCL team picker, subscribe via Stripe, get a welcome email, and start chatting. No admin approval. Forgot password works without contacting anyone. Or the admin can create complimentary accounts for any team. Adar answers the questions ARCL teams ask every single week — who are our top batsmen, how was a player dismissed, what is the wide rule, show our schedule, what is our team strength. All answered in under two seconds with live data. The average quality score across all responses is four point six five out of five — graded automatically by a second AI. The infrastructure cost runs between seven and twelve dollars per team per month. At fifteen dollars on the Standard plan, the margin is three to eight dollars per team. Built on Google ADK, Gemini two point five Flash, FastAPI, Cloud Run, Firestore, Firebase and Stripe. This is production-ready AI infrastructure for cricket leagues.",
 
   // S9 - CTA
-  "That is Adar — the complete self-service AI cricket assistant. Live player stats from arcl dot org. Men's and women's league rules — correctly separated. Dismissal analysis from match scorecards. Team strength scoring. Schedule and umpiring assignments. Stripe billing at twelve dollars per month with a thirty-day free trial. And LLM as judge quality evaluation on every response. The app is live now at arcl.tigers.agomoniai.com. Register your team and start your thirty-day free trial today. Thank you."
+  "That is Adar — the complete self-service AI cricket assistant. Live player stats from arcl dot org. Men's and women's league rules — correctly separated. Dismissal analysis from match scorecards. Team strength scoring. Schedule and umpiring assignments. Stripe billing with auto-renewal. And LLM as judge quality evaluation on every response. The app is live now at arcl.tigers.agomoniai.com. Register your team and start the fourteen day free trial today. Thank you."
 ];
 
 // Pause durations between slides (milliseconds) after narration finishes
@@ -1116,16 +1137,75 @@ function tc(type) {
 // ── Main sequence ──
 async function runDemo() {
   for (let i = 0; i < SLIDES.length; i++) {
-    showSlide(i);
+    if (isAutoPlaying) break  // defer to auto-play if user clicked AUTO
+    curSlide = i
+    showSlide(i)
+    updateNavBtns()
 
-    // Auto chart toggle on slide 5 — switch to bowling midway through narration
-    if (i === 8) { // slide s5 (strength+charts) is now index 8
-      setTimeout(() => { tc('bowl'); }, 9000);  // switch to bowling after ~9s
-      setTimeout(() => { tc('bat');  }, 17000); // switch back
+    if (i === 8) {
+      setTimeout(() => { tc('bowl'); }, 9000)
+      setTimeout(() => { tc('bat');  }, 17000)
     }
 
-    await speakSlide(i);
-    await wait(PAUSES[i] || 1000);
+    await speakSlide(i)
+    await wait(PAUSES[i] || 1000)
+  }
+}
+
+// ── Manual navigation ──
+function navSlide(dir) {
+  const next = curSlide + dir
+  if (next < 0 || next >= SLIDES.length) return
+  window.speechSynthesis.cancel()
+  stopWave()
+  isAutoPlaying = false
+  document.getElementById('btn-auto').classList.remove('active')
+  clearTimeout(autoTimer)
+  curSlide = next
+  showSlide(curSlide)
+  updateNavBtns()
+}
+
+function updateNavBtns() {
+  document.getElementById('btn-prev').disabled = curSlide === 0
+  document.getElementById('btn-next').disabled = curSlide === SLIDES.length - 1
+}
+
+// ── Auto-play ──
+let isAutoPlaying = false
+let autoTimer = null
+
+function toggleAuto() {
+  if (isAutoPlaying) {
+    isAutoPlaying = false
+    window.speechSynthesis.cancel()
+    stopWave()
+    clearTimeout(autoTimer)
+    document.getElementById('btn-auto').classList.remove('active')
+  } else {
+    isAutoPlaying = true
+    document.getElementById('btn-auto').classList.add('active')
+    runAutoFrom(curSlide)
+  }
+}
+
+async function runAutoFrom(startIdx) {
+  for (let i = startIdx; i < SLIDES.length; i++) {
+    if (!isAutoPlaying) break
+    curSlide = i
+    showSlide(i)
+    updateNavBtns()
+    if (i === 8) {
+      setTimeout(() => { if (isAutoPlaying) tc('bowl') }, 9000)
+      setTimeout(() => { if (isAutoPlaying) tc('bat')  }, 17000)
+    }
+    await speakSlide(i)
+    if (!isAutoPlaying) break
+    await wait(PAUSES[i] || 1000)
+  }
+  if (isAutoPlaying) {
+    isAutoPlaying = false
+    document.getElementById('btn-auto').classList.remove('active')
   }
 }
 

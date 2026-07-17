@@ -14,6 +14,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import secrets
+import time
 import bcrypt
 from jose import JWTError, jwt
 from fastapi import APIRouter, HTTPException, Depends
@@ -27,9 +29,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-TEAMS_COLLECTION = "adar_teams"
-JWT_ALGORITHM    = "HS256"
-JWT_EXPIRE_DAYS  = 30
+TEAMS_COLLECTION   = "adar_teams"
+OTP_COLLECTION     = "arcl_mfa_otp"
+JWT_ALGORITHM      = "HS256"
+JWT_EXPIRE_DAYS    = 30
+OTP_EXPIRE_SECONDS = 300   # 5 minutes
+OTP_MAX_ATTEMPTS   = 3
+OTP_RESEND_COOLDOWN = 60   # seconds
 
 # ── FIX 1: read at call time via property, not at import time ─────────────────
 # Reading at module load time means values set by load_dotenv() may not be
@@ -38,6 +44,11 @@ def _jwt_secret()      -> str: return os.environ.get("JWT_SECRET",      "change-
 def _admin_email()     -> str: return os.environ.get("ADMIN_EMAIL",     "admin@agomoniai.com").strip().lower()
 def _admin_password()  -> str: return os.environ.get("ADMIN_PASSWORD",  "").strip()
 def _billing_enabled() -> bool: return os.environ.get("BILLING_ENABLED", "true").lower() == "true"
+
+def _mfa_bypass_emails() -> set:
+    """Emails that skip OTP — stored in MFA_BYPASS_EMAILS env var (comma-separated)."""
+    raw = os.environ.get("MFA_BYPASS_EMAILS", "").strip()
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 # ── FIX 2: auth always uses its own database, independent of DOMAIN ───────────
 # Read at call time (function) not import time so load_dotenv() has already run.
@@ -77,6 +88,13 @@ class TokenResponse(BaseModel):
     role:         str
     status:       str
 
+
+class OTPVerifyRequest(BaseModel):
+    mfa_token: str
+    otp:       str = Field(..., min_length=6, max_length=6)
+
+class OTPResendRequest(BaseModel):
+    mfa_token: str
 
 class TeamInfo(BaseModel):
     team_id:        str
@@ -189,7 +207,7 @@ async def register(req: RegisterRequest):
     }
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 async def login(req: LoginRequest):
     email          = req.email.strip().lower()
     admin_email    = _admin_email()
@@ -249,32 +267,213 @@ async def login(req: LoginRequest):
         raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
     # pending_payment → allow login, frontend redirects to checkout
 
+    # ── MFA: skip for whitelisted emails ─────────────────────────────────────
+    if email in _mfa_bypass_emails():
+        logger.info(f"MFA bypassed for whitelisted email: {email}")
+        try:
+            if status in ("pending_payment", "pending"):
+                from src.adar.db import get_firestore as _get_fs
+                _db   = _get_fs()
+                _doc  = await _db.collection(TEAMS_COLLECTION).document(team["team_id"]).get()
+                _fresh = (_doc.to_dict() or {}).get("status", status) if _doc.exists else status
+            else:
+                _fresh = status
+        except Exception:
+            _fresh = status
+        token = _create_token({
+            "team_id":   team["team_id"],
+            "team_name": team["team_name"],
+            "email":     team["email"],
+            "role":      team.get("role", "team"),
+            "status":    _fresh,
+        })
+        return {
+            "access_token": token,
+            "token_type":   "bearer",
+            "team_id":      team["team_id"],
+            "team_name":    team["team_name"],
+            "role":         team.get("role", "team"),
+            "status":       _fresh,
+        }
+
+    # ── MFA: issue temp token, send OTP ─────────────────────────────────────
+    otp       = str(secrets.randbelow(900000) + 100000)
+    mfa_token = _create_token({
+        "team_id":    team["team_id"],
+        "mfa_pending": True,
+        "exp":        datetime.now(timezone.utc) + timedelta(minutes=10),
+    })
+
+    # Store OTP in Firestore
+    otp_doc_id = f"{team['team_id']}_{int(time.time())}"
+    await db.collection(OTP_COLLECTION).document(otp_doc_id).set({
+        "otp":         otp,
+        "team_id":     team["team_id"],
+        "email":       team["email"],
+        "team_name":   team["team_name"],
+        "mfa_token":   mfa_token,
+        "expires_at":  int(time.time()) + OTP_EXPIRE_SECONDS,
+        "attempts":    0,
+        "used":        False,
+        "sent_at":     int(time.time()),
+    })
+
+    # Send OTP email
+    try:
+        from src.adar.notify import send_otp_email
+        await send_otp_email(
+            to=team["email"],
+            team_name=team["team_name"],
+            otp=otp,
+        )
+        logger.info(f"OTP sent to {team['email']} for team={team['team_id']}")
+    except Exception as e:
+        logger.error(f"OTP email failed: {e}")
+        raise HTTPException(500, "Could not send login code. Please try again.")
+
+    return {
+        "mfa_required": True,
+        "mfa_token":    mfa_token,
+        "email_hint":   team["email"][:2] + "***@" + team["email"].split("@")[-1],
+    }
+
+
+# ── OTP verification ─────────────────────────────────────────────────────────
+
+@router.post("/verify-otp")
+async def verify_otp(req: OTPVerifyRequest):
+    """Verify OTP and return full JWT."""
+    # Decode mfa_token (only has team_id + mfa_pending)
+    try:
+        payload = jwt.decode(req.mfa_token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
+    except JWTError:
+        raise HTTPException(401, "Session expired. Please log in again.")
+
+    if not payload.get("mfa_pending"):
+        raise HTTPException(400, "Invalid MFA token.")
+
+    team_id = payload.get("team_id")
+    db = get_db()
+
+    # Find matching OTP document
+    otp_ref = db.collection(OTP_COLLECTION)
+    query   = otp_ref.where("team_id", "==", team_id)                     .where("mfa_token", "==", req.mfa_token)                     .limit(1)
+
+    otp_doc = None
+    otp_id  = None
+    async for doc in query.stream():
+        otp_doc = doc.to_dict()
+        otp_id  = doc.id
+        break
+
+    if not otp_doc:
+        raise HTTPException(401, "Invalid or expired code. Please log in again.")
+
+    # Check expiry
+    if int(time.time()) > otp_doc.get("expires_at", 0):
+        raise HTTPException(401, "Code expired. Please log in again.")
+
+    # Check already used
+    if otp_doc.get("used"):
+        raise HTTPException(401, "Code already used. Please log in again.")
+
+    # Check attempts
+    attempts = otp_doc.get("attempts", 0)
+    if attempts >= OTP_MAX_ATTEMPTS:
+        raise HTTPException(429, "Too many attempts. Please log in again.")
+
+    # Verify OTP
+    if req.otp.strip() != otp_doc.get("otp"):
+        await db.collection(OTP_COLLECTION).document(otp_id).update(
+            {"attempts": attempts + 1}
+        )
+        remaining = OTP_MAX_ATTEMPTS - attempts - 1
+        raise HTTPException(401, f"Invalid code. {remaining} attempt(s) remaining.")
+
+    # Mark used
+    await db.collection(OTP_COLLECTION).document(otp_id).update({"used": True})
+
+    # Fetch fresh team data
+    team_doc = await db.collection(TEAMS_COLLECTION).document(team_id).get()
+    team     = team_doc.to_dict() if team_doc.exists else {}
+    status   = team.get("status", "active")
+
+    # Issue full JWT
     token = _create_token({
-        "team_id":   team["team_id"],
-        "team_name": team["team_name"],
-        "email":     team["email"],
+        "team_id":   team_id,
+        "team_name": team.get("team_name", team_id),
+        "email":     team.get("email", ""),
         "role":      team.get("role", "team"),
         "status":    status,
     })
 
-    try:
-        if status in ("pending_payment", "pending"):
-            from src.adar.db import get_firestore as _get_fs
-            _db   = _get_fs()
-            _doc  = await _db.collection(TEAMS_COLLECTION).document(team["team_id"]).get()
-            _fresh = (_doc.to_dict() or {}).get("status", status) if _doc.exists else status
-        else:
-            _fresh = status
-    except Exception:
-        _fresh = status
-
+    logger.info(f"MFA verified for team={team_id}")
     return TokenResponse(
         access_token=token,
-        team_id=team["team_id"],
-        team_name=team["team_name"],
+        team_id=team_id,
+        team_name=team.get("team_name", team_id),
         role=team.get("role", "team"),
-        status=_fresh,
+        status=status,
     )
+
+
+@router.post("/resend-otp")
+async def resend_otp(req: OTPResendRequest):
+    """Resend OTP — rate limited to once per 60 seconds."""
+    try:
+        payload = jwt.decode(req.mfa_token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
+    except JWTError:
+        raise HTTPException(401, "Session expired. Please log in again.")
+
+    if not payload.get("mfa_pending"):
+        raise HTTPException(400, "Invalid MFA token.")
+
+    team_id = payload.get("team_id")
+    db      = get_db()
+
+    # Find existing OTP doc
+    query   = db.collection(OTP_COLLECTION)                .where("team_id", "==", team_id)                .where("mfa_token", "==", req.mfa_token)                .limit(1)
+
+    otp_doc = None
+    otp_id  = None
+    async for doc in query.stream():
+        otp_doc = doc.to_dict()
+        otp_id  = doc.id
+        break
+
+    if not otp_doc:
+        raise HTTPException(401, "Session not found. Please log in again.")
+
+    # Enforce cooldown
+    sent_at = otp_doc.get("sent_at", 0)
+    if int(time.time()) - sent_at < OTP_RESEND_COOLDOWN:
+        wait = OTP_RESEND_COOLDOWN - (int(time.time()) - sent_at)
+        raise HTTPException(429, f"Please wait {wait} seconds before resending.")
+
+    # Generate new OTP and update doc
+    otp = str(secrets.randbelow(900000) + 100000)
+    await db.collection(OTP_COLLECTION).document(otp_id).update({
+        "otp":        otp,
+        "expires_at": int(time.time()) + OTP_EXPIRE_SECONDS,
+        "attempts":   0,
+        "used":       False,
+        "sent_at":    int(time.time()),
+    })
+
+    # Send email
+    try:
+        from src.adar.notify import send_otp_email
+        await send_otp_email(
+            to=otp_doc["email"],
+            team_name=otp_doc.get("team_name", team_id),
+            otp=otp,
+        )
+        logger.info(f"OTP resent to {otp_doc['email']} for team={team_id}")
+    except Exception as e:
+        logger.error(f"OTP resend email failed: {e}")
+        raise HTTPException(500, "Could not resend code. Please try again.")
+
+    return {"message": "New code sent to your email."}
 
 
 # ── Password reset ────────────────────────────────────────────────────────────

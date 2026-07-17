@@ -29,6 +29,8 @@ GMAIL_APP_PASS = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 
 async def send_email(to: str, subject: str, html: str):
+    import logging as _log
+    _log.info(f"[notify] Sending email to={to} subject={subject[:40]}")
     """Send email via Gmail SMTP."""
     if not to or "@" not in to:
         logger.warning(f"Invalid email address: {to}")
@@ -248,6 +250,32 @@ async def send_reactivation_email(to: str, team_name: str, next_billing: str = "
       Welcome back! We're glad you're staying.
     </p>"""
     await send_email(to, "Your Adar ARCL subscription has been reactivated", _base_template("Subscription reactivated", body))
+
+
+async def send_otp_email(to: str, team_name: str, otp: str):
+    """Email the 6-digit OTP login code."""
+    body = f"""
+    <div style="text-align:center;margin:8px 0 24px">
+      <div style="font-size:0.8rem;color:#5A8A70;margin-bottom:12px;letter-spacing:0.04em;text-transform:uppercase">
+        Your login code
+      </div>
+      <div style="font-size:2.8rem;font-weight:800;letter-spacing:0.22em;color:#1A3326;
+        background:#E8F5EE;border-radius:12px;padding:16px 24px;display:inline-block;
+        border:2px solid rgba(46,184,126,0.3)">
+        {otp}
+      </div>
+      <div style="font-size:0.78rem;color:#5A8A70;margin-top:12px">
+        Expires in <strong>5 minutes</strong> · Do not share this code
+      </div>
+    </div>
+    <p style="font-size:0.85rem;color:#5A8A70;text-align:center;margin-top:0">
+      If you didn't try to sign in to Adar, you can safely ignore this email.
+    </p>"""
+    await send_email(
+        to,
+        f"Your Adar login code: {otp}",
+        _base_template("Sign in to Adar ARCL", f"<p>Hi <strong>{team_name}</strong>,</p>{body}")
+    )
 
 
 async def send_welcome_email(to: str, team_name: str, plan: str = "standard", trial_ends: str = ""):
