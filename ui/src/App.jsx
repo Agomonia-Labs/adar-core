@@ -64,6 +64,12 @@ const SHOW_EVAL = import.meta.env.VITE_SHOW_EVAL !== 'false'
 const YOUTUBE_PLAY_INTENT_RE = /youtube|youtu\.be|ইউটিউব|play|listen|শুন|শোন|লিংক/i
 const YOUTUBE_VIDEO_URL_RE = /https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[^\s)\]]+/i
 const VOICE_STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet)\b|থামুন|থামো|বন্ধ করুন|বন্ধ করো|চুপ|স্টপ|পজ|বাতিল/i
+// Matches the *assistant's own* sign-off ("Goodbye!", "Good-bye", "Bye now")
+// in its reply text -- when it says this, the voice conversation should end
+// instead of the mic reopening right after, which reads as ignoring the
+// farewell. Not the same thing as VOICE_STOP_COMMAND_RE above, which matches
+// what the *caller* says to interrupt playback mid-sentence.
+const ASSISTANT_FAREWELL_RE = /\bgood[\s-]?bye\b|\bbye\b/i
 
 function shouldOpenYouTube(message = '') {
   return YOUTUBE_PLAY_INTENT_RE.test(message)
@@ -471,6 +477,15 @@ function ChatTab({ onUsageIncrement }) {
   const sendMessage = useCallback(async (text, options = {}) => {
     const message = text || input.trim()
     if (!message || loading || sendingRef.current) return
+    // Typing "stop"/"please stop" (etc.) while the assistant is speaking
+    // should halt playback locally, not get sent to the assistant as a
+    // regular chat message — mirrors the same check useSpeech.js already
+    // does for a *spoken* stop command.
+    if (isSpeaking && VOICE_STOP_COMMAND_RE.test(message)) {
+      stopSpeaking()
+      setInput('')
+      return
+    }
     const wantsYouTube = shouldOpenYouTube(message)
     sendingRef.current = true
     setInput('')
@@ -495,6 +510,15 @@ function ChatTab({ onUsageIncrement }) {
         voiceRequested:Boolean(options.speakResponse),
       }
       setMessages(prev => [...prev, assistantMessage])
+      // The assistant signed off -- end the conversation rather than looping
+      // back to listen again (covers both the hands-free voice loop and a
+      // typed message sent mid-voice-conversation; either way the mic should
+      // not reopen after a goodbye). speakWithTimeout below still speaks the
+      // farewell itself -- this only stops what happens *after* it.
+      if (ASSISTANT_FAREWELL_RE.test(data.response || '')) {
+        setVoiceModeActive(false)
+        stopListening()
+      }
       let youtubeStarted = false
       if (wantsYouTube) {
         const youtubeUrl = extractYouTubeVideoUrl(data.response || '')
@@ -531,7 +555,7 @@ function ChatTab({ onUsageIncrement }) {
       sendingRef.current = false
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }, [input, loading, onUsageIncrement, playYouTubeInsideApp, restartVoiceListening, sessionId, speakWithTimeout, userId])
+  }, [input, isSpeaking, loading, onUsageIncrement, playYouTubeInsideApp, restartVoiceListening, sessionId, speakWithTimeout, stopListening, stopSpeaking, userId])
 
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
 
@@ -540,7 +564,12 @@ function ChatTab({ onUsageIncrement }) {
   }
 
   const handleVoiceClick = () => {
-    if (voiceModeActive) {
+    // Guaranteed click-to-stop: whenever the assistant is speaking, this
+    // button stops it -- regardless of voiceModeActive, so it also covers
+    // playback started by clicking "read aloud" on a past message (not just
+    // the hands-free conversation flow), and works even in browsers/moments
+    // where spoken "stop" doesn't get picked up.
+    if (voiceModeActive || isSpeaking) {
       setVoiceModeActive(false)
       stopSpeaking()
       stopListening()

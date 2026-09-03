@@ -1,4 +1,5 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 # Only load .env in local development — never in production.
 # Set DOTENV_FILE=.env.geetabitan to run as Geetabitan locally.
@@ -29,6 +30,7 @@ from api.routes.polls import router as polls_router
 from api.routes.auth  import router as auth_router, get_current_team
 from api.routes.music import router as music_router
 from api.routes.admin import router as admin_router
+from api.routes.scheduling_admin import router as scheduling_admin_router
 from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
 from api.schemas import ChatRequest, ChatResponse, SessionResponse
@@ -915,11 +917,15 @@ _PROD_ORIGINS = [
     "https://www.geetabitan.adar.agomoniai.com",
     "https://restaurants.adar.agomoniai.com",
     "https://www.restaurants.adar.agomoniai.com",
+    "https://scheduling.adar.agomoniai.com",
+    "https://www.scheduling.adar.agomoniai.com",
     # Firebase default URLs
     "https://geetabitan-adar.web.app",
     "https://geetabitan-adar.firebaseapp.com",
     "https://restaurants-adar.web.app",
     "https://restaurants-adar.firebaseapp.com",
+    "https://scheduling-adar.web.app",
+    "https://scheduling-adar.firebaseapp.com",
 ]
 _DEV_ORIGINS = [
     "http://localhost:6001", "http://localhost:6002", "http://localhost:5173", "http://localhost:3000",
@@ -1031,6 +1037,7 @@ async def get_arcl_teams(season: int = 69):
 
 
 app.include_router(admin_router)
+app.include_router(scheduling_admin_router)
 app.include_router(payments_router)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1061,6 +1068,43 @@ async def get_or_create_session(user_id: str, session_id: Optional[str]):
         session_id=sid,
         state={},
     )
+
+
+async def _run_agent_with_retries(runner, user_id, session_id, new_message, max_attempts: int = 3) -> str:
+    """
+    Run the orchestrator and collect its final response text. Gemini
+    occasionally returns a transient 503 UNAVAILABLE (a momentary outage on
+    Google's end, not something wrong with our request) — ADK's own internal
+    retry only covers sub-second blips, and a longer one still bubbles up as
+    a hard failure for the whole chat turn. Retry the whole run a couple
+    more times with a short backoff before giving up. Non-transient errors
+    (a real bug, a bad tool call, etc.) are re-raised immediately — this
+    only insures against the "service unavailable" class of failure.
+    Shared by every domain since they all go through this same call.
+    """
+    last_err: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            text = ""
+            async for event in runner.run_async(
+                user_id=user_id,
+                session_id=session_id,
+                new_message=new_message,
+            ):
+                if hasattr(event, "is_final_response") and event.is_final_response():
+                    if event.content and event.content.parts:
+                        for part in event.content.parts:
+                            if hasattr(part, "text") and part.text:
+                                text += part.text
+            return text
+        except Exception as e:
+            last_err = e
+            transient = "503" in str(e) or "UNAVAILABLE" in str(e) or "overloaded" in str(e).lower()
+            if not transient or attempt == max_attempts:
+                raise
+            logger.warning(f"Transient model error (attempt {attempt}/{max_attempts}), retrying: {e}")
+            await asyncio.sleep(1.5 * attempt)
+    raise last_err  # pragma: no cover — loop always returns or raises above
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -1128,16 +1172,9 @@ async def chat(
             response_text = await _restaurant_direct_response(message, _recent_chat_history.get(session_key)) or ""
         if not response_text:
             try:
-                async for event in runner.run_async(
-                    user_id=request.user_id,
-                    session_id=session.id,
-                    new_message=user_message,
-                ):
-                    if hasattr(event, "is_final_response") and event.is_final_response():
-                        if event.content and event.content.parts:
-                            for part in event.content.parts:
-                                if hasattr(part, "text") and part.text:
-                                    response_text += part.text
+                response_text = await _run_agent_with_retries(
+                    runner, request.user_id, session.id, user_message,
+                )
             except Exception:
                 if DOMAIN != "restaurants":
                     raise
@@ -1319,6 +1356,13 @@ async def demo_tts(request: Request):
     raw_text = (body.get("text") or "").strip()
     lang = (body.get("lang") or "en-US").strip()
     text = raw_text[:1200].strip()
+    # "Dr." read by Google TTS voices is frequently mispronounced as "drive"
+    # (it's ambiguous with the street-address abbreviation). When "Dr."/"Dr"
+    # is used as a title — followed by a capitalized name, e.g. "Dr. Osei" —
+    # spell it out so it's said as "Doctor" instead. Doesn't touch "Dr." at
+    # the end of a sentence or followed by a lowercase word, so it's safe to
+    # apply for every tenant/domain, not just scheduling.
+    text = re.sub(r"\bDr\.?\s+(?=[A-Z])", "Doctor ", text)
     if len(text) > 380:
         parts = []
         current = ""

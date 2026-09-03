@@ -8,6 +8,7 @@
  * .env.arcl:       VITE_DOMAIN=arcl
  * .env.geetabitan: VITE_DOMAIN=geetabitan
  * .env.restaurants: VITE_DOMAIN=restaurants
+ * .env.scheduling: VITE_DOMAIN=scheduling
  */
 
 const _domain =
@@ -259,6 +260,78 @@ const TENANTS = {
 
     loginTitle:   'Adar Restaurants',
     loginCaption: 'Powered by Adar · Restaurant Food Recommender',
+  },
+
+  scheduling: {
+    id:            'scheduling',
+    appTitle:      'Adar Scheduling',
+    name:          'Practice Scheduling Assistant',
+    shortName:     'Scheduling',
+    subtitle:      'Book, Check, Reschedule & Cancel Appointments',
+    logoText:      'Adar',
+
+    primaryColor:  '#2563EB',
+    primaryLight:  '#60A5FA',
+    primaryDark:   '#1E40AF',
+    accentColor:   '#059669',
+    accentLight:   '#34D399',
+    accentDark:    '#047857',
+    bgDefault:     '#F8FAFC',
+    bgPaper:       '#FFFFFF',
+    textPrimary:   '#1E293B',
+    textSecondary: '#64748B',
+    divider:       '#E2E8F0',
+
+    fontFamily: '"Inter", "Roboto", "Helvetica Neue", sans-serif',
+
+    // Chat strings
+    welcomeMessage:
+      "Hi! I'm your scheduling assistant. I can help you book, check, " +
+      "reschedule, or cancel an appointment.\n\nWhat would you like to do?",
+    placeholder:    'Ask to book, check, or cancel an appointment…',
+    typingText:     'Checking availability…',
+    clearMessage:   'Session cleared. What would you like to schedule?',
+    footerText:     'Powered by Adar',
+    evalLabels: {
+      accuracy: 'Accuracy',
+      completeness: 'Completeness',
+      relevance: 'Relevance',
+      format: 'Format',
+      overall: 'Overall',
+      scale: '5',
+    },
+    voice: {
+      lang: 'en-US',
+      startTooltip: 'Speak',
+      stopTooltip: 'Stop voice conversation',
+      noSpeech: 'No speech heard. Please try again.',
+      micPermission: 'Please allow microphone access.',
+      network: 'Network problem.',
+      speechErrorPrefix: 'Voice error',
+      notUnderstood: 'Could not understand speech. Please try again.',
+      voiceServerProblemPrefix: 'Voice server problem',
+      micStartProblemPrefix: 'Could not start microphone',
+    },
+
+    // Suggested questions shown on first load
+    suggestedQuestions: [
+      'What appointment types do you offer?',
+      'I need to see a doctor next week',
+      'What times are open tomorrow afternoon?',
+      'Book a follow-up visit',
+      'Cancel my appointment',
+      'Reschedule my appointment to next Friday',
+    ],
+
+    // Register page
+    registerSubtitle:    'Practice scheduling · book, check, and manage appointments',
+    showTeamDropdown:    false,
+    teamDropdownLabel:   '',
+    teamDropdownHelper:  '',
+
+    // Login page
+    loginTitle:   'Adar Scheduling',
+    loginCaption: 'Powered by Adar · Practice Scheduling Assistant',
   },
 }
 

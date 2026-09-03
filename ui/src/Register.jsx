@@ -33,6 +33,7 @@ export default function Register({ onBack }) {
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState('')
   const [success, setSuccess]           = useState(false)
+  const [regStatus, setRegStatus]       = useState('')
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }))
   const pwStr = passwordStrength(form.password)
@@ -54,12 +55,13 @@ export default function Register({ onBack }) {
     if (form.password.length < 8)       { setError('Password must be at least 8 characters'); return }
     setLoading(true)
     try {
-      await axios.post(`${API_URL}/api/auth/register`, {
+      const res = await axios.post(`${API_URL}/api/auth/register`, {
         team_name:      form.team_name.trim(),
         email:          form.email.trim().toLowerCase(),
         contact_person: form.contact_person.trim(),
         password:       form.password,
       })
+      setRegStatus(res.data?.status || '')
       setSuccess(true)
     } catch (err) {
       setError(err.response?.data?.detail || 'Registration failed. Please try again.')
@@ -68,7 +70,9 @@ export default function Register({ onBack }) {
     }
   }
 
-  if (success) return (
+  if (success) {
+    const billingRequired = regStatus === 'pending_payment'
+    return (
     <Box sx={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', bgcolor:'background.default', p:2 }}>
       <Box sx={{ width:'100%', maxWidth:420, textAlign:'center' }}>
         <CheckCircleOutlineIcon sx={{ fontSize:56, color:'primary.main', mb:2 }} />
@@ -77,17 +81,22 @@ export default function Register({ onBack }) {
           Welcome to Adar, <strong>{form.team_name}</strong>!
         </Typography>
         <Typography variant="body2" sx={{ color:'text.secondary', mb:3 }}>
-          Next: subscribe to start your <strong>30-day free trial</strong>. No charge during trial. Cancel anytime.
+          {billingRequired
+            ? <>Next: subscribe to start your <strong>30-day free trial</strong>. No charge during trial. Cancel anytime.</>
+            : <>Your account is ready — sign in to get started.</>}
         </Typography>
         <Button variant="contained" fullWidth sx={{ py:1.2, mb:1.5 }} onClick={onBack}>
-          Sign in to subscribe →
+          {billingRequired ? 'Sign in to subscribe →' : 'Sign in →'}
         </Button>
-        <Typography variant="caption" sx={{ color:'text.secondary' }}>
-          Powered by Stripe · PCI DSS compliant
-        </Typography>
+        {billingRequired && (
+          <Typography variant="caption" sx={{ color:'text.secondary' }}>
+            Powered by Stripe · PCI DSS compliant
+          </Typography>
+        )}
       </Box>
     </Box>
   )
+  }
 
   return (
     <Box sx={{ minHeight:'100dvh', display:'flex', alignItems:'center', justifyContent:'center', bgcolor:'background.default', p:2 }}>

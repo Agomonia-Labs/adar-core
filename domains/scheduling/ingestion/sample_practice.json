@@ -1,0 +1,57 @@
+{
+  "practice": {
+    "name": "Riverside Family Medicine",
+    "timezone": "America/New_York",
+    "lead_time_minutes": 120,
+    "max_advance_days": 60
+  },
+  "appointment_types": [
+    {
+      "name": "New Patient Visit",
+      "duration_minutes": 45,
+      "buffer_minutes": 10,
+      "description": "For patients being seen at this practice for the first time."
+    },
+    {
+      "name": "Follow-up Visit",
+      "duration_minutes": 20,
+      "buffer_minutes": 5,
+      "description": "A short check-in for an existing, ongoing concern."
+    },
+    {
+      "name": "Annual Physical",
+      "duration_minutes": 40,
+      "buffer_minutes": 10,
+      "description": "Yearly wellness exam."
+    }
+  ],
+  "providers": [
+    {
+      "name": "Dr. Amara Osei",
+      "role": "Family Medicine Physician",
+      "appointment_types": ["New Patient Visit", "Follow-up Visit", "Annual Physical"],
+      "working_hours": [
+        {"weekday": 0, "start": "09:00", "end": "12:00"},
+        {"weekday": 0, "start": "13:00", "end": "17:00"},
+        {"weekday": 1, "start": "09:00", "end": "12:00"},
+        {"weekday": 1, "start": "13:00", "end": "17:00"},
+        {"weekday": 2, "start": "09:00", "end": "12:00"},
+        {"weekday": 2, "start": "13:00", "end": "17:00"},
+        {"weekday": 3, "start": "09:00", "end": "12:00"},
+        {"weekday": 3, "start": "13:00", "end": "17:00"},
+        {"weekday": 4, "start": "09:00", "end": "13:00"}
+      ]
+    },
+    {
+      "name": "Dr. Ben Whitfield",
+      "role": "Nurse Practitioner",
+      "appointment_types": ["Follow-up Visit", "Annual Physical"],
+      "working_hours": [
+        {"weekday": 1, "start": "10:00", "end": "18:00"},
+        {"weekday": 2, "start": "10:00", "end": "18:00"},
+        {"weekday": 3, "start": "10:00", "end": "18:00"},
+        {"weekday": 4, "start": "10:00", "end": "18:00"}
+      ]
+    }
+  ]
+}

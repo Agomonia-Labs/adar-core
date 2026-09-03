@@ -191,12 +191,20 @@ export function useSpeech({ lang = 'en-US', labels = {}, onResult, onError } = {
       }
     }
 
-    rec.onerror = () => {}
+    rec.onerror = (e) => {
+      // 'no-speech' and 'aborted' are routine in continuous mode (fires on
+      // every silence gap / on our own deliberate rec.abort()) -- only log
+      // anything unexpected.
+      if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        console.warn('Interrupt listening error:', e.error)
+      }
+    }
     rec.onend = () => {
       if (!interruptActiveRef.current) return
       try {
         rec.start()
-      } catch {
+      } catch (err) {
+        console.warn('Interrupt listening failed to restart:', err)
         interruptActiveRef.current = false
       }
     }
@@ -214,8 +222,23 @@ export function useSpeech({ lang = 'en-US', labels = {}, onResult, onError } = {
     interruptActiveRef.current = true
     try {
       rec.start()
-    } catch {
-      // Already started, or this browser does not allow concurrent recognition.
+    } catch (err) {
+      // The speech engine sometimes isn't ready for a second (interrupt)
+      // SpeechRecognition instance the instant the first one (regular STT)
+      // just stopped -- "recognition has already started" / InvalidStateError.
+      // One short retry covers that race; log so a real, non-transient
+      // failure (e.g. this browser truly disallows concurrent recognition)
+      // is at least visible in devtools instead of silently never working.
+      console.warn('Interrupt listening failed to start, retrying:', err)
+      setTimeout(() => {
+        if (!interruptActiveRef.current) return
+        try {
+          rec.start()
+        } catch (retryErr) {
+          console.warn('Interrupt listening retry also failed — spoken "stop" will not interrupt playback in this browser/session:', retryErr)
+          interruptActiveRef.current = false
+        }
+      }, 300)
     }
   }, [listening])
 

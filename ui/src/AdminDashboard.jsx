@@ -11,6 +11,7 @@ import RefreshIcon from '@mui/icons-material/Refresh'
 import LogoutIcon from '@mui/icons-material/Logout'
 import axios from 'axios'
 import tenant from './tenant'   // CHANGE: import tenant
+import SchedulingAdmin from './scheduling/SchedulingAdmin'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const API_KEY = import.meta.env.VITE_API_KEY || ''
@@ -187,14 +188,14 @@ export default function AdminDashboard({ token, onLogout }) {
 
           {/* Tab nav */}
           <Stack direction="row" spacing={1} mb={2}>
-            {['teams','evals'].map(t => (
+            {(tenant.id === 'scheduling' ? ['teams','evals','scheduling'] : ['teams','evals']).map(t => (
               <Button key={t} size="small" variant={activeTab===t?'contained':'outlined'}
                 onClick={() => { setActiveTab(t); if(t==='evals' && !evals) fetchEvals() }}
                 sx={{
                   textTransform:'capitalize',
                   ...(activeTab===t ? {} : { borderColor:'divider', color:'text.secondary' })
                 }}>
-                {t === 'teams' ? '👥 Teams' : '📊 Evals'}
+                {t === 'teams' ? '👥 Teams' : t === 'evals' ? '📊 Evals' : '🏥 Practices'}
               </Button>
             ))}
           </Stack>
@@ -433,6 +434,11 @@ export default function AdminDashboard({ token, onLogout }) {
                 </Box>
               )}
             </Box>
+          )}
+
+          {/* Scheduling tab (practices/providers/appointment types/calendar) */}
+          {activeTab === 'scheduling' && tenant.id === 'scheduling' && (
+            <SchedulingAdmin token={token} />
           )}
         </>
       )}

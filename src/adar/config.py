@@ -26,6 +26,7 @@ DOMAIN = os.getenv("DOMAIN", "arcl")
 _FIRESTORE_DEFAULTS = {
     "arcl":       "tigers-arcl",
     "geetabitan": "geetabitan-db",
+    "scheduling": "adar-scheduling-db",
 }
 FIRESTORE_DATABASE = os.getenv(
     "FIRESTORE_DATABASE",
@@ -55,6 +56,7 @@ _APP_NAME_DEFAULTS = {
     "arcl":       "adar-arcl-api",
     "geetabitan": "adar-geetabitan-api",
     "restaurants": "adar-restaurants-api",
+    "scheduling": "adar-scheduling-api",
 }
 APP_NAME = os.getenv("APP_NAME", _APP_NAME_DEFAULTS.get(DOMAIN, "adar-api"))
 APP_ENV  = os.getenv("APP_ENV", "development")
@@ -64,10 +66,16 @@ PORT     = int(os.getenv("PORT", "8040"))
 ARCL_API_KEY       = os.getenv("ARCL_API_KEY", "")
 GEETABITAN_API_KEY = os.getenv("GEETABITAN_API_KEY", "")
 RESTAURANTS_API_KEY = os.getenv("RESTAURANTS_API_KEY", "")
+SCHEDULING_API_KEY = os.getenv("SCHEDULING_API_KEY", "")
+# Single-practice pilots can pin their practice_id here so the agent never
+# has to ask the caller which practice they mean. Multi-practice deployments
+# leave this blank and resolve practice_id from the caller session instead.
+SCHEDULING_DEFAULT_PRACTICE_ID = os.getenv("SCHEDULING_DEFAULT_PRACTICE_ID", "")
 _API_KEY_DEFAULTS = {
     "arcl": ARCL_API_KEY,
     "geetabitan": GEETABITAN_API_KEY,
     "restaurants": RESTAURANTS_API_KEY,
+    "scheduling": SCHEDULING_API_KEY,
 }
 API_KEY = _API_KEY_DEFAULTS.get(DOMAIN, ARCL_API_KEY)
 
@@ -76,6 +84,16 @@ if DOMAIN == "geetabitan":
     FS_SONGS_COLLECTION    = "geetabitan_songs"
     FS_EVALS_COLLECTION    = "geetabitan_evals"
     FS_SESSIONS_COLLECTION = "geetabitan_sessions"
+elif DOMAIN == "scheduling":
+    # Practice-scoped scheduling collections. Every document in these
+    # collections carries a practice_id field (the tenant boundary) —
+    # see domains/scheduling/README.md for the full schema.
+    SCHEDULING_PRACTICES_COLLECTION        = os.getenv("SCHEDULING_PRACTICES_COLLECTION",        "scheduling_practices")
+    SCHEDULING_PROVIDERS_COLLECTION        = os.getenv("SCHEDULING_PROVIDERS_COLLECTION",        "scheduling_providers")
+    SCHEDULING_APPOINTMENT_TYPES_COLLECTION = os.getenv("SCHEDULING_APPOINTMENT_TYPES_COLLECTION", "scheduling_appointment_types")
+    SCHEDULING_APPOINTMENTS_COLLECTION     = os.getenv("SCHEDULING_APPOINTMENTS_COLLECTION",     "scheduling_appointments")
+    SCHEDULING_HOLDS_COLLECTION            = os.getenv("SCHEDULING_HOLDS_COLLECTION",            "scheduling_holds")
+    FS_EVALS_COLLECTION                    = "scheduling_evals"
 else:
     # Original ARCL names kept exactly as they were — so existing
     # domains/arcl/tools/*.py imports continue to work with no changes.
@@ -243,6 +261,28 @@ OFFTOPIC_GUARD: dict = {
             "menus, prices, reviews, and nearby options."
         ),
     },
+    "scheduling": {
+        "off_topic": [
+            "python", "javascript", "java", "write a program", "write code",
+            "cricket", "football", "soccer", "music", "lyrics", "song",
+            "stock market", "crypto", "bitcoin", "how to hack", "sql injection",
+            "calculus", "algebra", "write an essay", "recipe", "cooking",
+            "weather", "movie", "joke", "poem", "translate",
+        ],
+        "hints": [
+            "appointment", "appointments", "schedule", "scheduling", "book",
+            "booking", "reschedule", "cancel", "cancellation", "available",
+            "availability", "slot", "slots", "opening", "openings", "provider",
+            "doctor", "clinician", "physician", "dentist", "stylist", "attorney",
+            "visit", "office hours", "hours", "today", "tomorrow", "next week",
+            "morning", "afternoon", "evening", "am", "pm", "confirm", "confirmation",
+            "practice", "clinic", "patient", "new patient", "follow up", "follow-up",
+        ],
+        "reject_msg": (
+            "I can help you book, check, reschedule, or cancel an appointment. "
+            "What would you like to do?"
+        ),
+    },
 }
 
 
@@ -291,6 +331,15 @@ class _Settings:
     ARCL_API_KEY:       str = ARCL_API_KEY
     GEETABITAN_API_KEY: str = GEETABITAN_API_KEY
     API_KEY:            str = API_KEY
+
+    # Scheduling collection names (only meaningful when DOMAIN == "scheduling")
+    SCHEDULING_API_KEY:                      str = SCHEDULING_API_KEY
+    SCHEDULING_DEFAULT_PRACTICE_ID:          str = SCHEDULING_DEFAULT_PRACTICE_ID
+    SCHEDULING_PRACTICES_COLLECTION:         str = SCHEDULING_PRACTICES_COLLECTION         if DOMAIN == "scheduling" else ""
+    SCHEDULING_PROVIDERS_COLLECTION:         str = SCHEDULING_PROVIDERS_COLLECTION         if DOMAIN == "scheduling" else ""
+    SCHEDULING_APPOINTMENT_TYPES_COLLECTION: str = SCHEDULING_APPOINTMENT_TYPES_COLLECTION if DOMAIN == "scheduling" else ""
+    SCHEDULING_APPOINTMENTS_COLLECTION:      str = SCHEDULING_APPOINTMENTS_COLLECTION      if DOMAIN == "scheduling" else ""
+    SCHEDULING_HOLDS_COLLECTION:             str = SCHEDULING_HOLDS_COLLECTION             if DOMAIN == "scheduling" else ""
 
     # ARCL collection names (only meaningful when DOMAIN == "arcl")
     ARCL_RULES_COLLECTION:         str = ARCL_RULES_COLLECTION         if DOMAIN == "arcl" else ""

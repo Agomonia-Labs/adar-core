@@ -14,6 +14,9 @@
         "restaurants": [
           "restaurants-adar"
         ],
+        "scheduling": [
+          "scheduling-adar"
+        ],
         "arcl": [
           "bdas-493785"
         ]

@@ -183,13 +183,21 @@ async def register(req: RegisterRequest):
     if doc.exists:
         team_id = f"{team_id}_{int(datetime.now().timestamp()) % 10000}"
 
+    # Bug fix: this used to hardcode "pending_payment" in the response below
+    # regardless of what was actually written to Firestore — for any domain
+    # with BILLING_ENABLED=false (restaurants, scheduling), the team was
+    # correctly created with status "active" but the API told the caller
+    # "pending_payment" anyway, which is why the frontend's post-register
+    # screen always shows the "subscribe to your trial" message even when
+    # billing is off for that domain. Compute it once, use it in both places.
+    status = "pending_payment" if _billing_enabled() else "active"
     team_data = {
         "team_id":        team_id,
         "team_name":      req.team_name.strip(),
         "email":          email,
         "password_hash":  _hash_password(req.password),
         "contact_person": req.contact_person.strip(),
-        "status":         "pending_payment" if _billing_enabled() else "active",
+        "status":         status,
         "role":           "team",
         "quota_rpm":      20,
         "quota_daily":    500,
@@ -198,12 +206,16 @@ async def register(req: RegisterRequest):
     }
 
     await db.collection(TEAMS_COLLECTION).document(team_id).set(team_data)
-    logger.info(f"New registration: {team_id} ({email})")
+    logger.info(f"New registration: {team_id} ({email}) status={status}")
 
     return {
-        "message": "Registration successful! Please subscribe to start using Adar.",
+        "message": (
+            "Registration successful! Please subscribe to start using Adar."
+            if status == "pending_payment"
+            else "Registration successful! You can sign in now."
+        ),
         "team_id": team_id,
-        "status":  "pending_payment",
+        "status":  status,
     }
 
 

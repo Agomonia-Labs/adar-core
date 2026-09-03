@@ -39,6 +39,18 @@
       "rewrites": [
         { "source": "**", "destination": "/index.html" }
       ]
+    },
+    {
+      "target": "scheduling",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        { "source": "**", "destination": "/index.html" }
+      ]
     }
   ]
 

@@ -19,10 +19,29 @@ import os
 import logging
 from datetime import datetime
 
+from src.adar.config import DOMAIN
+
 logger = logging.getLogger(__name__)
 
+# Every domain shares this module (Gmail sending, OTP login codes, the base
+# HTML template) — brand text needs to follow DOMAIN, not stay hardcoded to
+# ARCL. FROM_NAME feeds the email's actual "From:" header display name, and
+# _BRAND feeds _base_template's default brand_name/footer_org below, so a
+# call site that doesn't explicitly override branding (send_otp_email, for
+# instance) still shows correctly per domain instead of always saying
+# "Adar ARCL". Billing-flow emails (welcome/trial/payment/etc. further down)
+# stay ARCL-worded on purpose — Stripe billing isn't wired up for any other
+# domain yet (BILLING_ENABLED=false), so they're unreachable elsewhere.
+_BRAND_DEFAULTS = {
+    "arcl":        {"brand_name": "Adar ARCL",       "footer_org": "American Recreational Cricket League"},
+    "geetabitan":  {"brand_name": "Adar Geetabitan",  "footer_org": "গীতবিতান — রবীন্দ্রনাথ ঠাকুরের গান"},
+    "restaurants": {"brand_name": "Adar Restaurants", "footer_org": "Restaurant Food Recommender"},
+    "scheduling":  {"brand_name": "Adar Scheduling",  "footer_org": "Practice Scheduling Assistant"},
+}
+_BRAND = _BRAND_DEFAULTS.get(DOMAIN, _BRAND_DEFAULTS["arcl"])
+
 FROM_EMAIL     = os.environ.get("NOTIFY_FROM_EMAIL", "noreply@adar.agomoniai.com")
-FROM_NAME      = "Adar ARCL"
+FROM_NAME      = _BRAND["brand_name"]
 APP_URL        = os.environ.get("FRONTEND_URL", "https://adar.agomoniai.com")
 GMAIL_USER     = os.environ.get("GMAIL_USER", "admin@agomoniai.com")
 GMAIL_APP_PASS = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -70,8 +89,16 @@ async def send_email(to: str, subject: str, html: str):
     logger.warning(f"No email provider configured. Would have sent to={to} subject='{subject}'")
 
 
-def _base_template(title: str, body: str) -> str:
-    """Simple branded HTML email template."""
+def _base_template(
+    title: str,
+    body: str,
+    logo_text: str = "আদর",
+    brand_name: str = _BRAND["brand_name"],
+    footer_org: str = _BRAND["footer_org"],
+) -> str:
+    """Simple branded HTML email template. Defaults follow the running
+    domain (see _BRAND above) so a call site only needs to pass
+    logo_text/brand_name/footer_org when it wants to override that."""
     return f"""
 <!DOCTYPE html>
 <html>
@@ -86,8 +113,8 @@ def _base_template(title: str, body: str) -> str:
 
     <!-- Header -->
     <div style="background: #2EB87E; padding: 24px 32px; display: flex; align-items: center;">
-      <span style="font-size: 1.4rem; font-weight: 700; color: #fff; margin-right: 10px;">আদর</span>
-      <span style="font-size: 1.1rem; font-weight: 600; color: #fff;">Adar ARCL</span>
+      <span style="font-size: 1.4rem; font-weight: 700; color: #fff; margin-right: 10px;">{logo_text}</span>
+      <span style="font-size: 1.1rem; font-weight: 600; color: #fff;">{brand_name}</span>
     </div>
 
     <!-- Body -->
@@ -98,7 +125,7 @@ def _base_template(title: str, body: str) -> str:
     <!-- Footer -->
     <div style="padding: 20px 32px; background: #F5FBF7; border-top: 1px solid #C8E8D8;
                 font-size: 0.75rem; color: #5A8A70; text-align: center;">
-      American Recreational Cricket League · Powered by Adar<br>
+      {footer_org} · Powered by Adar<br>
       <a href="{APP_URL}" style="color: #2EB87E;">Visit app</a>
     </div>
   </div>
@@ -274,7 +301,7 @@ async def send_otp_email(to: str, team_name: str, otp: str):
     await send_email(
         to,
         f"Your Adar login code: {otp}",
-        _base_template("Sign in to Adar ARCL", f"<p>Hi <strong>{team_name}</strong>,</p>{body}")
+        _base_template(f"Sign in to {_BRAND['brand_name']}", f"<p>Hi <strong>{team_name}</strong>,</p>{body}")
     )
 
 
@@ -366,3 +393,43 @@ async def send_trial_ending_email(to: str, team_name: str, trial_ends: str, plan
     </div>
     """
     await send_email(to, subject, html)
+
+
+
+async def send_appointment_confirmation_email(
+    to: str,
+    caller_name: str,
+    practice_name: str,
+    appointment_type_name: str,
+    provider_name: str,
+    when_formatted: str,
+    appointment_id: str,
+):
+    """Email sent when a scheduling appointment is confirmed via confirm_booking.
+    Domain-neutral (practice_name comes from the caller, not hardcoded ARCL
+    copy) — see domains/scheduling/tools/availability_tools.py."""
+    body = f"""
+    <h2 style="color:#1A3326; margin-top:0;">Appointment confirmed ✓</h2>
+    <p>Hi {caller_name},</p>
+    <p>Your appointment with <strong>{practice_name}</strong> is confirmed.</p>
+    <div style="background:#EBF7F1; border:1px solid #C8E8D8; border-radius:8px; padding:16px; margin:20px 0;">
+      <strong>When:</strong> {when_formatted}<br>
+      <strong>Provider:</strong> {provider_name}<br>
+      <strong>Visit type:</strong> {appointment_type_name}<br>
+      <strong>Confirmation ID:</strong> {appointment_id[:8]}
+    </div>
+    <p style="color:#5A8A70; font-size:0.85rem;">
+      Need to reschedule or cancel? Just message the assistant with your phone
+      number and this confirmation ID.
+    </p>"""
+    await send_email(
+        to,
+        f"Appointment confirmed — {when_formatted}",
+        _base_template(
+            "Appointment confirmed",
+            body,
+            logo_text="Adar",
+            brand_name="Adar Scheduling",
+            footer_org="Practice Scheduling Assistant",
+        ),
+    )
