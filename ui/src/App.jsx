@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   ThemeProvider, CssBaseline, Box, Paper, Typography,
   TextField, IconButton, Chip, Avatar, Divider, Button,
-  CircularProgress, Tooltip, Stack, Tab, Tabs,
+  CircularProgress, Tooltip, Stack, Tab, Tabs, Select, MenuItem,
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import MicIcon from '@mui/icons-material/Mic'
@@ -71,6 +71,24 @@ const VOICE_STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet)\b|থামুন|থ
 // farewell. Not the same thing as VOICE_STOP_COMMAND_RE above, which matches
 // what the *caller* says to interrupt playback mid-sentence.
 const ASSISTANT_FAREWELL_RE = /\bgood[\s-]?bye\b|\bbye\b/i
+
+// Languages the scheduling assistant can converse in (mirrors the voice
+// map already live server-side in api/main.py's /api/demo/tts endpoint).
+// 'auto' leaves both text and voice on today's existing behavior — the
+// agent detects the caller's language from what they type, and STT/TTS
+// fall back to the tenant's configured default. Picking an explicit
+// language sets STT/TTS to that language *and* adds a short hint to each
+// outgoing message so the reply language stops depending on the model
+// guessing correctly turn to turn.
+const LANGUAGES = [
+  { code: 'auto',  label: 'Auto-detect' },
+  { code: 'en-US', label: 'English' },
+  { code: 'bn-IN', label: 'বাংলা (Bangla)' },
+  { code: 'hi-IN', label: 'हिन्दी (Hindi)' },
+  { code: 'ur-IN', label: 'اردو (Urdu)' },
+  { code: 'ar-XA', label: 'العربية (Arabic)' },
+  { code: 'es-US', label: 'Español (Spanish)' },
+]
 
 function shouldOpenYouTube(message = '') {
   return YOUTUBE_PLAY_INTENT_RE.test(message)
@@ -240,7 +258,7 @@ function MessageBubble({ msg, prevContent = '', onSpeak, onPlayYouTube, isSpeaki
         borderColor: isUser ? `${tenant.accentColor}40` : `${tenant.primaryColor}40`,
         borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
       }}>
-        <Box sx={{
+        <Box dir="auto" sx={{
           fontSize:'0.875rem', lineHeight:1.7, color:'text.primary',
           '& p': { margin:'0 0 6px 0' },
           '& p:last-child': { margin:0 },
@@ -403,10 +421,15 @@ function YouTubeMiniPlayer({ player, onClose }) {
 
 function ChatTab({ onUsageIncrement }) {
   const voiceLabels = tenant.voice || {}
+  // Explicit language picked in the UI (see LANGUAGES above). 'auto' keeps
+  // today's behavior unchanged; picking a language drives STT/TTS below
+  // and adds a hint to outgoing messages (see sendMessage).
+  const [selectedLanguage, setSelectedLanguage] = useState('auto')
+  const effectiveVoiceLang = selectedLanguage === 'auto' ? (voiceLabels.lang || 'en-US') : selectedLanguage
   // ── Speech to text ──────────────────────────────────────────────────────
   const sendMessageRef = useRef(null)
   const { listening, isSpeaking, supported, startListening, stopListening, speakBangla, stopSpeaking } = useSpeech({
-    lang:     voiceLabels.lang || 'bn-IN',
+    lang:     effectiveVoiceLang,
     labels:   voiceLabels,
     onResult: (text) => {
       if (VOICE_STOP_COMMAND_RE.test(text)) {
@@ -524,9 +547,15 @@ function ChatTab({ onUsageIncrement }) {
       // far more reliable in practice. The visible chat bubble above still
       // shows only what the person actually typed.
       const selectedPractice = practices.find(p => p.id === selectedPracticeId)
-      const apiMessage = selectedPractice
-        ? `[This conversation is about: ${selectedPractice.name}] ${message}`
-        : message
+      const selectedLanguageMeta = LANGUAGES.find(l => l.code === selectedLanguage)
+      const messageHints = []
+      if (selectedLanguage !== 'auto' && selectedLanguageMeta) {
+        messageHints.push(`[Please respond in ${selectedLanguageMeta.label}]`)
+      }
+      if (selectedPractice) {
+        messageHints.push(`[This conversation is about: ${selectedPractice.name}]`)
+      }
+      const apiMessage = messageHints.length ? `${messageHints.join(' ')} ${message}` : message
       const { data } = await axios.post(
         `${API_URL}/api/chat`,
         { message:apiMessage, user_id:userId, session_id:sessionId },
@@ -627,6 +656,26 @@ function ChatTab({ onUsageIncrement }) {
 
   return (
     <>
+      {tenant.id === 'scheduling' && (
+        <Box sx={{ px:2.5, pt:1.5, pb:0.5, display:'flex', alignItems:'center', gap:1 }}>
+          <Typography variant="caption" sx={{ color:'text.secondary' }}>
+            🌐 Language:
+          </Typography>
+          <Select
+            size="small"
+            variant="standard"
+            disableUnderline
+            value={selectedLanguage}
+            onChange={(e) => setSelectedLanguage(e.target.value)}
+            sx={{ fontSize:'0.78rem', fontWeight:600, color:'text.primary', '& .MuiSelect-select': { py:0.25 } }}
+          >
+            {LANGUAGES.map(l => (
+              <MenuItem key={l.code} value={l.code} sx={{ fontSize:'0.8rem' }}>{l.label}</MenuItem>
+            ))}
+          </Select>
+        </Box>
+      )}
+
       {tenant.id === 'scheduling' && practices.length > 1 && !sessionId && (
         <Box sx={{ px:2.5, pt:1.5, pb:0.5 }}>
           <Typography variant="caption" sx={{ color:'text.secondary', mb:0.75, display:'block' }}>
