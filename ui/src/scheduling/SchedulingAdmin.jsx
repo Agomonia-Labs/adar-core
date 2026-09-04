@@ -17,6 +17,9 @@ import axios from 'axios'
 import SchedulingProviders from './SchedulingProviders'
 import SchedulingAppointmentTypes from './SchedulingAppointmentTypes'
 import SchedulingCalendar from './SchedulingCalendar'
+import SchedulingStaff from './SchedulingStaff'
+import SchedulingOverview from './SchedulingOverview'
+import SchedulingBookingsList from './SchedulingBookingsList'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const API_KEY = import.meta.env.VITE_API_KEY || ''
@@ -30,16 +33,35 @@ function authHeaders(token) {
 const EMPTY_PRACTICE = { name: '', timezone: 'America/New_York', lead_time_minutes: 120, max_advance_days: 60 }
 
 const SUB_TABS = [
+  { key: 'overview',          label: '📊 Overview' },
   { key: 'providers',         label: '👥 Providers' },
   { key: 'appointment-types', label: '🏷️ Appointment types' },
   { key: 'calendar',          label: '📅 Calendar' },
+  { key: 'bookings',          label: '📋 Bookings' },
 ]
 
+// Staff-login management is admin-only on the backend (get_admin on all
+// three .../staff endpoints in scheduling_admin.py) -- a practice_staff
+// login would just get 403s, so the tab is hidden for it entirely rather
+// than shown-then-erroring.
+const STAFF_TAB = { key: 'staff', label: '🔑 Staff logins' }
+
 export default function SchedulingAdmin({ token }) {
+  // A practice-scoped scheduling staff login (role="practice_staff" — see
+  // api/routes/scheduling_admin.py) can only ever see its own practice_id:
+  // list-all (GET /practices) is admin-only on the backend and would 403,
+  // so this component fetches just that one practice instead and never
+  // offers to create another. Everything below this point (providers,
+  // appointment types, calendar) already scopes correctly by practiceId,
+  // since those endpoints enforce the same practice_id check server-side.
+  const isPracticeStaff = localStorage.getItem('adar_role') === 'practice_staff'
+  const myPracticeId    = localStorage.getItem('adar_practice_id') || ''
+
   const [practices, setPractices]           = useState([])
   const [practicesLoading, setPracticesLoading] = useState(true)
   const [selectedId, setSelectedId]         = useState('')
-  const [subTab, setSubTab]                 = useState('providers')
+  const [subTab, setSubTab]                 = useState('overview')
+  const [calendarProviderFilter, setCalendarProviderFilter] = useState('')
   const [error, setError]                   = useState('')
   const [msg, setMsg]                       = useState('')
 
@@ -55,8 +77,14 @@ export default function SchedulingAdmin({ token }) {
   const loadPractices = useCallback(async () => {
     setPracticesLoading(true); setError('')
     try {
-      const { data } = await axios.get(`${API_URL}/admin/scheduling/practices`, { headers: authHeaders(token) })
-      const list = data.practices || []
+      let list
+      if (isPracticeStaff) {
+        const { data } = await axios.get(`${API_URL}/admin/scheduling/practices/${myPracticeId}`, { headers: authHeaders(token) })
+        list = [data]
+      } else {
+        const { data } = await axios.get(`${API_URL}/admin/scheduling/practices`, { headers: authHeaders(token) })
+        list = data.practices || []
+      }
       setPractices(list)
       setSelectedId(prev => (prev && list.some(p => p.id === prev)) ? prev : (list[0]?.id || ''))
     } catch (e) {
@@ -64,7 +92,7 @@ export default function SchedulingAdmin({ token }) {
     } finally {
       setPracticesLoading(false)
     }
-  }, [token])
+  }, [token, isPracticeStaff, myPracticeId])
 
   useEffect(() => { loadPractices() }, [loadPractices])
 
@@ -152,9 +180,11 @@ export default function SchedulingAdmin({ token }) {
             ))}
           </Select>
         </FormControl>
-        <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={openNewPractice}>
-          New practice
-        </Button>
+        {!isPracticeStaff && (
+          <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={openNewPractice}>
+            New practice
+          </Button>
+        )}
         {selectedPractice && (
           <Button size="small" onClick={openEditPractice}>Edit practice settings</Button>
         )}
@@ -162,8 +192,12 @@ export default function SchedulingAdmin({ token }) {
 
       {practices.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <Typography sx={{ color: 'text.secondary', mb: 2 }}>No practices yet. Create one to get started.</Typography>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openNewPractice}>New practice</Button>
+          <Typography sx={{ color: 'text.secondary', mb: 2 }}>
+            {isPracticeStaff ? 'Could not load your practice.' : 'No practices yet. Create one to get started.'}
+          </Typography>
+          {!isPracticeStaff && (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={openNewPractice}>New practice</Button>
+          )}
         </Paper>
       ) : (
         <>
@@ -178,7 +212,7 @@ export default function SchedulingAdmin({ token }) {
           )}
 
           <Stack direction="row" spacing={1} mb={2}>
-            {SUB_TABS.map(t => (
+            {(isPracticeStaff ? SUB_TABS : [...SUB_TABS, STAFF_TAB]).map(t => (
               <Button key={t.key} size="small" variant={subTab === t.key ? 'contained' : 'outlined'}
                 onClick={() => setSubTab(t.key)}
                 sx={{ textTransform: 'none', ...(subTab === t.key ? {} : { borderColor: 'divider', color: 'text.secondary' }) }}>
@@ -191,14 +225,26 @@ export default function SchedulingAdmin({ token }) {
             <Box sx={{ textAlign: 'center', py: 3 }}><CircularProgress size={24} /></Box>
           ) : (
             <>
+              {subTab === 'overview' && (
+                <SchedulingOverview token={token} practiceId={selectedId} practiceName={selectedPractice?.name}
+                  providers={providers} appointmentTypes={appointmentTypes} />
+              )}
               {subTab === 'providers' && (
-                <SchedulingProviders token={token} practiceId={selectedId} appointmentTypes={appointmentTypes} />
+                <SchedulingProviders token={token} practiceId={selectedId} appointmentTypes={appointmentTypes}
+                  onViewCalendar={(providerId) => { setCalendarProviderFilter(providerId); setSubTab('calendar') }} />
               )}
               {subTab === 'appointment-types' && (
                 <SchedulingAppointmentTypes token={token} practiceId={selectedId} />
               )}
               {subTab === 'calendar' && (
-                <SchedulingCalendar token={token} practiceId={selectedId} providers={providers} />
+                <SchedulingCalendar token={token} practiceId={selectedId} providers={providers} appointmentTypes={appointmentTypes}
+                  providerFilter={calendarProviderFilter} onProviderFilterChange={setCalendarProviderFilter} />
+              )}
+              {subTab === 'bookings' && (
+                <SchedulingBookingsList token={token} practiceId={selectedId} providers={providers} />
+              )}
+              {subTab === 'staff' && !isPracticeStaff && (
+                <SchedulingStaff token={token} practiceId={selectedId} practiceName={selectedPractice?.name} practices={practices} />
               )}
             </>
           )}

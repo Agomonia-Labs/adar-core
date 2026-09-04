@@ -527,12 +527,14 @@ async def confirm_booking(
         }
         return reason_map.get(str(exc), "I couldn't confirm that booking — please try again.")
 
+    practice_rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
+    practice = practice_rows[0] if practice_rows else {}
+    practice_name = practice.get("name") or "your practice"
+
     email_sent = False
     if caller_email:
         try:
             from src.adar.notify import send_appointment_confirmation_email
-            rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
-            practice_name = rows[0].get("name") if rows else "your practice"
             await send_appointment_confirmation_email(
                 to=caller_email,
                 caller_name=caller_name,
@@ -545,6 +547,32 @@ async def confirm_booking(
             email_sent = True
         except Exception:
             logger.exception("Appointment confirmation email failed for %s (booking still confirmed)", appointment_id)
+
+    # Staff-facing "new booking" notification — separate from the caller's
+    # confirmation email above and never allowed to affect it: this is
+    # purely so front-desk staff learn about a new booking without opening
+    # the admin calendar. Falls back to the platform ADMIN_EMAIL when the
+    # practice hasn't set its own notification_email (matches today's
+    # reality that one operator runs every practice on a deployment until
+    # per-practice staff logins exist).
+    notify_to = practice.get("notification_email") or settings.ADMIN_EMAIL
+    if notify_to:
+        try:
+            from src.adar.notify import send_new_booking_notification_email
+            await send_new_booking_notification_email(
+                to=notify_to,
+                practice_name=practice_name,
+                caller_name=caller_name,
+                caller_phone=caller_phone,
+                caller_email=caller_email,
+                appointment_type_name=appointment_type_name,
+                provider_name=provider_name,
+                when_formatted=_format_slot(start),
+                appointment_id=appointment_id,
+                reason=reason,
+            )
+        except Exception:
+            logger.exception("New-booking staff notification failed for %s (booking still confirmed)", appointment_id)
 
     result = (
         f"Booked. {caller_name} is confirmed with {provider_name} for {_format_slot(start)} "
@@ -576,7 +604,32 @@ async def cancel_appointment(appointment_id: str, practice_id: str = "", reason:
         "cancel_reason": reason,
         "updated_at": firestore.SERVER_TIMESTAMP,
     })
-    return f"Cancelled the {data.get('appointment_type_name', 'appointment')} with {data.get('provider_name', 'the provider')} on {_format_slot(data['start_time'])}."
+
+    caller_email = data.get("caller_email")
+    email_sent = False
+    if caller_email:
+        try:
+            from src.adar.notify import send_appointment_cancelled_email
+            practice_rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
+            practice_name = practice_rows[0].get("name") if practice_rows else "your practice"
+            await send_appointment_cancelled_email(
+                to=caller_email,
+                caller_name=data.get("caller_name", ""),
+                practice_name=practice_name,
+                appointment_type_name=data.get("appointment_type_name", "appointment"),
+                provider_name=data.get("provider_name", "the provider"),
+                when_formatted=_format_slot(data["start_time"]),
+                appointment_id=appointment_id,
+                cancel_reason=reason,
+            )
+            email_sent = True
+        except Exception:
+            logger.exception("Cancellation email failed for %s (cancellation still applied)", appointment_id)
+
+    result = f"Cancelled the {data.get('appointment_type_name', 'appointment')} with {data.get('provider_name', 'the provider')} on {_format_slot(data['start_time'])}."
+    if caller_email:
+        result += " A cancellation email was sent." if email_sent else " (Cancellation email failed to send — let them know directly.)"
+    return result
 
 
 async def reschedule_appointment(appointment_id: str, practice_id: str = "") -> str:

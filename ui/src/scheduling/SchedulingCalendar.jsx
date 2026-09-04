@@ -1,8 +1,13 @@
 // ui/src/scheduling/SchedulingCalendar.jsx
 // Month-grid calendar of confirmed/cancelled bookings for a practice, with
-// a day-agenda panel for full detail. Read-only for now (view bookings);
-// booking changes still go through the voice/chat assistant's
-// cancel_appointment / reschedule_appointment tools.
+// a day-agenda panel for full detail. Staff/admin can also add a manual
+// entry directly here (walk-in, phone call handled without the assistant)
+// via POST /admin/scheduling/practices/{id}/bookings, and cancel an
+// existing one via DELETE /admin/scheduling/appointments/{id} -- both new,
+// admin-console-only actions (api/routes/scheduling_admin.py's
+// create_booking/cancel_booking). The voice/chat assistant's own
+// hold_slot/confirm_booking/cancel_appointment tools are unaffected and
+// keep working the same way for callers.
 //
 // No calendar library — plain date math (Monday-start weeks, matching the
 // ISO-week convention get_weekly_availability already uses on the backend)
@@ -11,11 +16,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Box, Paper, Typography, Button, Chip, Stack, CircularProgress, Alert,
-  IconButton, Select, MenuItem, FormControl, InputLabel, Divider,
+  IconButton, Select, MenuItem, FormControl, InputLabel, Divider, TextField,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import TodayIcon from '@mui/icons-material/Today'
+import AddIcon from '@mui/icons-material/Add'
 import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -46,13 +53,29 @@ function monthGridRange(viewDate) {
   return gridDays
 }
 
-export default function SchedulingCalendar({ token, practiceId, providers }) {
+// datetime-local input <-> ISO with the browser's own offset (so "2pm" typed
+// by the staff member means 2pm in whatever timezone their browser is in;
+// the backend accepts any ISO offset and stores it tz-aware).
+function localInputToIso(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString()
+}
+
+const EMPTY_BOOKING = { provider_id: '', appointment_type_id: '', when: '', caller_name: '', caller_phone: '', caller_email: '', reason: '' }
+
+export default function SchedulingCalendar({ token, practiceId, providers, appointmentTypes = [], providerFilter = '', onProviderFilterChange }) {
   const [viewDate, setViewDate]       = useState(() => startOfMonth(new Date()))
   const [selectedDate, setSelectedDate] = useState(() => ymd(new Date()))
   const [bookings, setBookings]       = useState([])
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState('')
-  const [providerFilter, setProviderFilter] = useState('')
+
+  const [newBooking, setNewBooking]   = useState(null) // null=closed, {} = open
+  const [savingBooking, setSavingBooking] = useState(false)
+  const [cancelling, setCancelling]   = useState(null) // booking pending cancel confirm
+  const [msg, setMsg]                 = useState('')
 
   const gridDays = useMemo(() => monthGridRange(viewDate), [viewDate])
 
@@ -95,6 +118,65 @@ export default function SchedulingCalendar({ token, practiceId, providers }) {
 
   const statusColor = (s) => (s === 'confirmed' ? 'success' : s === 'cancelled' ? 'default' : 'warning')
 
+  const openNewBooking = () => {
+    // Default the picker to 9am on whatever day is currently selected, so
+    // staff usually just need to adjust the hour, not re-pick the date.
+    const defaultWhen = `${selectedDate}T09:00`
+    setNewBooking({
+      ...EMPTY_BOOKING,
+      when: defaultWhen,
+      provider_id: providers[0]?.id || '',
+      appointment_type_id: appointmentTypes[0]?.id || '',
+    })
+  }
+  const closeNewBooking = () => setNewBooking(null)
+
+  const saveNewBooking = async () => {
+    if (!newBooking.provider_id) { setError('Choose a provider'); return }
+    if (!newBooking.appointment_type_id) { setError('Choose an appointment type'); return }
+    if (!newBooking.caller_name.trim()) { setError('Patient/client name is required'); return }
+    const iso = localInputToIso(newBooking.when)
+    if (!iso) { setError('Choose a valid date and time'); return }
+    setSavingBooking(true); setError('')
+    try {
+      await axios.post(
+        `${API_URL}/admin/scheduling/practices/${practiceId}/bookings`,
+        {
+          provider_id: newBooking.provider_id,
+          appointment_type_id: newBooking.appointment_type_id,
+          start_time: iso,
+          caller_name: newBooking.caller_name.trim(),
+          caller_phone: newBooking.caller_phone.trim(),
+          caller_email: newBooking.caller_email.trim(),
+          reason: newBooking.reason.trim(),
+        },
+        { headers: authHeaders(token) },
+      )
+      setMsg('✓ Appointment added')
+      closeNewBooking(); load()
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Failed to add appointment')
+    } finally {
+      setSavingBooking(false)
+    }
+  }
+
+  const confirmCancel = async () => {
+    if (!cancelling) return
+    setError('')
+    try {
+      await axios.delete(
+        `${API_URL}/admin/scheduling/appointments/${cancelling.id}`,
+        { headers: authHeaders(token), params: { reason: 'Cancelled by staff' } },
+      )
+      setMsg('✓ Appointment cancelled')
+      setCancelling(null); load()
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Failed to cancel appointment')
+      setCancelling(null)
+    }
+  }
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={1}>
@@ -106,15 +188,28 @@ export default function SchedulingCalendar({ token, practiceId, providers }) {
             Today
           </Button>
         </Stack>
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Provider</InputLabel>
-          <Select label="Provider" value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)}>
-            <MenuItem value="">All providers</MenuItem>
-            {providers.map(p => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
-          </Select>
-        </FormControl>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Provider</InputLabel>
+            <Select label="Provider" value={providerFilter} onChange={(e) => onProviderFilterChange?.(e.target.value)}>
+              <MenuItem value="">All providers</MenuItem>
+              {providers.map(p => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={openNewBooking}
+            disabled={providers.length === 0 || appointmentTypes.length === 0}>
+            New appointment
+          </Button>
+        </Stack>
       </Stack>
 
+      {(providers.length === 0 || appointmentTypes.length === 0) && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Add at least one provider and one appointment type before you can add a manual booking.
+        </Alert>
+      )}
+
+      {msg   && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -196,13 +291,75 @@ export default function SchedulingCalendar({ token, practiceId, providers }) {
                   <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                     {b.caller_name} · {b.caller_phone}{b.caller_email ? ` · ${b.caller_email}` : ''}
                   </Typography>
-                  {b.reason && <Typography variant="caption" sx={{ color: 'text.secondary' }}>Reason: {b.reason}</Typography>}
+                  {b.reason && <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>Reason: {b.reason}</Typography>}
+                  {b.status !== 'cancelled' && (
+                    <Button size="small" color="error" sx={{ mt: 0.5, textTransform: 'none' }} onClick={() => setCancelling(b)}>
+                      Cancel appointment
+                    </Button>
+                  )}
                 </Box>
               ))}
             </Stack>
           )}
         </Paper>
       </Box>
+
+      {/* New manual appointment */}
+      <Dialog open={Boolean(newBooking)} onClose={closeNewBooking} maxWidth="xs" fullWidth>
+        <DialogTitle>New appointment</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Provider</InputLabel>
+              <Select label="Provider" value={newBooking?.provider_id || ''}
+                onChange={(e) => setNewBooking({ ...newBooking, provider_id: e.target.value })}>
+                {providers.map(p => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Appointment type</InputLabel>
+              <Select label="Appointment type" value={newBooking?.appointment_type_id || ''}
+                onChange={(e) => setNewBooking({ ...newBooking, appointment_type_id: e.target.value })}>
+                {appointmentTypes.map(t => <MenuItem key={t.id} value={t.id}>{t.name} ({t.duration_minutes} min)</MenuItem>)}
+              </Select>
+            </FormControl>
+            <TextField label="Date & time" type="datetime-local" size="small" fullWidth
+              InputLabelProps={{ shrink: true }}
+              value={newBooking?.when || ''}
+              onChange={(e) => setNewBooking({ ...newBooking, when: e.target.value })} />
+            <TextField label="Patient / client name" size="small" fullWidth value={newBooking?.caller_name || ''}
+              onChange={(e) => setNewBooking({ ...newBooking, caller_name: e.target.value })} />
+            <TextField label="Phone (optional)" size="small" fullWidth value={newBooking?.caller_phone || ''}
+              onChange={(e) => setNewBooking({ ...newBooking, caller_phone: e.target.value })} />
+            <TextField label="Email (optional — sends a confirmation)" size="small" fullWidth value={newBooking?.caller_email || ''}
+              onChange={(e) => setNewBooking({ ...newBooking, caller_email: e.target.value })} />
+            <TextField label="Reason / notes (optional)" size="small" fullWidth multiline minRows={2}
+              value={newBooking?.reason || ''}
+              onChange={(e) => setNewBooking({ ...newBooking, reason: e.target.value })} />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeNewBooking}>Cancel</Button>
+          <Button variant="contained" onClick={saveNewBooking} disabled={savingBooking}>
+            {savingBooking ? 'Adding…' : 'Add appointment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Cancel confirm */}
+      <Dialog open={Boolean(cancelling)} onClose={() => setCancelling(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Cancel this appointment?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {cancelling?.caller_name}'s {cancelling?.appointment_type_name} with {cancelling?.provider_name} will be cancelled.
+            {cancelling?.caller_email ? ' They’ll get a cancellation email.' : ''}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelling(null)}>Never mind</Button>
+          <Button color="error" variant="contained" onClick={confirmCancel}>Cancel appointment</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

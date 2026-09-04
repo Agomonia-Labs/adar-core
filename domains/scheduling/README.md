@@ -43,8 +43,8 @@ Every collection is scoped by `practice_id` (the tenant boundary — same role
 
 | Collection | Purpose | Key fields |
 |---|---|---|
-| `scheduling_practices` | One doc per practice/tenant | `name`, `timezone`, `lead_time_minutes`, `max_advance_days` |
-| `scheduling_providers` | Bookable resources (a clinician, a stylist, …) | `practice_id`, `name`, `role`, `appointment_type_ids`, `working_hours` (list of `{weekday, start, end}`), `active` |
+| `scheduling_practices` | One doc per practice/tenant | `name`, `timezone`, `lead_time_minutes`, `max_advance_days`, `notification_email` |
+| `scheduling_providers` | Bookable resources (a clinician, a stylist, …) | `practice_id`, `name`, `role`, `bio`, `appointment_type_ids`, `working_hours` (list of `{weekday, start, end}`), `active` |
 | `scheduling_appointment_types` | Services offered | `practice_id`, `name`, `duration_minutes`, `buffer_minutes`, `description` |
 | `scheduling_appointments` | Confirmed/cancelled bookings | `practice_id`, `provider_id`, `appointment_type_id`, `start_time`, `end_time`, `status`, `caller_name`, `caller_phone`, `caller_email`, `reason` |
 | `scheduling_holds` | Short-lived (10 min) holds while a caller confirms | same shape as an appointment, plus `expires_at`, `status: active\|confirmed` |
@@ -100,6 +100,26 @@ reusing the same Gmail SMTP sender as the OTP login codes — `GMAIL_USER` /
 The send is best-effort: a failed email never undoes an already-confirmed
 booking, it just logs and tells the caller to hold onto the confirmation ID.
 
+`confirm_booking` also sends a separate staff-facing "new booking" email
+(`send_new_booking_notification_email`) to the practice's own
+`notification_email` field (settable via `POST/PATCH /admin/scheduling/practices`,
+or the `notification_email` key in a practice's ingestion JSON) so front-desk
+staff learn about a booking without opening the admin calendar. A practice
+that hasn't set one falls back to the platform `ADMIN_EMAIL` — this matches
+today's reality that one operator runs every practice on a deployment until
+per-practice staff logins exist (see "Not built yet" below). Same
+best-effort semantics as the caller email: never blocks or fails the
+booking, and is entirely independent of whether the caller's own
+confirmation email succeeded.
+
+`cancel_appointment` mirrors this on the way out — if the appointment had a
+`caller_email`, it sends `send_appointment_cancelled_email` after the
+Firestore status flips to `cancelled`. `reschedule_appointment` calls
+`cancel_appointment` internally, so a reschedule correctly sends this too
+before the caller picks a new time. There is currently no equivalent
+staff-facing "booking cancelled" notification — only the caller is emailed
+on cancellation.
+
 ## Single-practice vs multi-practice
 
 Every tool takes `practice_id`, and a single deployment can now genuinely
@@ -114,6 +134,19 @@ printed `practice_id`, or leave it unset in a genuinely multi-practice
 deployment and `find_practice` will ask the caller to choose whenever more
 than one active practice matches (or none was named).
 
+For a multi-practice deployment where you don't want a global default (so
+`find_practice` keeps asking new callers), the chat UI itself offers a
+per-session way to skip that: when `GET /api/scheduling/directory` returns
+more than one active practice, `ChatTab` (`ui/src/App.jsx`) shows a row of
+practice chips above the message list, before the first message of a
+session is sent. Picking one folds a `[This conversation is about: <practice
+name>] ` prefix into that first outgoing message only — the visible chat
+bubble still shows just what the caller typed — so `find_practice` resolves
+immediately instead of asking. This is purely a per-session UI hint, not a
+deployment-wide setting; it has no effect on `SCHEDULING_DEFAULT_PRACTICE_ID`
+or on voice/telephony callers, who still go through the normal ask-if-
+ambiguous flow.
+
 ## Admin console
 
 A practice-facing admin UI lives inside the existing admin dashboard (same
@@ -126,10 +159,11 @@ bookings:
 - **Practices** — create/edit name, timezone (IANA string), lead time,
   booking window, and an `active` flag to hide a practice from callers
   without deleting it (`SchedulingAdmin.jsx`).
-- **Providers** — name, role, which appointment types they offer, weekly
-  working hours (`WorkingHoursEditor.jsx` — per-weekday ranges, supports
-  split shifts like a lunch break), and `active`
-  (`SchedulingProviders.jsx`).
+- **Providers** — name, role, a free-text bio (shown to callers on the
+  Providers tab — background, focus areas, credentials), which appointment
+  types they offer, weekly working hours (`WorkingHoursEditor.jsx` —
+  per-weekday ranges, supports split shifts like a lunch break), and
+  `active` (`SchedulingProviders.jsx`).
 - **Appointment types** — name, duration, buffer, description, `active`
   (`SchedulingAppointmentTypes.jsx`).
 - **Calendar** — a month-grid view of confirmed/cancelled bookings for the
@@ -139,15 +173,14 @@ bookings:
   rescheduling a booking still goes through the voice/chat assistant's
   `cancel_appointment`/`reschedule_appointment` tools, not this view.
 
-All of it is served by a new admin-only API router,
-`api/routes/scheduling_admin.py` (mounted at `/admin/scheduling/...` in
-`api/main.py`, gated by the same `get_admin` dependency —
-`api/routes/auth.py` — as the rest of `/admin/*`, and 404s outright when
+All of it is served by an API router, `api/routes/scheduling_admin.py`
+(mounted at `/admin/scheduling/...` in `api/main.py`, 404s outright when
 `DOMAIN != scheduling`):
 
 ```
-GET    /admin/scheduling/practices
-POST   /admin/scheduling/practices
+GET    /admin/scheduling/practices                                          admin only
+POST   /admin/scheduling/practices                                          admin only
+GET    /admin/scheduling/practices/{practice_id}
 PATCH  /admin/scheduling/practices/{practice_id}
 GET    /admin/scheduling/practices/{practice_id}/providers
 POST   /admin/scheduling/practices/{practice_id}/providers
@@ -156,6 +189,9 @@ GET    /admin/scheduling/practices/{practice_id}/appointment-types
 POST   /admin/scheduling/practices/{practice_id}/appointment-types
 PATCH  /admin/scheduling/appointment-types/{type_id}
 GET    /admin/scheduling/practices/{practice_id}/bookings?start=&end=&provider_id=&status=
+POST   /admin/scheduling/practices/{practice_id}/staff                      admin only
+GET    /admin/scheduling/practices/{practice_id}/staff                      admin only
+DELETE /admin/scheduling/practices/{practice_id}/staff/{team_id}            admin only
 ```
 
 Changes made here take effect immediately for the live assistant, with no
@@ -166,6 +202,87 @@ provider or appointment type's `active` flag off hides it from
 Python-side `r.get("active") is not False` filter treats a document with no
 `active` field at all as active, so pre-existing seeded data that predates
 this feature is unaffected).
+
+### Two levels of access: platform admin vs. one practice's own staff
+
+Every route above except the three marked `admin only` accepts either of
+two JWTs, both minted by the existing shared login flow in
+`api/routes/auth.py` (`/api/auth/login` + `/verify-otp` — no separate login
+endpoint was added):
+
+- **`role="admin"`** — the single platform-operator login
+  (`ADMIN_EMAIL`/`ADMIN_PASSWORD`). Unrestricted: every practice, plus the
+  only role that can create a practice or provision staff accounts for one.
+- **`role="practice_staff"`** — scoped to exactly one `practice_id`, carried
+  in the JWT itself. `get_scheduling_staff` (the FastAPI dependency) accepts
+  the token; `_check_practice_access` (called once each route knows which
+  `practice_id` it's touching — from the path directly, or from the fetched
+  provider/appointment-type doc for the two routes keyed by their own id
+  instead) 403s on any mismatch. This is why `GET /practices` (list-all)
+  and `POST /practices` (create) stay admin-only — a practice_staff token
+  listing every practice would leak names it has no business seeing, and
+  creating a practice is a platform-operator action. `GET
+  /practices/{practice_id}` (singular) exists specifically so a
+  practice_staff login has a way to fetch its own practice's details
+  without list-all.
+
+**Provisioning a staff account** (admin-only, via the three `.../staff`
+routes above) writes a login record into the same `adar_teams` collection
+and password-hashing path every other domain's team login already uses —
+`role: "practice_staff"` and `practice_id` are the only things that make it
+different from a billing-oriented `role: "team"` account, and account
+status is set to `"active"` immediately (no `pending_payment` gate, unlike
+`/register` — that gate exists for Stripe billing, which scheduling doesn't
+use). The account then logs in through the *same* `/api/auth/login` +
+`/verify-otp` flow as everyone else (Gmail-SMTP OTP included) — the only
+frontend changes were: `Login.jsx` persisting the JWT's `practice_id` into
+`localStorage` alongside the existing `adar_token`/`adar_role`, and
+`AdminDashboard.jsx`/`SchedulingAdmin.jsx` reading that role/practice_id
+back to skip the (admin-only, otherwise-403ing) Teams/Evals tabs and the
+practice list-all call, going straight to that one practice's Providers /
+Appointment types / Calendar view with no practice switcher or "New
+practice" button.
+
+This exists because, until now, every practice on a deployment shared the
+single platform-admin login — fine for one operator running every practice,
+but with no way to hand an individual practice's own front-desk staff
+access to just their own calendar without also handing them every other
+practice's data. There's still no self-service signup for this role by
+design: only the platform admin can call the `.../staff` endpoints, since
+provisioning a login is exactly the kind of action that shouldn't be
+delegable to the account it's creating.
+
+## Customer directory (Providers tab)
+
+Callers get their own read-only view of the same data, so they can browse
+practices and providers without a chat round trip — a "👥 Providers" tab
+next to Chat/Polls in the main app (`ui/src/App.jsx`, only rendered when
+`tenant.id === 'scheduling'` → `ui/src/scheduling/SchedulingDirectory.jsx`).
+For each active practice it shows its active providers, each with a role,
+their bio (when set), the appointment types they offer (with duration),
+and a compact working-hours summary (consecutive identical days merged,
+e.g. "Mon–Fri 9:00 AM–5:00 PM"). A practice picker only appears when more than one practice
+exists.
+
+There are no provider photos in Firestore, and no file-upload
+infrastructure to add them — each provider instead gets a deterministic
+initials avatar (e.g. "Dr. Patel" → a colored circle with "DP"), computed
+client-side from their name, so every provider has a picture with zero
+setup and no third-party image service at runtime.
+
+Backed by one new, deliberately read-only endpoint —
+`api/routes/scheduling_directory.py`, mounted at `/api/scheduling/...` in
+`api/main.py`. It requires only a logged-in caller (`get_current_team`,
+same as `/api/chat`), not admin — unlike every route in
+`scheduling_admin.py` above — and only ever returns active records:
+
+```
+GET /api/scheduling/directory
+```
+
+Returns every active practice with its active providers (working hours,
+resolved appointment-type names + durations) and appointment-type catalog
+in one call, so the tab renders without N further requests.
 
 ## Running it locally
 
@@ -225,6 +342,19 @@ npm run dev -- --mode scheduling
 Open it, allow microphone access, and talk to the assistant — same
 record → `/api/stt` → `/api/chat` → `/api/demo/tts` round trip Geetabitan's
 voice mode uses, just with the scheduling agent and copy from `tenant.js`.
+
+Product demo (standalone narrated walkthrough — not the live app above):
+
+```text
+http://localhost:5173/demo.scheduling.html
+```
+
+Same pattern as `demo.restaurants.html` / `demo.geetabitan.html` — a
+self-contained static page (browser voice synthesis, mic panel with sample
+booking prompts) that ships from `ui/public/` and deploys with the rest of
+`dist/`, at `https://scheduling.adar.agomoniai.com/demo.scheduling.html`.
+It intentionally does not touch `ui/public/demo.html`, which is the ARCL
+product's demo and is shared dist output served by every hosting target.
 
 ## Deployment
 

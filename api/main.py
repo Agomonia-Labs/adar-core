@@ -31,6 +31,7 @@ from api.routes.auth  import router as auth_router, get_current_team
 from api.routes.music import router as music_router
 from api.routes.admin import router as admin_router
 from api.routes.scheduling_admin import router as scheduling_admin_router
+from api.routes.scheduling_directory import router as scheduling_directory_router
 from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
 from api.schemas import ChatRequest, ChatResponse, SessionResponse
@@ -1038,6 +1039,7 @@ async def get_arcl_teams(season: int = 69):
 
 app.include_router(admin_router)
 app.include_router(scheduling_admin_router)
+app.include_router(scheduling_directory_router)
 app.include_router(payments_router)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

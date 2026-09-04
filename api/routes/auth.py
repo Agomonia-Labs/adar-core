@@ -87,6 +87,10 @@ class TokenResponse(BaseModel):
     team_name:    str
     role:         str
     status:       str
+    # Set only for a practice-scoped scheduling staff login (role=
+    # "practice_staff") — see api/routes/scheduling_admin.py's staff-account
+    # endpoints. None for every other role.
+    practice_id:  Optional[str] = None
 
 
 class OTPVerifyRequest(BaseModel):
@@ -293,11 +297,12 @@ async def login(req: LoginRequest):
         except Exception:
             _fresh = status
         token = _create_token({
-            "team_id":   team["team_id"],
-            "team_name": team["team_name"],
-            "email":     team["email"],
-            "role":      team.get("role", "team"),
-            "status":    _fresh,
+            "team_id":     team["team_id"],
+            "team_name":   team["team_name"],
+            "email":       team["email"],
+            "role":        team.get("role", "team"),
+            "status":      _fresh,
+            "practice_id": team.get("practice_id"),
         })
         return {
             "access_token": token,
@@ -306,6 +311,7 @@ async def login(req: LoginRequest):
             "team_name":    team["team_name"],
             "role":         team.get("role", "team"),
             "status":       _fresh,
+            "practice_id":  team.get("practice_id"),
         }
 
     # ── MFA: issue temp token, send OTP ─────────────────────────────────────
@@ -412,11 +418,12 @@ async def verify_otp(req: OTPVerifyRequest):
 
     # Issue full JWT
     token = _create_token({
-        "team_id":   team_id,
-        "team_name": team.get("team_name", team_id),
-        "email":     team.get("email", ""),
-        "role":      team.get("role", "team"),
-        "status":    status,
+        "team_id":     team_id,
+        "team_name":   team.get("team_name", team_id),
+        "email":       team.get("email", ""),
+        "role":        team.get("role", "team"),
+        "status":      status,
+        "practice_id": team.get("practice_id"),
     })
 
     logger.info(f"MFA verified for team={team_id}")
@@ -426,6 +433,7 @@ async def verify_otp(req: OTPVerifyRequest):
         team_name=team.get("team_name", team_id),
         role=team.get("role", "team"),
         status=status,
+        practice_id=team.get("practice_id"),
     )
 
 

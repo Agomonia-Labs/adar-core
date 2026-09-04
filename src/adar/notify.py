@@ -433,3 +433,94 @@ async def send_appointment_confirmation_email(
             footer_org="Practice Scheduling Assistant",
         ),
     )
+
+
+async def send_appointment_cancelled_email(
+    to: str,
+    caller_name: str,
+    practice_name: str,
+    appointment_type_name: str,
+    provider_name: str,
+    when_formatted: str,
+    appointment_id: str,
+    cancel_reason: str = "",
+):
+    """Email sent to the caller when their appointment is cancelled via
+    cancel_appointment (including the cancel-then-rebook path inside
+    reschedule_appointment). Best-effort, mirrors
+    send_appointment_confirmation_email's template and call convention —
+    see domains/scheduling/tools/availability_tools.py."""
+    reason_line = f"<br><strong>Reason:</strong> {cancel_reason}" if cancel_reason else ""
+    body = f"""
+    <h2 style="color:#1A3326; margin-top:0;">Appointment cancelled</h2>
+    <p>Hi {caller_name},</p>
+    <p>Your appointment with <strong>{practice_name}</strong> has been cancelled.</p>
+    <div style="background:#EBF7F1; border:1px solid #C8E8D8; border-radius:8px; padding:16px; margin:20px 0;">
+      <strong>Was scheduled:</strong> {when_formatted}<br>
+      <strong>Provider:</strong> {provider_name}<br>
+      <strong>Visit type:</strong> {appointment_type_name}<br>
+      <strong>Confirmation ID:</strong> {appointment_id[:8]}{reason_line}
+    </div>
+    <p style="color:#5A8A70; font-size:0.85rem;">
+      Want to book a new time instead? Just message the assistant.
+    </p>"""
+    await send_email(
+        to,
+        f"Appointment cancelled — {when_formatted}",
+        _base_template(
+            "Appointment cancelled",
+            body,
+            logo_text="Adar",
+            brand_name="Adar Scheduling",
+            footer_org="Practice Scheduling Assistant",
+        ),
+    )
+
+
+async def send_new_booking_notification_email(
+    to: str,
+    practice_name: str,
+    caller_name: str,
+    caller_phone: str,
+    appointment_type_name: str,
+    provider_name: str,
+    when_formatted: str,
+    appointment_id: str,
+    caller_email: str = "",
+    reason: str = "",
+):
+    """Staff-facing email sent to the practice's notification_email (falling
+    back to the platform ADMIN_EMAIL when a practice hasn't set one) the
+    moment confirm_booking succeeds, so front-desk staff learn about a new
+    booking without having to open the admin calendar. Best-effort — never
+    blocks or fails the booking itself. See
+    domains/scheduling/tools/availability_tools.py."""
+    contact_line = caller_phone
+    if caller_email:
+        contact_line += f" · {caller_email}"
+    reason_line = f"<br><strong>Reason for visit:</strong> {reason}" if reason else ""
+    body = f"""
+    <h2 style="color:#1A3326; margin-top:0;">New booking</h2>
+    <p>A new appointment was just booked at <strong>{practice_name}</strong> through Adar Front Desk.</p>
+    <div style="background:#EBF7F1; border:1px solid #C8E8D8; border-radius:8px; padding:16px; margin:20px 0;">
+      <strong>When:</strong> {when_formatted}<br>
+      <strong>Provider:</strong> {provider_name}<br>
+      <strong>Visit type:</strong> {appointment_type_name}<br>
+      <strong>Patient:</strong> {caller_name}<br>
+      <strong>Contact:</strong> {contact_line}<br>
+      <strong>Confirmation ID:</strong> {appointment_id[:8]}{reason_line}
+    </div>
+    <p style="color:#5A8A70; font-size:0.85rem;">
+      This booking is already on the live calendar in the admin console.
+    </p>"""
+    await send_email(
+        to,
+        f"New booking — {caller_name} with {provider_name}, {when_formatted}",
+        _base_template(
+            "New booking",
+            body,
+            logo_text="Adar",
+            brand_name="Adar Scheduling",
+            footer_org="Practice Scheduling Assistant",
+        ),
+    )

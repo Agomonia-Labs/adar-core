@@ -12,6 +12,7 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 import axios from 'axios'
 import WorkingHoursEditor from './WorkingHoursEditor'
 
@@ -24,9 +25,9 @@ function authHeaders(token) {
   return h
 }
 
-const EMPTY = { name: '', role: '', appointment_type_ids: [], working_hours: [] }
+const EMPTY = { name: '', role: '', bio: '', appointment_type_ids: [], working_hours: [] }
 
-export default function SchedulingProviders({ token, practiceId, appointmentTypes }) {
+export default function SchedulingProviders({ token, practiceId, appointmentTypes, onViewCalendar }) {
   const [providers, setProviders] = useState([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
@@ -71,6 +72,7 @@ export default function SchedulingProviders({ token, practiceId, appointmentType
       const body = {
         name: editing.name.trim(),
         role: editing.role || '',
+        bio: editing.bio || '',
         appointment_type_ids: editing.appointment_type_ids || [],
         working_hours: editing.working_hours || [],
       }
@@ -160,7 +162,12 @@ export default function SchedulingProviders({ token, practiceId, appointmentType
                     <Chip size="small" label={p.active !== false ? 'Active' : 'Hidden'} color={p.active !== false ? 'success' : 'default'} />
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={() => openEdit(p)}><EditIcon fontSize="small" /></IconButton>
+                    <IconButton size="small" onClick={() => openEdit(p)} title="Edit"><EditIcon fontSize="small" /></IconButton>
+                    {onViewCalendar && (
+                      <IconButton size="small" onClick={() => onViewCalendar(p.id)} title="View this provider's calendar">
+                        <CalendarMonthIcon fontSize="small" />
+                      </IconButton>
+                    )}
                     <Switch size="small" checked={p.active !== false} onChange={() => toggleActive(p)} />
                   </TableCell>
                 </TableRow>
@@ -178,6 +185,9 @@ export default function SchedulingProviders({ token, practiceId, appointmentType
               onChange={(e) => setEditing({ ...editing, name: e.target.value })} autoFocus />
             <TextField label="Role (optional)" size="small" fullWidth placeholder="e.g. Family Medicine, Stylist, Attorney"
               value={editing?.role || ''} onChange={(e) => setEditing({ ...editing, role: e.target.value })} />
+            <TextField label="Bio (optional)" size="small" fullWidth multiline minRows={3}
+              placeholder="Shown to callers browsing the Providers tab — background, focus areas, credentials."
+              value={editing?.bio || ''} onChange={(e) => setEditing({ ...editing, bio: e.target.value })} />
 
             <Box>
               <Typography variant="body2" fontWeight={600} mb={0.5}>Appointment types offered</Typography>

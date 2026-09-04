@@ -52,6 +52,11 @@ export default function Login({ onLogin }) {
         localStorage.setItem('adar_team_name', data.team_name)
         localStorage.setItem('adar_role',      data.role)
         localStorage.setItem('adar_status',    data.status || 'active')
+        // Only set for a practice-scoped scheduling staff login
+        // (role === 'practice_staff') — see api/routes/scheduling_admin.py.
+        // Cleared (not left stale) for every other login.
+        if (data.practice_id) localStorage.setItem('adar_practice_id', data.practice_id)
+        else localStorage.removeItem('adar_practice_id')
         onLogin(data)
       }
     } catch (err) {
@@ -106,6 +111,8 @@ export default function Login({ onLogin }) {
       localStorage.setItem('adar_team_name', data.team_name)
       localStorage.setItem('adar_role',      data.role)
       localStorage.setItem('adar_status',    data.status || 'active')
+      if (data.practice_id) localStorage.setItem('adar_practice_id', data.practice_id)
+      else localStorage.removeItem('adar_practice_id')
       onLogin(data)
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid code. Please try again.')
@@ -291,7 +298,7 @@ export default function Login({ onLogin }) {
 
           <Divider sx={{ my:2 }}>
             <Box component="a"
-              href={tenant.id === 'geetabitan' ? '/demo.geetabitan.html' : tenant.id === 'restaurants' ? '/demo.restaurants.html' : '/demo.html'}
+              href={tenant.id === 'geetabitan' ? '/demo.geetabitan.html' : tenant.id === 'restaurants' ? '/demo.restaurants.html' : tenant.id === 'scheduling' ? '/demo.scheduling.html' : '/demo.html'}
               target="_blank" rel="noopener noreferrer"
               sx={{
                 display:'inline-flex', alignItems:'center', gap:0.75,

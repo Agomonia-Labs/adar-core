@@ -34,9 +34,17 @@ function StatusChip({ status }) {
 }
 
 export default function AdminDashboard({ token, onLogout }) {
+  // A practice-scoped scheduling staff login (role="practice_staff" — see
+  // api/routes/scheduling_admin.py) only ever gets the Practices view: the
+  // Teams/Evals endpoints below are platform-admin-only (get_admin) and
+  // would just 403 for this role, so this dashboard skips fetching and
+  // rendering them entirely rather than showing a broken Teams tab.
+  const role = localStorage.getItem('adar_role')
+  const isPracticeStaff = role === 'practice_staff'
+
   const [teams, setTeams]     = useState([])
   const [stats, setStats]     = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!isPracticeStaff)
   const [msg, setMsg]         = useState('')
   const [error, setError]     = useState('')
   const [activeTab, setActiveTab] = useState('teams')
@@ -67,7 +75,7 @@ export default function AdminDashboard({ token, onLogout }) {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { if (!isPracticeStaff) load() }, [])
 
   const act = async (url, successMsg) => {
     setMsg(''); setError('')
@@ -170,7 +178,7 @@ export default function AdminDashboard({ token, onLogout }) {
       ) : (
         <>
           {/* Stats */}
-          {stats && (
+          {!isPracticeStaff && stats && (
             <Stack direction="row" spacing={2} mb={3} flexWrap="wrap">
               {[
                 { label:'Total',     val: teams.length },
@@ -186,22 +194,25 @@ export default function AdminDashboard({ token, onLogout }) {
             </Stack>
           )}
 
-          {/* Tab nav */}
-          <Stack direction="row" spacing={1} mb={2}>
-            {(tenant.id === 'scheduling' ? ['teams','evals','scheduling'] : ['teams','evals']).map(t => (
-              <Button key={t} size="small" variant={activeTab===t?'contained':'outlined'}
-                onClick={() => { setActiveTab(t); if(t==='evals' && !evals) fetchEvals() }}
-                sx={{
-                  textTransform:'capitalize',
-                  ...(activeTab===t ? {} : { borderColor:'divider', color:'text.secondary' })
-                }}>
-                {t === 'teams' ? '👥 Teams' : t === 'evals' ? '📊 Evals' : '🏥 Practices'}
-              </Button>
-            ))}
-          </Stack>
+          {/* Tab nav — a practice_staff login has nowhere else to go, so no
+              switcher is shown at all (see isPracticeStaff above). */}
+          {!isPracticeStaff && (
+            <Stack direction="row" spacing={1} mb={2}>
+              {(tenant.id === 'scheduling' ? ['teams','evals','scheduling'] : ['teams','evals']).map(t => (
+                <Button key={t} size="small" variant={activeTab===t?'contained':'outlined'}
+                  onClick={() => { setActiveTab(t); if(t==='evals' && !evals) fetchEvals() }}
+                  sx={{
+                    textTransform:'capitalize',
+                    ...(activeTab===t ? {} : { borderColor:'divider', color:'text.secondary' })
+                  }}>
+                  {t === 'teams' ? '👥 Teams' : t === 'evals' ? '📊 Evals' : '🏥 Practices'}
+                </Button>
+              ))}
+            </Stack>
+          )}
 
           {/* Teams tab */}
-          {activeTab === 'teams' && (
+          {!isPracticeStaff && activeTab === 'teams' && (
             <Box>
               <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
                 <Typography variant="subtitle2" fontWeight={600}>All teams ({teams.length})</Typography>
@@ -307,7 +318,7 @@ export default function AdminDashboard({ token, onLogout }) {
           )}
 
           {/* Evals tab */}
-          {activeTab === 'evals' && (
+          {!isPracticeStaff && activeTab === 'evals' && (
             <Box>
               {/* Filters */}
               <Stack direction="row" spacing={1} mb={2} flexWrap="wrap" alignItems="flex-end">
@@ -436,8 +447,11 @@ export default function AdminDashboard({ token, onLogout }) {
             </Box>
           )}
 
-          {/* Scheduling tab (practices/providers/appointment types/calendar) */}
-          {activeTab === 'scheduling' && tenant.id === 'scheduling' && (
+          {/* Scheduling tab (practices/providers/appointment types/calendar).
+              Always shown for a practice_staff login regardless of
+              activeTab's default — they have no tab switcher to reach it
+              any other way (see isPracticeStaff above). */}
+          {(isPracticeStaff || activeTab === 'scheduling') && tenant.id === 'scheduling' && (
             <SchedulingAdmin token={token} />
           )}
         </>

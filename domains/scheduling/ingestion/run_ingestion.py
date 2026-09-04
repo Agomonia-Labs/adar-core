@@ -43,6 +43,10 @@ async def seed_practice(path: str) -> str:
         "timezone": practice.get("timezone", "UTC"),
         "lead_time_minutes": practice.get("lead_time_minutes", 120),
         "max_advance_days": practice.get("max_advance_days", 60),
+        # Where new-booking notifications go (confirm_booking in
+        # availability_tools.py) — optional, falls back to the platform
+        # ADMIN_EMAIL at send time when left blank.
+        "notification_email": practice.get("notification_email", ""),
         "active": True,
     })
     # practice_id doubles as its own tenant key — store it on the doc too so
@@ -77,6 +81,7 @@ async def seed_practice(path: str) -> str:
             "practice_id": practice_id,
             "name": provider["name"],
             "role": provider.get("role", ""),
+            "bio": provider.get("bio", ""),
             "appointment_type_ids": type_ids_for_provider,
             "working_hours": provider.get("working_hours", []),
             "active": True,

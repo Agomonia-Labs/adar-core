@@ -22,6 +22,7 @@ import theme from './theme'
 import tenant from './tenant'
 import { useSpeech } from './hooks/useSpeech'
 import PollsPage from './Polls'
+import SchedulingDirectory from './scheduling/SchedulingDirectory'
 import Login from './Login'
 import Checkout from './Checkout'
 import Billing from './Billing'
@@ -435,6 +436,13 @@ function ChatTab({ onUsageIncrement }) {
   const sendingRef                = useRef(false)
   const [sessionId, setSessionId] = useState(null)
   const [userId]                  = useState(() => `user_${uuidv4().slice(0,8)}`)
+  // Which practice this chat session is about, when there's more than one
+  // configured (e.g. a salon practice alongside the family-medicine demo).
+  // Purely a per-session UI hint -- nothing here sets a deployment-wide
+  // default practice_id. Left unset, the agent falls back to its normal
+  // find_practice flow and asks the caller when it's ambiguous.
+  const [practices, setPractices]             = useState([])
+  const [selectedPracticeId, setSelectedPracticeId] = useState('')
   const voiceConversationRef      = useRef(false)
   const startListeningRef         = useRef(startListening)
   const bottomRef = useRef(null)
@@ -442,6 +450,17 @@ function ChatTab({ onUsageIncrement }) {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [messages, loading])
   useEffect(() => { startListeningRef.current = startListening }, [startListening])
+
+  useEffect(() => {
+    if (tenant.id !== 'scheduling') return
+    const token = localStorage.getItem('adar_token') || ''
+    if (!token) return
+    const headers = { Authorization: `Bearer ${token}` }
+    if (API_KEY) headers['X-API-Key'] = API_KEY
+    axios.get(`${API_URL}/api/scheduling/directory`, { headers })
+      .then(({ data }) => setPractices(data.practices || []))
+      .catch(() => { /* selector just won't show -- chat still works normally */ })
+  }, [])
   useEffect(() => { voiceConversationRef.current = voiceModeActive }, [voiceModeActive])
 
   useEffect(() => {
@@ -496,9 +515,21 @@ function ChatTab({ onUsageIncrement }) {
       const headers = {}
       if (API_KEY) headers['X-API-Key']     = API_KEY
       if (token)   headers['Authorization'] = `Bearer ${token}`
+      // If the caller picked a practice from the selector, fold that into
+      // the outgoing message on every turn (not just the first) so the
+      // agent's own find_practice step resolves immediately and can't drift
+      // to a different practice mid-conversation -- find_practice's own
+      // returned text already tells the model to keep reusing one
+      // practice_id, but repeating the hint here on every turn makes that
+      // far more reliable in practice. The visible chat bubble above still
+      // shows only what the person actually typed.
+      const selectedPractice = practices.find(p => p.id === selectedPracticeId)
+      const apiMessage = selectedPractice
+        ? `[This conversation is about: ${selectedPractice.name}] ${message}`
+        : message
       const { data } = await axios.post(
         `${API_URL}/api/chat`,
-        { message, user_id:userId, session_id:sessionId },
+        { message:apiMessage, user_id:userId, session_id:sessionId },
         { headers },
       )
       setSessionId(data.session_id)
@@ -596,6 +627,52 @@ function ChatTab({ onUsageIncrement }) {
 
   return (
     <>
+      {tenant.id === 'scheduling' && practices.length > 1 && !sessionId && (
+        <Box sx={{ px:2.5, pt:1.5, pb:0.5 }}>
+          <Typography variant="caption" sx={{ color:'text.secondary', mb:0.75, display:'block' }}>
+            Which practice is this chat about?
+          </Typography>
+          <Box sx={{ display:'flex', flexWrap:'wrap', gap:1 }}>
+            {practices.map(p => (
+              <Chip key={p.id} label={p.name} size="small"
+                variant={selectedPracticeId === p.id ? 'filled' : 'outlined'}
+                color={selectedPracticeId === p.id ? 'primary' : 'default'}
+                onClick={() => setSelectedPracticeId(prev => prev === p.id ? '' : p.id)}
+                sx={{
+                  cursor:'pointer', fontSize:'0.72rem',
+                  fontWeight: selectedPracticeId === p.id ? 700 : 400,
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* Once the conversation has started, keep the chosen practice
+          visible (rather than letting the picker disappear) so it's
+          always clear which facility this conversation belongs to. "change"
+          resets the session so switching practices starts a clean
+          conversation instead of just relabelling mid-thread. */}
+      {tenant.id === 'scheduling' && practices.length > 1 && sessionId && selectedPracticeId && (
+        <Box sx={{ px:2.5, pt:1.5, pb:0.5, display:'flex', alignItems:'center', gap:1 }}>
+          <Typography variant="caption" sx={{ color:'text.secondary' }}>
+            This conversation is about:
+          </Typography>
+          <Chip
+            label={practices.find(p => p.id === selectedPracticeId)?.name}
+            size="small" variant="filled" color="primary"
+            sx={{ fontSize:'0.72rem', fontWeight:700 }}
+          />
+          <Box component="span" onClick={clearSession}
+            sx={{
+              fontSize:'0.7rem', color:'text.secondary', textDecoration:'underline',
+              cursor:'pointer', userSelect:'none',
+            }}>
+            change
+          </Box>
+        </Box>
+      )}
+
       <Box sx={{ flex:1, overflowY:'auto', px:2.5, py:2 }}>
         {messages.map((msg,i) => (
           <MessageBubble
@@ -700,13 +777,19 @@ function ChatTab({ onUsageIncrement }) {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState(0)
+  const [activeTab, setActiveTab] = useState('chat')
   const [page, setPage]           = useState(() => {
     const token  = localStorage.getItem('adar_token')
     const role   = localStorage.getItem('adar_role')
     const status = localStorage.getItem('adar_status')
     if (token) {
-      if (role === 'admin') return 'admin'
+      // practice_staff logins get the same admin console as 'admin' --
+      // AdminDashboard.jsx / SchedulingAdmin.jsx already scope everything
+      // down to just that staff login's own practice (see isPracticeStaff
+      // there). Without this, a practice_staff login fell through to the
+      // plain consumer chat widget below instead, which is why the
+      // Providers/Calendar/Bookings management tabs never appeared for one.
+      if (role === 'admin' || role === 'practice_staff') return 'admin'
       if (status === 'pending_payment') return 'checkout'
       return 'chat'
     }
@@ -747,7 +830,7 @@ export default function App() {
     if (data.status === 'pending_payment') {
       setPage('checkout')
     } else {
-      setPage(data.role === 'admin' ? 'admin' : 'chat')
+      setPage((data.role === 'admin' || data.role === 'practice_staff') ? 'admin' : 'chat')
     }
   }
 
@@ -893,15 +976,22 @@ export default function App() {
           borderBottom:'1px solid', borderColor:'divider', bgcolor:'background.paper', minHeight:42,
           '& .MuiTab-root':{ minHeight:42, fontSize:'0.8rem', textTransform:'none', fontWeight:500 },
         }}>
-          <Tab label="💬 Chat" />
-          <Tab label="📊 Polls" />
+          <Tab value="chat" label="💬 Chat" />
+          {tenant.id === 'scheduling' && <Tab value="providers" label="👥 Providers" />}
+          {tenant.id !== 'scheduling' && <Tab value="polls" label="📊 Polls" />}
         </Tabs>
 
-        {activeTab === 0 ? (
+        {activeTab === 'chat' && (
           <Box sx={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
             <ChatTab onUsageIncrement={() => setUsage(prev => prev ? { ...prev, used_today:(prev.used_today||0)+1 } : prev)} />
           </Box>
-        ) : (
+        )}
+        {activeTab === 'providers' && tenant.id === 'scheduling' && (
+          <Box sx={{ flex:1, overflowY:'auto' }}>
+            <SchedulingDirectory token={token} />
+          </Box>
+        )}
+        {activeTab === 'polls' && tenant.id !== 'scheduling' && (
           <Box sx={{ flex:1, overflowY:'auto' }}>
             <PollsPage />
           </Box>
