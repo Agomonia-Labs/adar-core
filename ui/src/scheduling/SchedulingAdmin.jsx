@@ -20,6 +20,7 @@ import SchedulingCalendar from './SchedulingCalendar'
 import SchedulingStaff from './SchedulingStaff'
 import SchedulingOverview from './SchedulingOverview'
 import SchedulingBookingsList from './SchedulingBookingsList'
+import SchedulingTraces from './SchedulingTraces'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const API_KEY = import.meta.env.VITE_API_KEY || ''
@@ -38,6 +39,7 @@ const SUB_TABS = [
   { key: 'appointment-types', label: '🏷️ Appointment types' },
   { key: 'calendar',          label: '📅 Calendar' },
   { key: 'bookings',          label: '📋 Bookings' },
+  { key: 'traces',            label: '🔍 Traces' },
 ]
 
 // Staff-login management is admin-only on the backend (get_admin on all
@@ -242,6 +244,9 @@ export default function SchedulingAdmin({ token }) {
               )}
               {subTab === 'bookings' && (
                 <SchedulingBookingsList token={token} practiceId={selectedId} providers={providers} />
+              )}
+              {subTab === 'traces' && (
+                <SchedulingTraces token={token} practiceId={selectedId} />
               )}
               {subTab === 'staff' && !isPracticeStaff && (
                 <SchedulingStaff token={token} practiceId={selectedId} practiceName={selectedPractice?.name} practices={practices} />

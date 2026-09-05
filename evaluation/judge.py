@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 from src.adar.config import settings
+from src.adar import tracing
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,7 @@ async def evaluate_response(
     session_id:  str = "",
     user_id:     str = "",
     enabled:     bool = True,
+    trace_id:    str = "",
 ) -> dict | None:
     """
     Evaluate an agent response using LLM-as-judge.
@@ -156,6 +158,7 @@ async def evaluate_response(
 
         eval_doc = {
             "eval_id":      str(uuid.uuid4()),
+            "trace_id":     trace_id or None,
             "team_id":      team_id,
             "session_id":   session_id,
             "user_id":      user_id,
@@ -181,6 +184,28 @@ async def evaluate_response(
                 logger.info(f"Eval stored: overall={overall} team={team_id}")
             except Exception as store_err:
                 logger.warning(f"Eval Firestore write failed: {store_err}")
+            # Phase 4: correlate this eval to the request's own trace_id in
+            # the Postgres trace store (never a freshly minted id) so the
+            # admin Trace Explorer can join a trace to its eval score.
+            if trace_id:
+                try:
+                    await tracing.record_evaluation(
+                        trace_id=trace_id,
+                        domain=DOMAIN,
+                        team_id=team_id,
+                        session_id=session_id,
+                        scores={
+                            "accuracy":     scores["accuracy"],
+                            "completeness": scores["completeness"],
+                            "relevance":    scores["relevance"],
+                            "format":       scores["format"],
+                            "overall":      overall,
+                        },
+                        explanation=explanation,
+                        model=GEMINI_MODEL,
+                    )
+                except Exception as trace_err:
+                    logger.warning(f"Eval trace-store write failed (non-fatal): {trace_err}")
 
         try:
             asyncio.create_task(_store())

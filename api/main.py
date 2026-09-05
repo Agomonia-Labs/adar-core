@@ -31,9 +31,13 @@ from api.routes.auth  import router as auth_router, get_current_team
 from api.routes.music import router as music_router
 from api.routes.admin import router as admin_router
 from api.routes.scheduling_admin import router as scheduling_admin_router
+from api.routes.scheduling_traces import router as scheduling_traces_router
 from api.routes.scheduling_directory import router as scheduling_directory_router
 from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
+from src.adar import tracing
+from src.adar.observability import configure_telemetry, shutdown_telemetry, traced_span
+from src.adar.tracedb import init_trace_pool, close_trace_pool
 from api.schemas import ChatRequest, ChatResponse, SessionResponse
 from src.adar.config import settings
 from src.adar.config import DOMAIN, OFFTOPIC_GUARD
@@ -876,8 +880,14 @@ async def lifespan(app: FastAPI):
     session_service = DatabaseSessionService(db_url=settings.SESSION_DB_URL)
     orchestrator, _ = build_agents()
     logger.info(f"Orchestrator ready — domain: {DOMAIN}  model: {settings.ADK_MODEL}")
+    try:
+        await init_trace_pool()
+    except Exception:
+        logger.exception("init_trace_pool() raised unexpectedly — continuing startup without it")
     yield
     logger.info(f"Shutting down Adar {DOMAIN.upper()} API...")
+    await close_trace_pool()
+    shutdown_telemetry()
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -907,6 +917,7 @@ app = FastAPI(
     docs_url    = "/docs" if getattr(settings, "APP_ENV", "production") != "production" else None,
     redoc_url   = None,
 )
+configure_telemetry(app, default_service_name=settings.OTEL_SERVICE_NAME)
 
 # ── CHANGE 6: CORS origins include geetabitan domain ─────────────────────────
 _PROD_ORIGINS = [
@@ -941,6 +952,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def trace_id_middleware(request: Request, call_next):
+    """Opens this request's root OTel span itself — see the note in
+    src/adar/observability.py on why FastAPIInstrumentor's own
+    auto-instrumentation is deliberately NOT used (it crashes on this
+    FastAPI version's lazy `_IncludedRouter`). Also sets the single
+    (OTel-native, or fallback-shaped) trace_id for the whole request in a
+    contextvar — read anywhere downstream (the /api/chat handler,
+    evaluation/judge.py) without threading it through every call."""
+    with traced_span(f"{request.method} {request.url.path}", attributes={
+        "http.method": request.method,
+        "http.route": request.url.path,
+    }):
+        trace_id = tracing.resolve_trace_id()
+        token = tracing.current_trace_id.set(trace_id)
+        try:
+            response = await call_next(request)
+            response.headers["X-Trace-Id"] = trace_id
+            return response
+        finally:
+            tracing.current_trace_id.reset(token)
+
 
 app.include_router(polls_router)
 app.include_router(auth_router)
@@ -1039,6 +1074,7 @@ async def get_arcl_teams(season: int = 69):
 
 app.include_router(admin_router)
 app.include_router(scheduling_admin_router)
+app.include_router(scheduling_traces_router)
 app.include_router(scheduling_directory_router)
 app.include_router(payments_router)
 
@@ -1085,14 +1121,66 @@ async def _run_agent_with_retries(runner, user_id, session_id, new_message, max_
     Shared by every domain since they all go through this same call.
     """
     last_err: Exception | None = None
+    # The span this whole run happens under (api/main.py's /api/chat sets it
+    # via "async with tracing.span('agent_run', ...)" before calling this) --
+    # every tool call and LLM turn recorded below nests under it as a child.
+    parent_span_id = tracing.current_span_id.get()
     for attempt in range(1, max_attempts + 1):
         try:
             text = ""
+            pending_calls: dict[str, tuple[str, dict, float]] = {}
             async for event in runner.run_async(
                 user_id=user_id,
                 session_id=session_id,
                 new_message=new_message,
             ):
+                parts = (event.content.parts if event.content else None) or []
+
+                # Tool calls arrive as a function_call part, then later (once
+                # the tool actually runs) a function_response part with the
+                # same .id -- pair them up so each tool call becomes ONE span
+                # with a real duration, not two disconnected half-events.
+                for part in parts:
+                    fc = getattr(part, "function_call", None)
+                    if fc is not None and getattr(fc, "id", None):
+                        pending_calls[fc.id] = (fc.name, dict(fc.args or {}), time.perf_counter())
+                    fr = getattr(part, "function_response", None)
+                    if fr is not None and getattr(fr, "id", None) and fr.id in pending_calls:
+                        tool_name, tool_args, started_at = pending_calls.pop(fr.id)
+                        duration_ms = int((time.perf_counter() - started_at) * 1000)
+                        resp = fr.response
+                        tool_error = str(resp["error"]) if isinstance(resp, dict) and resp.get("error") else None
+                        try:
+                            await tracing.record_tool_span(
+                                parent_span_id=parent_span_id,
+                                name=tool_name, args=tool_args, result=resp,
+                                error=tool_error, duration_ms=duration_ms,
+                            )
+                        except Exception:
+                            logger.warning("Failed to record tool span for %s", tool_name, exc_info=True)
+
+                # Each model turn (as opposed to a tool turn) carries
+                # usage_metadata -- record it as an llm_event so token usage
+                # and the actual response text show up in the trace, not
+                # just the fact that "agent_run" happened.
+                usage = getattr(event, "usage_metadata", None)
+                if usage is not None:
+                    resp_text = "".join(p.text for p in parts if getattr(p, "text", None))
+                    finish_reason = getattr(event, "finish_reason", None)
+                    try:
+                        await tracing.record_llm_event(
+                            span_id=parent_span_id,
+                            provider="google",
+                            model=getattr(event, "model_version", None) or settings.ADK_MODEL,
+                            operation="generate",
+                            llm_response=resp_text or None,
+                            input_tokens=getattr(usage, "prompt_token_count", None),
+                            output_tokens=getattr(usage, "candidates_token_count", None),
+                            finish_reason=str(finish_reason) if finish_reason else None,
+                        )
+                    except Exception:
+                        logger.warning("Failed to record llm_event", exc_info=True)
+
                 if hasattr(event, "is_final_response") and event.is_final_response():
                     if event.content and event.content.parts:
                         for part in event.content.parts:
@@ -1138,6 +1226,19 @@ async def chat(
     try:
         session = await get_or_create_session(request.user_id, request.session_id)
 
+        trace_id = tracing.current_trace_id.get()
+        await tracing.start_trace(
+            "chat",
+            trace_id=trace_id,
+            domain=DOMAIN,
+            practice_id=getattr(settings, "SCHEDULING_DEFAULT_PRACTICE_ID", "") or None,
+            team_id=request.user_id,
+            session_id=str(session.id),
+            user_id=request.user_id,
+            input_text=message,
+            client_info={"ip": client_ip},
+        )
+
         # ── CHANGE 7: use generic orchestrator (was arcl_orchestrator) ────────
         runner = Runner(
             agent=orchestrator,
@@ -1174,9 +1275,10 @@ async def chat(
             response_text = await _restaurant_direct_response(message, _recent_chat_history.get(session_key)) or ""
         if not response_text:
             try:
-                response_text = await _run_agent_with_retries(
-                    runner, request.user_id, session.id, user_message,
-                )
+                async with tracing.span("agent_run", metadata={"adar.domain": DOMAIN}):
+                    response_text = await _run_agent_with_retries(
+                        runner, request.user_id, session.id, user_message,
+                    )
             except Exception:
                 if DOMAIN != "restaurants":
                     raise
@@ -1245,9 +1347,30 @@ async def chat(
                     session_id=str(session.id),
                     user_id=request.user_id,
                     enabled=True,
+                    trace_id=trace_id,
                 )
         except Exception as eval_err:
             logger.warning(f"Eval failed (non-fatal): {eval_err}")
+
+        # The trace was tagged with only a placeholder practice_id in
+        # start_trace() (called before the agent ran, before anyone knew
+        # which practice the conversation was actually about) — find_practice
+        # (domains/scheduling/tools/availability_tools.py) writes the REAL
+        # one into session.state once it resolves it. Re-fetch the session
+        # now that the run is done and use it to correct the trace, so the
+        # admin Traces tab (scoped per-practice) actually finds this trace.
+        _resolved_practice_id = None
+        if DOMAIN == "scheduling":
+            try:
+                _updated_session = await session_service.get_session(
+                    app_name=APP_NAME, user_id=request.user_id, session_id=session.id,
+                )
+                if _updated_session and _updated_session.state:
+                    _resolved_practice_id = _updated_session.state.get("resolved_practice_id")
+            except Exception:
+                logger.warning("Could not re-fetch session state for practice_id tagging", exc_info=True)
+
+        await tracing.finish_trace(trace_id, status="success", practice_id=_resolved_practice_id)
 
         return ChatResponse(
             response=response_text,
@@ -1263,6 +1386,22 @@ async def chat(
         raise
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
+        try:
+            _trace_id = tracing.current_trace_id.get()
+            if _trace_id:
+                _err_practice_id = None
+                if DOMAIN == "scheduling":
+                    try:
+                        _updated_session = await session_service.get_session(
+                            app_name=APP_NAME, user_id=request.user_id, session_id=session.id,
+                        )
+                        if _updated_session and _updated_session.state:
+                            _err_practice_id = _updated_session.state.get("resolved_practice_id")
+                    except Exception:
+                        pass
+                await tracing.finish_trace(_trace_id, status="error", error_message=str(e), practice_id=_err_practice_id)
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

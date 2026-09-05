@@ -22,6 +22,9 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1.field_path import FieldPath
+from google.adk.tools import ToolContext
 
 from src.adar.config import settings
 from src.adar.db import get_db, direct_query, add_document
@@ -210,7 +213,7 @@ async def list_providers(practice_id: str = "", appointment_type_name: str = "")
     return "Providers:\n" + "\n".join(lines)
 
 
-async def find_practice(name: str = "") -> str:
+async def find_practice(name: str = "", tool_context: ToolContext = None) -> str:
     """Multi-practice lookup: resolve which practice a caller means by name
     (e.g. "Riverside Family Medicine"), or -- called with no name -- resolve
     to this deployment's single default practice if one is configured
@@ -237,6 +240,8 @@ async def find_practice(name: str = "") -> str:
     if not name and settings.SCHEDULING_DEFAULT_PRACTICE_ID:
         default = next((r for r in rows if r["doc_id"] == settings.SCHEDULING_DEFAULT_PRACTICE_ID), None)
         if default:
+            if tool_context is not None:
+                tool_context.state["resolved_practice_id"] = default["doc_id"]
             return f"practice_id: {default['doc_id']} — \"{default.get('name')}\". Use this practice_id on every tool call for the rest of this conversation."
 
     name_low = name.strip().lower()
@@ -246,6 +251,8 @@ async def find_practice(name: str = "") -> str:
         return "I couldn't find a practice by that name. Could you double-check the name?"
     if len(matches) == 1:
         m = matches[0]
+        if tool_context is not None:
+            tool_context.state["resolved_practice_id"] = m["doc_id"]
         return f"Found it — practice_id: {m['doc_id']} (\"{m.get('name')}\"). Use this practice_id on every tool call for the rest of this conversation."
     lines = [f"- {m.get('name')} (practice_id: {m['doc_id']})" for m in matches[:10]]
     return "More than one practice matches — which one did you mean?\n" + "\n".join(lines)
@@ -588,14 +595,54 @@ async def confirm_booking(
     return result
 
 
+async def _resolve_appointment(db, appointment_id: str):
+    """The confirmation ID the caller has is only the first 8 characters
+    of the real Firestore document id -- confirm_booking deliberately
+    truncates it (f"...(confirmation ID: {appointment_id[:8]})") so it's
+    short enough to read/type back. Looking that short string up as an
+    exact document id (the previous behavior) always misses, which is why
+    cancel/reschedule used to fail with "I couldn't find an appointment
+    with that confirmation ID" even for a real, active appointment.
+    Try an exact match first (covers a full id, if one's ever passed
+    directly), then fall back to a document-id prefix range query for the
+    short form everyone actually has. Returns (ref, snap); ref is None if
+    the prefix matched zero or more than one document (ambiguous)."""
+    coll = db.collection(settings.SCHEDULING_APPOINTMENTS_COLLECTION)
+    prefix = (appointment_id or "").strip()
+    if not prefix:
+        return None, None
+    ref = coll.document(prefix)
+    snap = await ref.get()
+    if snap.exists:
+        return ref, snap
+    # Firestore's document-id filter (__key__/__name__) requires the
+    # comparison value to be an actual document reference, not a bare
+    # string -- passing the plain prefix string here fails at query time
+    # with "400 __key__ filter value must be a Key". coll.document(...)
+    # builds a syntactically valid reference even though no document with
+    # that exact (usually partial) id exists; only its path is used for
+    # the range comparison.
+    query = (
+        coll
+        .where(filter=FieldFilter(FieldPath.document_id(), ">=", coll.document(prefix)))
+        .where(filter=FieldFilter(FieldPath.document_id(), "<", coll.document(prefix + "\uf8ff")))
+        .limit(2)
+    )
+    matches = [doc async for doc in query.stream()]
+    if len(matches) == 1:
+        doc = matches[0]
+        return coll.document(doc.id), doc
+    return None, None
+
+
 async def cancel_appointment(appointment_id: str, practice_id: str = "", reason: str = "") -> str:
     """Cancel a confirmed appointment by its confirmation ID."""
     practice_id = _resolve_practice_id(practice_id)
     db = get_db()
-    ref = db.collection(settings.SCHEDULING_APPOINTMENTS_COLLECTION).document(appointment_id)
-    snap = await ref.get()
-    if not snap.exists or snap.to_dict().get("practice_id") != practice_id:
+    ref, snap = await _resolve_appointment(db, appointment_id)
+    if ref is None or not snap.exists or snap.to_dict().get("practice_id") != practice_id:
         return "I couldn't find an appointment with that confirmation ID."
+    appointment_id = ref.id  # the resolved FULL id, for the email call below
     data = snap.to_dict()
     if data.get("status") == "cancelled":
         return "That appointment is already cancelled."

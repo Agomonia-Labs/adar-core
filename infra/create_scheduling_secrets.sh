@@ -24,6 +24,15 @@ gcloud secrets create scheduling-api-key \
 gcloud secrets create scheduling-admin-email    --project="${PROJECT}"
 gcloud secrets create scheduling-admin-password --project="${PROJECT}"
 
+# Observability (Phase 3 of the build plan) — not created automatically:
+# create the "scheduling" database/schema on the existing adar-pgdev Cloud
+# SQL instance first (the same instance restaurants/geetabitan already use,
+# see infra/deploy-scheduling.sh), then:
+#   gcloud secrets create scheduling-trace-db-url --project="${PROJECT}" \
+#     --data-file=<(echo -n "postgresql://USER:PASSWORD@HOST:5432/DBNAME")
+# Leave it uncreated (and OTEL_ENABLED=false) to keep this deploy's
+# observability inert.
+
 echo ""
 echo "Secrets created. Now fill in the empty ones:"
 echo "  gcloud secrets versions add scheduling-admin-email    --data-file=<(echo -n 'you@example.com')"

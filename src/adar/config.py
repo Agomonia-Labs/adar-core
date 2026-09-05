@@ -286,6 +286,36 @@ OFFTOPIC_GUARD: dict = {
 }
 
 
+# ── Observability (OpenTelemetry + Postgres trace store) ─────────────────────
+# Mirrors the pattern already proven in the sister product adar-rag
+# (DocIntel): OTEL_ENABLED gates everything so this is fully inert until a
+# Collector endpoint is configured. TRACE_ID design is deliberately simpler
+# than DocIntel's: we use the OTel-native (W3C) trace_id as THE trace_id
+# everywhere — no separate app-level id — correlated via the session_id
+# that already flows through every ADK request.
+OTEL_ENABLED               = os.getenv("OTEL_ENABLED", "false").lower() == "true"
+OTEL_SERVICE_NAME          = os.getenv("OTEL_SERVICE_NAME", f"adar-core-{DOMAIN}")
+OTEL_SERVICE_VERSION       = os.getenv("OTEL_SERVICE_VERSION", "1.0.0")
+OTEL_DEPLOYMENT_ENVIRONMENT = os.getenv("OTEL_DEPLOYMENT_ENVIRONMENT", "development")
+# Shared OTel Collector — the same Cloud Run service adar-rag (DocIntel)
+# already deploys as "docintel-otel-collector". Point this at that
+# service's URL; the OTLP HTTP exporter appends /v1/traces itself, so just
+# the base Collector URL goes here (matches adar-rag's
+# OTEL_EXPORTER_OTLP_ENDPOINT convention exactly).
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+OTEL_EXPORTER_OTLP_PROTOCOL = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+OTEL_CAPTURE_CONTENT        = os.getenv("OTEL_CAPTURE_CONTENT", "false").lower() == "true"
+
+# Postgres trace store — new Cloud SQL instance/schema (see the
+# observability plan doc); a raw asyncpg pool + idempotent DDL, matching
+# adar-rag's own convention exactly (no SQLAlchemy/Alembic there either).
+# Blank means the trace store is disabled — spans are still emitted over
+# OTLP to the Collector, but the admin Trace Explorer has nothing to query.
+TRACE_DB_URL       = os.getenv("TRACE_DB_URL", "")
+TRACE_DB_ENABLED   = bool(TRACE_DB_URL)
+TRACE_FULL_CONTENT = os.getenv("TRACE_FULL_CONTENT", "false").lower() == "true"
+
+
 # ── Settings object ───────────────────────────────────────────────────────────
 # Provides attribute-style access (`settings.X`) so all existing imports of
 # `from src.adar.config import settings` continue to work without change.
@@ -360,6 +390,18 @@ class _Settings:
     CRICCLUBS_STANDINGS: str = CRICCLUBS_STANDINGS if DOMAIN == "arcl" else ""
     CRICCLUBS_SCHEDULE:  str = CRICCLUBS_SCHEDULE  if DOMAIN == "arcl" else ""
     CRICCLUBS_RESULTS:   str = CRICCLUBS_RESULTS   if DOMAIN == "arcl" else ""
+
+    # Observability
+    OTEL_ENABLED:                str  = OTEL_ENABLED
+    OTEL_SERVICE_NAME:           str  = OTEL_SERVICE_NAME
+    OTEL_SERVICE_VERSION:        str  = OTEL_SERVICE_VERSION
+    OTEL_DEPLOYMENT_ENVIRONMENT: str  = OTEL_DEPLOYMENT_ENVIRONMENT
+    OTEL_EXPORTER_OTLP_ENDPOINT: str  = OTEL_EXPORTER_OTLP_ENDPOINT
+    OTEL_EXPORTER_OTLP_PROTOCOL: str  = OTEL_EXPORTER_OTLP_PROTOCOL
+    OTEL_CAPTURE_CONTENT:        bool = OTEL_CAPTURE_CONTENT
+    TRACE_DB_URL:                str  = TRACE_DB_URL
+    TRACE_DB_ENABLED:            bool = TRACE_DB_ENABLED
+    TRACE_FULL_CONTENT:          bool = TRACE_FULL_CONTENT
 
 
 settings = _Settings()

@@ -72,6 +72,20 @@ const VOICE_STOP_COMMAND_RE = /\b(stop|pause|cancel|quiet)\b|থামুন|থ
 // what the *caller* says to interrupt playback mid-sentence.
 const ASSISTANT_FAREWELL_RE = /\bgood[\s-]?bye\b|\bbye\b/i
 
+// The scheduling agent's tool responses embed a bracketed
+// [slot_start_iso: ...] value alongside each spoken-friendly time so the
+// model can pass the exact timestamp back into hold_slot without
+// reconstructing it (see domains/scheduling/tools/availability_tools.py
+// and the agent instruction in agents_config.scheduling.json). The prompt
+// tells the model never to say this out loud, but LLMs don't always
+// follow that reliably when it's inline with text they're already
+// quoting — so strip it here as a deterministic backstop, before it's
+// ever shown or spoken to the caller.
+const INTERNAL_MARKER_RE = /\s*\[slot_start_iso:\s*[^\]]*\]/gi
+function stripInternalMarkers(text) {
+  return typeof text === 'string' ? text.replace(INTERNAL_MARKER_RE, '') : text
+}
+
 // Languages the scheduling assistant can converse in (mirrors the voice
 // map already live server-side in api/main.py's /api/demo/tts endpoint).
 // 'auto' leaves both text and voice on today's existing behavior — the
@@ -562,9 +576,10 @@ function ChatTab({ onUsageIncrement }) {
         { headers },
       )
       setSessionId(data.session_id)
+      const cleanResponse = stripInternalMarkers(data.response)
       const assistantMessage = {
         role:'assistant',
-        content:data.response,
+        content:cleanResponse,
         timestamp:Date.now(),
         eval:data.eval||null,
         voiceRequested:Boolean(options.speakResponse),
@@ -590,9 +605,9 @@ function ChatTab({ onUsageIncrement }) {
       }
       onUsageIncrement?.()
       // ── Speak the reply in Bangla if the question came from voice ──────────
-      if (options.speakResponse && data.response && !youtubeStarted) {
+      if (options.speakResponse && cleanResponse && !youtubeStarted) {
         try {
-          const played = await speakWithTimeout(data.response)
+          const played = await speakWithTimeout(cleanResponse)
           if (!played) {
             setMessages(prev => prev.map(msg =>
               msg === assistantMessage ? { ...msg, voicePlaybackFailed:true } : msg

@@ -38,3 +38,9 @@ pytz>=2024.0
 google-cloud-texttospeech
 pydub
 requests
+
+# ── Observability (OpenTelemetry — same pins proven in adar-rag) ─────────────
+opentelemetry-api>=1.31,<2
+opentelemetry-sdk>=1.31,<2
+opentelemetry-exporter-otlp-proto-http>=1.31,<2
+opentelemetry-instrumentation-httpx>=0.52b0,<1
