@@ -461,11 +461,17 @@ function ChatTab({ onUsageIncrement }) {
       setTimeout(() => setInput(''), 3000)
     },
   })
-  const [messages, setMessages] = useState([{
-    role:'assistant',
-    content: tenant.welcomeMessage,
-    timestamp: Date.now(),
-  }])
+  const [messages, setMessages] = useState(() => (
+    tenant.id === 'scheduling'
+      ? []
+      : [{ role:'assistant', content: tenant.welcomeMessage, timestamp: Date.now() }]
+  ))
+  // Scheduling collects name/email/phone up front (via the gate form
+  // below) so the assistant can greet the caller by name and confirm
+  // those details itself, instead of asking again right before booking.
+  const [callerDetails, setCallerDetails]     = useState(null)
+  const [callerForm, setCallerForm]           = useState({ name:'', email:'', phone:'' })
+  const [callerFormError, setCallerFormError] = useState('')
   const [input, setInput]         = useState('')
   const [loading, setLoading]     = useState(false)
   const [voiceModeActive, setVoiceModeActive] = useState(false)
@@ -545,7 +551,9 @@ function ChatTab({ onUsageIncrement }) {
     const wantsYouTube = shouldOpenYouTube(message)
     sendingRef.current = true
     setInput('')
-    setMessages(prev => [...prev, { role:'user', content:message, timestamp:Date.now() }])
+    if (!options.hidden) {
+      setMessages(prev => [...prev, { role:'user', content:message, timestamp:Date.now() }])
+    }
     setLoading(true)
     try {
       const token = localStorage.getItem('adar_token') || ''
@@ -568,6 +576,9 @@ function ChatTab({ onUsageIncrement }) {
       }
       if (selectedPractice) {
         messageHints.push(`[This conversation is about: ${selectedPractice.name}]`)
+      }
+      if (callerDetails) {
+        messageHints.push(`[Caller details already confirmed at the start of this conversation -- name: ${callerDetails.name}; email: ${callerDetails.email}; phone: ${callerDetails.phone}. Do not ask for these again -- reuse them directly when booking.]`)
       }
       const apiMessage = messageHints.length ? `${messageHints.join(' ')} ${message}` : message
       const { data } = await axios.post(
@@ -630,9 +641,38 @@ function ChatTab({ onUsageIncrement }) {
       sendingRef.current = false
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }, [input, isSpeaking, loading, onUsageIncrement, playYouTubeInsideApp, restartVoiceListening, sessionId, speakWithTimeout, stopListening, stopSpeaking, userId])
+  }, [callerDetails, input, isSpeaking, loading, onUsageIncrement, playYouTubeInsideApp, restartVoiceListening, sessionId, speakWithTimeout, stopListening, stopSpeaking, userId])
 
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
+
+  // Once the gate form is submitted, kick off the real conversation with a
+  // hidden first turn carrying the caller's details -- the assistant's own
+  // reply (not a hardcoded string) becomes the opening greeting, so it can
+  // greet the caller by name and read back their email/phone to confirm.
+  useEffect(() => {
+    if (callerDetails && messages.length === 0) {
+      sendMessageRef.current?.(
+        `[Caller details collected via the pre-chat form -- name: ${callerDetails.name}; email: ${callerDetails.email}; phone: ${callerDetails.phone}. Start by greeting the caller by name and reading back their email and phone number to confirm both before doing anything else. Do not ask for the caller's name, email, or phone number again later in this conversation -- reuse these confirmed values when booking.]`,
+        { hidden:true },
+      )
+    }
+  }, [callerDetails])
+
+  const submitCallerDetails = () => {
+    const name  = callerForm.name.trim()
+    const email = callerForm.email.trim()
+    const phone = callerForm.phone.trim()
+    if (!name || !email || !phone) {
+      setCallerFormError('Please share your name, email, and phone number to get started.')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setCallerFormError("That email address doesn't look right \u2014 please check it.")
+      return
+    }
+    setCallerFormError('')
+    setCallerDetails({ name, email, phone })
+  }
 
   const handleKeyDown = (e) => {
     if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
@@ -666,7 +706,52 @@ function ChatTab({ onUsageIncrement }) {
     stopListening()
     setSessionId(null)
     setYoutubePlayer(null)
-    setMessages([{ role:'assistant', content:tenant.clearMessage, timestamp:Date.now() }])
+    if (tenant.id === 'scheduling') {
+      // The next person at the widget may be a different caller entirely --
+      // send them back through the details gate rather than reusing the
+      // previous caller's name, email, and phone.
+      setCallerDetails(null)
+      setCallerForm({ name:'', email:'', phone:'' })
+      setCallerFormError('')
+      setMessages([])
+    } else {
+      setMessages([{ role:'assistant', content:tenant.clearMessage, timestamp:Date.now() }])
+    }
+  }
+
+  if (tenant.id === 'scheduling' && !callerDetails) {
+    return (
+      <Box sx={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center', px:3, py:2, gap:1.5 }}>
+        <Typography variant="h6" sx={{ fontWeight:700, color:'text.primary' }}>
+          Before we get started
+        </Typography>
+        <Typography variant="body2" sx={{ color:'text.secondary', mb:0.5 }}>
+          Please share your name, email, and phone number so the assistant can confirm your details and book your appointment.
+        </Typography>
+        <TextField
+          label="Full name" size="small" autoFocus
+          value={callerForm.name}
+          onChange={e => setCallerForm(prev => ({ ...prev, name:e.target.value }))}
+        />
+        <TextField
+          label="Email address" size="small" type="email"
+          value={callerForm.email}
+          onChange={e => setCallerForm(prev => ({ ...prev, email:e.target.value }))}
+        />
+        <TextField
+          label="Phone number" size="small" type="tel"
+          value={callerForm.phone}
+          onChange={e => setCallerForm(prev => ({ ...prev, phone:e.target.value }))}
+          onKeyDown={e => { if (e.key === 'Enter') submitCallerDetails() }}
+        />
+        {callerFormError && (
+          <Typography variant="caption" sx={{ color:'error.main' }}>{callerFormError}</Typography>
+        )}
+        <Button variant="contained" onClick={submitCallerDetails} sx={{ mt:0.5 }}>
+          Start conversation
+        </Button>
+      </Box>
+    )
   }
 
   return (
