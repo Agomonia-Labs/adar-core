@@ -36,7 +36,7 @@ _BRAND_DEFAULTS = {
     "arcl":        {"brand_name": "Adar ARCL",       "footer_org": "American Recreational Cricket League"},
     "geetabitan":  {"brand_name": "Adar Geetabitan",  "footer_org": "গীতবিতান — রবীন্দ্রনাথ ঠাকুরের গান"},
     "restaurants": {"brand_name": "Adar Restaurants", "footer_org": "Restaurant Food Recommender"},
-    "scheduling":  {"brand_name": "Adar Scheduling",  "footer_org": "Practice Scheduling Assistant"},
+    "scheduling":  {"brand_name": "ADAR Front Desk",  "footer_org": "AI Scheduling and Front Desk Assistant"},
 }
 _BRAND = _BRAND_DEFAULTS.get(DOMAIN, _BRAND_DEFAULTS["arcl"])
 
@@ -53,7 +53,7 @@ async def send_email(to: str, subject: str, html: str):
     """Send email via Gmail SMTP."""
     if not to or "@" not in to:
         logger.warning(f"Invalid email address: {to}")
-        return
+        return False
 
     if GMAIL_USER and GMAIL_APP_PASS:
         try:
@@ -81,12 +81,13 @@ async def send_email(to: str, subject: str, html: str):
                 tls_context=tls_context,
             )
             logger.info(f"Email sent via Gmail: to={to} subject='{subject}'")
-            return
+            return True
         except Exception as e:
             logger.error(f"Gmail SMTP error: {e}")
 
     # No email provider configured — just log
     logger.warning(f"No email provider configured. Would have sent to={to} subject='{subject}'")
+    return False
 
 
 def _base_template(
@@ -307,6 +308,36 @@ async def send_otp_email(to: str, team_name: str, otp: str):
 
 async def send_welcome_email(to: str, team_name: str, plan: str = "standard", trial_ends: str = ""):
     """Send welcome email after successful Stripe checkout."""
+    if DOMAIN == "scheduling":
+        plan_name = "Yearly" if plan == "yearly" else "Monthly"
+        billing_term = "$450 per year" if plan == "yearly" else "$50 per month"
+        body = f"""
+        <h2 style="color:#1A3326;margin-top:0">Your ADAR Front Desk subscription is active</h2>
+        <p>Hi <strong>{team_name}</strong>,</p>
+        <p>Stripe has confirmed your payment and your ADAR Front Desk account is now active.</p>
+        <div style="background:#E8F5EE;border-left:4px solid #2EB87E;padding:14px 16px;
+          border-radius:6px;margin:18px 0">
+          <strong>Plan:</strong> {plan_name}<br>
+          <strong>Billing:</strong> {billing_term}<br>
+          <strong>Status:</strong> Active
+        </div>
+        <p>You can now sign in to configure providers, appointment types, availability,
+          booking notifications, and your Front Desk assistant.</p>
+        <div style="text-align:center;margin:24px 0">
+          <a href="{APP_URL}"
+            style="background:#2EB87E;color:#fff;padding:12px 28px;border-radius:10px;
+            text-decoration:none;font-weight:600;font-size:1rem">Sign in to ADAR Front Desk</a>
+        </div>
+        <p style="font-size:0.82rem;color:#5A8A70;text-align:center">
+          You can manage or cancel your subscription from Billing after signing in.
+        </p>
+        """
+        return await send_email(
+            to,
+            f"ADAR Front Desk subscription active — {plan_name}",
+            _base_template("Subscription active", body),
+        )
+
     trial_end_line = (
         f"<div style='background:#E8F5EE;border-left:4px solid #2EB87E;padding:12px 16px;"
         f"border-radius:6px;margin:16px 0'>"
@@ -359,7 +390,7 @@ async def send_welcome_email(to: str, team_name: str, plan: str = "standard", tr
       </div>
     </div>
     """
-    await send_email(to, subject, html)
+    return await send_email(to, subject, html)
 
 
 async def send_trial_ending_email(to: str, team_name: str, trial_ends: str, plan: str = "standard"):

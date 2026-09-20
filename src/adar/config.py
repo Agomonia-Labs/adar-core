@@ -49,6 +49,8 @@ STRIPE_PRICE_GEETABITAN = os.getenv("STRIPE_PRICE_GEETABITAN", "")  # Geetabitan
 STRIPE_PRICE_BASIC      = os.getenv("STRIPE_PRICE_BASIC",      "")  # ARCL only
 STRIPE_PRICE_STANDARD   = os.getenv("STRIPE_PRICE_STANDARD",   "")  # ARCL only
 STRIPE_PRICE_UNLIMITED  = os.getenv("STRIPE_PRICE_UNLIMITED",  "")  # ARCL only
+STRIPE_PRICE_FRONT_DESK_MONTHLY = os.getenv("STRIPE_PRICE_FRONT_DESK_MONTHLY", "")
+STRIPE_PRICE_FRONT_DESK_YEARLY  = os.getenv("STRIPE_PRICE_FRONT_DESK_YEARLY", "")
 FRONTEND_URL           = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 # ── App identity ──────────────────────────────────────────────────────────────
@@ -355,6 +357,8 @@ class _Settings:
     STRIPE_PRICE_BASIC:      str = STRIPE_PRICE_BASIC      if DOMAIN == "arcl" else ""
     STRIPE_PRICE_STANDARD:   str = STRIPE_PRICE_STANDARD   if DOMAIN == "arcl" else ""
     STRIPE_PRICE_UNLIMITED:  str = STRIPE_PRICE_UNLIMITED   if DOMAIN == "arcl" else ""
+    STRIPE_PRICE_FRONT_DESK_MONTHLY: str = STRIPE_PRICE_FRONT_DESK_MONTHLY if DOMAIN == "scheduling" else ""
+    STRIPE_PRICE_FRONT_DESK_YEARLY:  str = STRIPE_PRICE_FRONT_DESK_YEARLY if DOMAIN == "scheduling" else ""
     FRONTEND_URL:           str = FRONTEND_URL
 
     # API keys

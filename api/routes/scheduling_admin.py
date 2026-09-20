@@ -636,8 +636,8 @@ async def create_staff_account(practice_id: str, body: StaffIn, _: dict = Depend
     role="practice_staff" plus practice_id on the record, which
     get_scheduling_staff/_check_practice_access above key off of. Skips the
     billing/pending_payment machinery in /register entirely: staff accounts
-    are active immediately, since scheduling has BILLING_ENABLED=false and a
-    payment gate makes no sense for a practice's own front-desk login."""
+    are active seats provisioned under the practice owner's Front Desk
+    subscription, so each staff login is not billed independently."""
     _require_scheduling_domain()
     db = get_db()
     practice_snap = await db.collection(settings.SCHEDULING_PRACTICES_COLLECTION).document(practice_id).get()

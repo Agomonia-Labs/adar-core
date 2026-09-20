@@ -13,6 +13,8 @@ const PLAN_COLORS = {
   basic:     { border: '#C8E8D8', badge: '#EBF7F1', text: '#1A8A5A' },
   standard:  { border: '#2EB87E', badge: '#2EB87E', text: '#fff'    },
   unlimited: { border: '#EF9F27', badge: '#FFF3E0', text: '#BA7517' },
+  monthly:   { border: '#2EB87E', badge: '#EBF7F1', text: '#1A8A5A' },
+  yearly:    { border: '#EF9F27', badge: '#EF9F27', text: '#fff' },
 }
 
 export default function Checkout({ token, onBack, onSuccess }) {
@@ -25,7 +27,13 @@ export default function Checkout({ token, onBack, onSuccess }) {
 
   useEffect(() => {
     axios.get(`${API_URL}/api/payments/plans`)
-      .then(({ data }) => setPlans(data.plans || []))
+      .then(({ data }) => {
+        const available = data.plans || []
+        setPlans(available)
+        if (available.length && !available.some(plan => plan.id === selected)) {
+          setSelected(available[0].id)
+        }
+      })
       .catch(() => setError('Could not load plans'))
       .finally(() => setPlansLoading(false))
   }, [])
@@ -51,6 +59,8 @@ export default function Checkout({ token, onBack, onSuccess }) {
 
   const formatAmount = (amount, currency) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount / 100)
+  const selectedPlan = plans.find(plan => plan.id === selected)
+  const hasTrial = Number(selectedPlan?.trial_days || 0) > 0
 
   if (redirecting) return (
     <Box sx={{
@@ -65,10 +75,10 @@ export default function Checkout({ token, onBack, onSuccess }) {
         {DOMAIN === 'geetabitan' ? 'গী' : 'আদর'}
       </Box>
       <Typography variant="h6" sx={{color:'#fff',fontWeight:600}}>
-        Starting your 30-day free trial...
+        {hasTrial ? `Starting your ${selectedPlan.trial_days}-day free trial...` : 'Opening secure checkout...'}
       </Typography>
       <Typography sx={{color:'rgba(255,255,255,0.45)',fontSize:'0.88rem',maxWidth:320}}>
-        Setting up your 30-day free trial. Taking you to our secure payment page.
+        {hasTrial ? 'Setting up your trial and taking you to our secure payment page.' : 'Taking you to Stripe to complete your subscription.'}
       </Typography>
       <CircularProgress sx={{color:'#2EB87E',mt:1}} />
       <Typography sx={{color:'rgba(255,255,255,0.3)',fontSize:'0.74rem',mt:1}}>
@@ -88,7 +98,7 @@ export default function Checkout({ token, onBack, onSuccess }) {
         }}>আদর</Box>
         <Typography variant="h5" fontWeight={600}>Choose your plan</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          30-day free trial · Cancel anytime · Auto-renews monthly
+          {DOMAIN === 'scheduling' ? 'Choose monthly or yearly billing · Cancel anytime' : 'Free trial · Cancel anytime · Auto-renews'}
         </Typography>
       </Stack>
 
@@ -103,7 +113,7 @@ export default function Checkout({ token, onBack, onSuccess }) {
           {plans.map(plan => {
             const colors  = PLAN_COLORS[plan.id] || PLAN_COLORS.basic
             const isSelected = selected === plan.id
-            const isPopular  = plan.id === 'standard'
+            const isPopular  = plan.id === 'standard' || (DOMAIN === 'scheduling' && plan.id === 'yearly')
 
             return (
               <Paper
@@ -123,7 +133,7 @@ export default function Checkout({ token, onBack, onSuccess }) {
               >
                 {isPopular && (
                   <Chip
-                    label="Most popular"
+                    label={DOMAIN === 'scheduling' && plan.id === 'yearly' ? 'Best value' : 'Most popular'}
                     size="small"
                     sx={{
                       position: 'absolute', top: -12, right: 16,
@@ -172,7 +182,14 @@ export default function Checkout({ token, onBack, onSuccess }) {
           All plans include:
         </Typography>
         <Stack spacing={0.5}>
-          {(DOMAIN === 'geetabitan' ? [
+          {(DOMAIN === 'scheduling' ? [
+            'AI-assisted appointment booking through chat and voice',
+            'Provider schedules, appointment types, and availability',
+            'Slot holds, confirmations, rescheduling, and cancellation',
+            'Customer and front-desk email notifications',
+            'Practice administration and booking calendar',
+            'Auto-renews · Cancel anytime',
+          ] : DOMAIN === 'geetabitan' ? [
             '২,০০০+ রবীন্দ্রসঙ্গীত অ্যাক্সেস',
             'রাগ-তাল বিশ্লেষণ ও স্বরলিপি',
             'YouTube লিংক — ১৩ জন শিল্পী',
@@ -204,12 +221,13 @@ export default function Checkout({ token, onBack, onSuccess }) {
       >
         {loading
           ? <CircularProgress size={20} sx={{ color: 'inherit' }} />
-          : 'Start free trial · Subscribe'}
+          : hasTrial ? 'Start free trial · Subscribe' : 'Continue to secure checkout'}
       </Button>
 
       <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', textAlign: 'center', mt: 1.5 }}>
-        Your card won't be charged during the 30-day trial.
-        Cancel before the trial ends and you pay nothing.
+        {hasTrial
+          ? `Your card will not be charged during the ${selectedPlan.trial_days}-day trial. Cancel before it ends and you pay nothing.`
+          : 'Your subscription starts after payment confirmation. Manage or cancel it from Billing.'}
       </Typography>
 
       <Box sx={{ textAlign: 'center', mt: 2 }}>

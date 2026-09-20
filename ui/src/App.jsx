@@ -28,35 +28,7 @@ import Checkout from './Checkout'
 import Billing from './Billing'
 import Register from './Register'
 import AdminDashboard from './AdminDashboard'
-
-
-// ── Handle Stripe payment return BEFORE React mounts ─────────────────────────
-// This runs synchronously so adar_status is correct when useState initialises.
-;(function handlePaymentReturn() {
-  try {
-    const p = new URLSearchParams(window.location.search)
-    if (p.get('payment') === 'success') {
-      localStorage.setItem('adar_status', 'active')
-      window.history.replaceState({}, '', window.location.pathname)
-      // Fire activate to backend (non-blocking, best-effort)
-      const token   = localStorage.getItem('adar_token')
-      const apiUrl  = import.meta.env.VITE_API_URL || ''
-      const apiKey  = import.meta.env.VITE_API_KEY  || ''
-      if (token) {
-        const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }
-        if (apiKey) headers['X-API-Key'] = apiKey
-        fetch(apiUrl + '/api/payments/activate', { method: 'POST', headers })
-          .then(r => r.json())
-          .then(d => console.log('[Payment] Activated:', d))
-          .catch(e => console.warn('[Payment] Activate error (non-fatal):', e))
-      }
-    }
-    if (p.get('payment') === 'cancelled') {
-      window.history.replaceState({}, '', window.location.pathname)
-    }
-  } catch (e) { /* never crash */ }
-})()
-
+import SubscriptionReturn from './SubscriptionReturn'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
 const API_KEY = import.meta.env.VITE_API_KEY || ''
@@ -928,6 +900,8 @@ function ChatTab({ onUsageIncrement }) {
 export default function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [page, setPage]           = useState(() => {
+    const payment = new URLSearchParams(window.location.search).get('payment')
+    if (payment === 'success') return 'subscription_return'
     const token  = localStorage.getItem('adar_token')
     const role   = localStorage.getItem('adar_role')
     const status = localStorage.getItem('adar_status')
@@ -948,6 +922,13 @@ export default function App() {
   const [usage, setUsage]       = useState(null)
   const [ingestStatus, setIngestStatus] = useState(null)
   const [teamName, setTeamName] = useState(() => localStorage.getItem('adar_team_name') || '')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('payment') === 'cancelled') {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   // Auto-logout after 30 minutes
   useEffect(() => {
@@ -1033,6 +1014,7 @@ export default function App() {
     localStorage.removeItem('adar_role')
     localStorage.removeItem('adar_status')
     localStorage.removeItem('adar_login_time')
+    localStorage.removeItem('adar_practice_id')
     setToken(''); setTeamName(''); setPage('login')
   }
 
@@ -1065,6 +1047,7 @@ export default function App() {
 
   if (page === 'login')    return <ThemeProvider theme={theme}><CssBaseline /><Login onLogin={handleLogin} /></ThemeProvider>
   if (page === 'register') return <ThemeProvider theme={theme}><CssBaseline /><Register onBack={() => setPage('login')} /></ThemeProvider>
+  if (page === 'subscription_return') return <ThemeProvider theme={theme}><CssBaseline /><SubscriptionReturn token={token} onSignInAgain={handleLogout} /></ThemeProvider>
   if (page === 'admin')    return <ThemeProvider theme={theme}><CssBaseline /><AdminDashboard token={token} onLogout={handleLogout} /></ThemeProvider>
   if (page === 'checkout') return <ThemeProvider theme={theme}><CssBaseline /><Checkout token={token} onBack={() => setPage('chat')} onSuccess={() => { localStorage.setItem('adar_status','active'); setPage('chat') }} /></ThemeProvider>
   if (page === 'billing')  return <ThemeProvider theme={theme}><CssBaseline /><Billing token={token} onSubscribe={() => setPage('checkout')} onBack={() => setPage('chat')} /></ThemeProvider>

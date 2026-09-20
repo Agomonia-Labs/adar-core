@@ -232,8 +232,9 @@ and password-hashing path every other domain's team login already uses —
 `role: "practice_staff"` and `practice_id` are the only things that make it
 different from a billing-oriented `role: "team"` account, and account
 status is set to `"active"` immediately (no `pending_payment` gate, unlike
-`/register` — that gate exists for Stripe billing, which scheduling doesn't
-use). The account then logs in through the *same* `/api/auth/login` +
+`/register`). The registered practice owner holds the Front Desk subscription;
+staff accounts are active seats under that practice and are not billed
+individually. The account then logs in through the *same* `/api/auth/login` +
 `/verify-otp` flow as everyone else (Gmail-SMTP OTP included) — the only
 frontend changes were: `Login.jsx` persisting the JWT's `practice_id` into
 `localStorage` alongside the existing `adar_token`/`adar_role`, and
@@ -411,5 +412,13 @@ exists; get those records before touching DNS rather than guessing them.
   calendar is view-only for now (see Admin console above); staff-facing
   practice/provider/appointment-type management and a bookings calendar are
   built — §3, Phase 4
-- Stripe billing plan for this domain — §5's "Billing" note
 - A second reference vertical to prove the schema generalizes — §5
+
+## Front Desk subscriptions
+
+Scheduling uses Stripe Checkout and the shared ADAR billing routes with two
+recurring plans: `$50/month` and `$450/year`. New self-registered practice
+accounts enter `pending_payment` until checkout completes. Stripe webhook
+events activate, suspend, renew, or cancel the account; staff accounts remain
+seats under the subscribed practice. See `docs/front_desk_billing.md` for the
+Stripe, Secret Manager, deployment, and test procedure.

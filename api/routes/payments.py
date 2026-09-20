@@ -4,13 +4,14 @@ api/routes/payments.py — Stripe payments for all domains.
 Domain routing:
   DOMAIN=geetabitan → single plan: Adar Geetabitan Standard ($3.99/mo, 14-day trial)
   DOMAIN=arcl       → three plans: Basic / Standard / Unlimited
+  DOMAIN=scheduling → ADAR Front Desk monthly ($50) and yearly ($450)
 
 Both domains share the same endpoints. Plan config is resolved at runtime
 from DOMAIN env var and the appropriate STRIPE_PRICE_* secret.
 """
 from __future__ import annotations
 import os, time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -55,6 +56,29 @@ def _plan_catalogue() -> dict:
                 "description": "Restaurant recommendations, menu search, price comparison",
             },
         }
+    if DOMAIN == "scheduling":
+        return {
+            "monthly": {
+                "name": "ADAR Front Desk Monthly",
+                "price_id": os.getenv("STRIPE_PRICE_FRONT_DESK_MONTHLY", ""),
+                "trial_days": 0,
+                "quota": 500,
+                "description": "$50/month",
+                "amount": 5000,
+                "currency": "usd",
+                "interval": "month",
+            },
+            "yearly": {
+                "name": "ADAR Front Desk Yearly",
+                "price_id": os.getenv("STRIPE_PRICE_FRONT_DESK_YEARLY", ""),
+                "trial_days": 0,
+                "quota": 500,
+                "description": "$450/year · Save $150",
+                "amount": 45000,
+                "currency": "usd",
+                "interval": "year",
+            },
+        }
     return {
         "basic": {
             "name":        "Adar ARCL",
@@ -73,6 +97,57 @@ def _get_plan(plan_key: str):
     return catalogue[plan_key], plan_key
 
 
+def _plan_key_from_subscription(subscription) -> str:
+    catalogue = _plan_catalogue()
+    try:
+        items = subscription.get("items", {}).get("data", [])
+        price_id = items[0].get("price", {}).get("id", "") if items else ""
+    except (AttributeError, IndexError, TypeError):
+        price_id = ""
+    for plan_key, plan in catalogue.items():
+        if plan.get("price_id") and plan["price_id"] == price_id:
+            return plan_key
+    metadata = dict(subscription.get("metadata", {}) or {})
+    return metadata.get("plan", next(iter(catalogue)))
+
+
+def _stripe_dict(value) -> dict:
+    if value is None:
+        return {}
+    if hasattr(value, "to_dict"):
+        return value.to_dict()
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _validate_plan_price(plan_key: str, plan: dict) -> None:
+    """Prevent a wrong Stripe secret from charging a different amount."""
+    expected_amount = plan.get("amount")
+    expected_interval = plan.get("interval")
+    if expected_amount is None or not expected_interval:
+        return
+    try:
+        price = stripe.Price.retrieve(plan["price_id"])
+    except stripe.StripeError as exc:
+        raise HTTPException(503, f"Stripe price for '{plan_key}' could not be loaded") from exc
+
+    recurring_value = getattr(price, "recurring", None)
+    if recurring_value is None and hasattr(price, "get"):
+        recurring_value = price.get("recurring", {})
+    recurring = _stripe_dict(recurring_value)
+    currency = (getattr(price, "currency", None) or price.get("currency", "")).lower()
+    amount = getattr(price, "unit_amount", None)
+    if amount is None:
+        amount = price.get("unit_amount")
+    active = getattr(price, "active", None)
+    if active is None:
+        active = price.get("active", True)
+    if currency != plan.get("currency", "usd") or amount != expected_amount \
+            or recurring.get("interval") != expected_interval or not active:
+        raise HTTPException(503, f"Stripe price for '{plan_key}' does not match the configured Front Desk plan")
+
+
 def _frontend_url() -> str:
     if FRONTEND_URL:
         return FRONTEND_URL.rstrip("/")
@@ -80,6 +155,8 @@ def _frontend_url() -> str:
         return "https://geetabitan.adar.agomoniai.com"
     if DOMAIN == "restaurants":
         return "https://restaurants.adar.agomoniai.com"
+    if DOMAIN == "scheduling":
+        return "https://scheduling.adar.agomoniai.com"
     return "https://arcl.agomoniai.com"
 
 
@@ -144,6 +221,7 @@ async def create_checkout(req: CheckoutRequest, team: dict = Depends(get_current
     plan_cfg, plan_key = _get_plan(req.plan)
     if not plan_cfg["price_id"]:
         raise HTTPException(500, f"Stripe price not configured for plan '{plan_key}'")
+    _validate_plan_price(plan_key, plan_cfg)
 
     team_id    = team["team_id"]
     team_email = team.get("email", "")
@@ -163,16 +241,18 @@ async def create_checkout(req: CheckoutRequest, team: dict = Depends(get_current
                 logging.warning(f"Could not save stripe_customer_id: {db_err}")
 
         base    = _frontend_url()
+        subscription_data = {
+            "metadata": {"team_id": team_id, "domain": DOMAIN, "plan": plan_key},
+        }
+        if int(plan_cfg.get("trial_days", 0)) > 0:
+            subscription_data["trial_period_days"] = int(plan_cfg["trial_days"])
         session = stripe.checkout.Session.create(
             customer=customer_id,
             payment_method_types=["card"],
             line_items=[{"price": plan_cfg["price_id"], "quantity": 1}],
             mode="subscription",
-            subscription_data={
-                "trial_period_days": int(plan_cfg["trial_days"]),
-                "metadata": {"team_id": team_id, "domain": DOMAIN, "plan": plan_key},
-            },
-            success_url=f"{base}?payment=success",
+            subscription_data=subscription_data,
+            success_url=f"{base}?payment=success&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url= f"{base}?payment=cancelled",
             metadata={"team_id": team_id, "domain": DOMAIN, "plan": plan_key},
         )
@@ -311,6 +391,7 @@ async def get_plans():
                 "amount":      399,
                 "currency":    "USD",
                 "interval":    "month",
+                "trial_days":  14,
             }],
         }
     if DOMAIN == "restaurants":
@@ -324,7 +405,25 @@ async def get_plans():
                 "amount":      0 if not _billing_enabled() else 999,
                 "currency":    "USD",
                 "interval":    "month",
+                "trial_days":  14 if _billing_enabled() else 0,
             }],
+        }
+    if DOMAIN == "scheduling":
+        return {
+            "domain": "scheduling",
+            "billing_enabled": _billing_enabled(),
+            "plans": [
+                {
+                    "id": key,
+                    "name": plan["name"],
+                    "description": plan["description"],
+                    "amount": plan["amount"],
+                    "currency": plan["currency"].upper(),
+                    "interval": plan["interval"],
+                    "trial_days": plan["trial_days"],
+                }
+                for key, plan in _plan_catalogue().items()
+            ],
         }
     # ARCL — single plan $12/month, 30-day trial
     return {
@@ -332,29 +431,56 @@ async def get_plans():
         "plans": [
             {"id": "standard", "name": "Adar ARCL",
              "description": "$12/month · 30-day free trial · Full access",
-             "amount": 1200, "currency": "USD", "interval": "month"},
+             "amount": 1200, "currency": "USD", "interval": "month",
+             "trial_days": 30},
         ],
     }
 
 
 # ── Activate ──────────────────────────────────────────────────────────────────
 @router.post("/activate")
-async def activate(team: dict = Depends(get_current_team)):
+async def activate(session_id: str = "", team: dict = Depends(get_current_team)):
     """Called after Stripe payment success. Updates team status to active and sends confirmation email."""
     import logging, time as _time
     logger    = logging.getLogger(__name__)
     team_id   = team.get("team_id", "")
-    plan_key  = team.get("subscription_plan", "standard")
-    team_email = team.get("email", "")
-    team_name  = team.get("team_name", team_id)
+    plan_key  = team.get("subscription_plan") or next(iter(_plan_catalogue()))
 
     if not team_id:
         raise HTTPException(400, "Missing team_id")
+    if _billing_enabled() and not session_id:
+        raise HTTPException(400, "A verified Stripe Checkout session is required")
+
+    team_db = await _get_team_from_db(team_id)
+    team_email = team_db.get("email") or team.get("email", "")
+    team_name = team_db.get("team_name") or team.get("team_name", team_id)
 
     try:
+        subscription_id = ""
+        subscription_status = "active"
+        customer_id = team_db.get("stripe_customer_id") or team.get("stripe_customer_id")
+        if _billing_enabled():
+            session = stripe.checkout.Session.retrieve(session_id)
+            metadata = _stripe_dict(getattr(session, "metadata", None))
+            if metadata.get("team_id") != team_id or metadata.get("domain") != DOMAIN:
+                raise HTTPException(403, "Checkout session does not belong to this account")
+            session_status = getattr(session, "status", None) or session.get("status")
+            payment_status = getattr(session, "payment_status", None) or session.get("payment_status")
+            if session_status != "complete" or payment_status not in {"paid", "no_payment_required"}:
+                raise HTTPException(409, "Stripe Checkout has not completed")
+            plan_key = metadata.get("plan", plan_key)
+            subscription_id = getattr(session, "subscription", None) or session.get("subscription", "")
+            customer_id = getattr(session, "customer", None) or session.get("customer", customer_id)
+            if subscription_id:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                subscription_status = (
+                    getattr(subscription, "status", None)
+                    or subscription.get("status", "")
+                )
+                if subscription_status not in {"active", "trialing"}:
+                    raise HTTPException(409, "Stripe subscription is not active")
         # Get trial end date from Stripe
         trial_end_date = ""
-        customer_id = team.get("stripe_customer_id")
         if customer_id and stripe.api_key:
             try:
                 subs = stripe.Subscription.list(
@@ -362,7 +488,6 @@ async def activate(team: dict = Depends(get_current_team)):
                 )
                 for sub in subs.auto_paging_iter():
                     if getattr(sub, "trial_end", None) and sub.trial_end > _time.time():
-                        from datetime import datetime
                         trial_end_date = datetime.utcfromtimestamp(
                             sub.trial_end
                         ).strftime("%B %d, %Y")
@@ -370,28 +495,48 @@ async def activate(team: dict = Depends(get_current_team)):
             except Exception as se:
                 logger.warning(f"Could not fetch trial_end from Stripe: {se}")
 
+        activated_at = datetime.now(timezone.utc).isoformat()
         await _update_team(team_id, {
-            "status":            "active",
+            "status": "active",
+            "subscription_status": subscription_status,
             "subscription_plan": plan_key,
+            "stripe_customer_id": customer_id,
+            "stripe_subscription_id": subscription_id,
+            "subscription_activated_at": activated_at,
         })
 
-        # Send confirmation email if not already sent
-        if team_email and not team.get("welcome_email_sent"):
+        # Use the verified Checkout session as an idempotency key so a browser
+        # refresh can never send a duplicate activation email.
+        activation_email_sent = (
+            team_db.get("subscription_activation_email_session_id") == session_id
+        )
+        email_sent = activation_email_sent
+        if team_email and not activation_email_sent:
             try:
                 from src.adar.notify import send_welcome_email
-                await send_welcome_email(
+                email_sent = bool(await send_welcome_email(
                     to=team_email,
                     team_name=team_name,
                     plan=plan_key,
                     trial_ends=trial_end_date,
-                )
-                await _update_team(team_id, {"welcome_email_sent": True})
-                logger.info(f"Welcome email sent to {team_email} (trial ends {trial_end_date})")
+                ))
+                if email_sent:
+                    await _update_team(team_id, {
+                        "welcome_email_sent": True,
+                        "subscription_activation_email_session_id": session_id,
+                        "subscription_activation_email_sent_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                    logger.info(f"Subscription activation email sent to {team_email}")
             except Exception as mail_err:
                 logger.warning(f"Welcome email failed (non-fatal): {mail_err}")
 
         return {"status": "activated", "plan": plan_key, "team_id": team_id,
-                "trial_ends": trial_end_date}
+                "trial_ends": trial_end_date, "email": team_email,
+                "email_sent": email_sent}
+    except HTTPException:
+        raise
+    except stripe.StripeError as e:
+        raise HTTPException(502, f"Stripe activation error: {str(e)}")
     except Exception as e:
         raise HTTPException(500, f"Activation error: {str(e)}")
 
@@ -488,7 +633,7 @@ async def stripe_webhook(request: Request):
 
     if etype in ("customer.subscription.created", "customer.subscription.updated"):
         meta     = obj.get("metadata", {})
-        plan_key = meta.get("plan", "standard")
+        plan_key = _plan_key_from_subscription(obj)
         status   = obj.get("status")
         updates  = {"subscription_plan": plan_key}
         if status in ("active", "trialing"):  updates["status"] = "active"
@@ -502,7 +647,7 @@ async def stripe_webhook(request: Request):
         try:
             sub      = stripe.Subscription.retrieve(obj.get("subscription", ""))
             meta     = dict(getattr(sub, "metadata", None) or {})
-            plan_key = meta.get("plan", "standard")
+            plan_key = _plan_key_from_subscription(sub)
             await _update(meta.get("team_id", ""), {"status": "active", "subscription_plan": plan_key})
         except stripe.StripeError:
             pass

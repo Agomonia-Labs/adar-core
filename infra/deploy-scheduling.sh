@@ -46,6 +46,57 @@ SERVICE="${SERVICE:-adar-scheduling-api}"
 SA="${SA:-adar-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
 SCHEDULING_DEFAULT_PRACTICE_ID="${SCHEDULING_DEFAULT_PRACTICE_ID:-e1WJrKlyup70ocTA5yGY}"
 
+REQUIRED_BILLING_SECRETS=(
+  stripe-secret-key
+  scheduling-stripe-webhook-secret
+  scheduling-stripe-price-monthly
+  scheduling-stripe-price-yearly
+)
+for secret in "${REQUIRED_BILLING_SECRETS[@]}"; do
+  if ! gcloud secrets versions describe latest \
+      --secret="$secret" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "Missing required billing secret or latest value: $secret" >&2
+    echo "Run infra/create_scheduling_secrets.sh and add its value before deploying." >&2
+    exit 1
+  fi
+done
+
+command -v curl >/dev/null 2>&1 || { echo "curl is required for Stripe price validation" >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "jq is required for Stripe price validation" >&2; exit 1; }
+
+STRIPE_SECRET_KEY_VALUE="$(gcloud secrets versions access latest \
+  --secret=stripe-secret-key --project="$PROJECT_ID")"
+
+validate_stripe_price() {
+  local plan="$1"
+  local price_secret="$2"
+  local expected_amount="$3"
+  local expected_interval="$4"
+  local price_id price_json active currency amount interval livemode
+
+  price_id="$(gcloud secrets versions access latest \
+    --secret="$price_secret" --project="$PROJECT_ID" | tr -d '\r\n')"
+  price_json="$(curl --fail --silent --show-error \
+    -u "${STRIPE_SECRET_KEY_VALUE}:" \
+    "https://api.stripe.com/v1/prices/${price_id}")"
+  active="$(printf '%s' "$price_json" | jq -r '.active')"
+  currency="$(printf '%s' "$price_json" | jq -r '.currency')"
+  amount="$(printf '%s' "$price_json" | jq -r '.unit_amount')"
+  interval="$(printf '%s' "$price_json" | jq -r '.recurring.interval // ""')"
+  livemode="$(printf '%s' "$price_json" | jq -r '.livemode')"
+
+  if [[ "$active" != "true" || "$livemode" != "true" || "$currency" != "usd" \
+      || "$amount" != "$expected_amount" || "$interval" != "$expected_interval" ]]; then
+    echo "Invalid Stripe ${plan} price: expected active live USD ${expected_amount} cents per ${expected_interval}; got active=${active}, live=${livemode}, currency=${currency}, amount=${amount}, interval=${interval}." >&2
+    exit 1
+  fi
+  echo "Validated Stripe ${plan} price: USD ${expected_amount} cents per ${expected_interval}."
+}
+
+validate_stripe_price "monthly" "scheduling-stripe-price-monthly" "5000" "month"
+validate_stripe_price "yearly" "scheduling-stripe-price-yearly" "45000" "year"
+unset STRIPE_SECRET_KEY_VALUE
+
 # ── Observability (off by default — see the observability plan doc) ────────
 # To turn on: point OTEL_EXPORTER_OTLP_ENDPOINT at the shared Collector
 # adar-rag already deploys ("docintel-otel-collector"), e.g.:
@@ -87,9 +138,9 @@ gcloud run deploy "${SERVICE}" \
   --cpu 1 \
   --port 8040 \
   --service-account "${SA}" \
-  --update-env-vars "APP_NAME=adar-scheduling-api,APP_ENV=production,GCP_PROJECT_ID=${PROJECT_ID},DOMAIN=scheduling,FIRESTORE_DATABASE=adar-scheduling-db,AUTH_FIRESTORE_DATABASE=adar-scheduling-db,ADK_MODEL=gemini-2.5-flash,EVAL_ENABLED=true,BILLING_ENABLED=false,SESSION_DB_URL=sqlite+aiosqlite:////tmp/scheduling_sessions.db,FRONTEND_URL=https://scheduling.adar.agomoniai.com,SCHEDULING_DEFAULT_PRACTICE_ID=${SCHEDULING_DEFAULT_PRACTICE_ID},OTEL_ENABLED=${OTEL_ENABLED},OTEL_SERVICE_NAME=adar-core-scheduling,OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}" \
+  --update-env-vars "APP_NAME=adar-scheduling-api,APP_ENV=production,GCP_PROJECT_ID=${PROJECT_ID},DOMAIN=scheduling,FIRESTORE_DATABASE=adar-scheduling-db,AUTH_FIRESTORE_DATABASE=adar-scheduling-db,ADK_MODEL=gemini-2.5-flash,EVAL_ENABLED=true,BILLING_ENABLED=true,SESSION_DB_URL=sqlite+aiosqlite:////tmp/scheduling_sessions.db,FRONTEND_URL=https://scheduling.adar.agomoniai.com,SCHEDULING_DEFAULT_PRACTICE_ID=${SCHEDULING_DEFAULT_PRACTICE_ID},OTEL_ENABLED=${OTEL_ENABLED},OTEL_SERVICE_NAME=adar-core-scheduling,OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}" \
   --add-cloudsql-instances "${SQL_INSTANCE}" \
-  --update-secrets "GOOGLE_API_KEY=google-api-key:latest,JWT_SECRET=scheduling-jwt-secret:latest,ADMIN_EMAIL=scheduling-admin-email:latest,ADMIN_PASSWORD=scheduling-admin-password:latest,SCHEDULING_API_KEY=scheduling-api-key:latest,GMAIL_USER=gmail-user:latest,GMAIL_APP_PASSWORD=gmail-app-password:latest,NOTIFY_FROM_EMAIL=from-email:latest,GEETABITAN_TTS_API_KEY=geetabitan-tts-api-key:latest,GEETABITAN_SPEECH_API_KEY=geetabitan-speech-api-key:latest,TRACE_DB_URL=scheduling-trace-db-url:latest"
+  --update-secrets "GOOGLE_API_KEY=google-api-key:latest,JWT_SECRET=scheduling-jwt-secret:latest,ADMIN_EMAIL=scheduling-admin-email:latest,ADMIN_PASSWORD=scheduling-admin-password:latest,SCHEDULING_API_KEY=scheduling-api-key:latest,GMAIL_USER=gmail-user:latest,GMAIL_APP_PASSWORD=gmail-app-password:latest,NOTIFY_FROM_EMAIL=from-email:latest,GEETABITAN_TTS_API_KEY=geetabitan-tts-api-key:latest,GEETABITAN_SPEECH_API_KEY=geetabitan-speech-api-key:latest,TRACE_DB_URL=scheduling-trace-db-url:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=scheduling-stripe-webhook-secret:latest,STRIPE_PRICE_FRONT_DESK_MONTHLY=scheduling-stripe-price-monthly:latest,STRIPE_PRICE_FRONT_DESK_YEARLY=scheduling-stripe-price-yearly:latest"
 
 URL=$(gcloud run services describe "${SERVICE}" \
   --region "${REGION}" \
