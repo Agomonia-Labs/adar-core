@@ -285,6 +285,54 @@ Returns every active practice with its active providers (working hours,
 resolved appointment-type names + durations) and appointment-type catalog
 in one call, so the tab renders without N further requests.
 
+## Public Front Desk guest sessions
+
+The Agomonia Labs public Front Desk experience can exercise the deployed API
+without asking a viewer to register or exposing a staff credential. Selecting
+**ADAR Core API** calls:
+
+```text
+POST /api/scheduling/guest/session
+```
+
+The endpoint issues a 30-minute JWT with `role=scheduling_guest`, a dedicated
+`token_use`, and one configured `practice_id`. The browser keeps it in session
+storage and sends it as a bearer token to the guest-only practice, provider,
+appointment-type, and booking routes. An expired token is replaced
+automatically.
+
+The public showcase seeds six deterministic demo practices with:
+
+```bash
+DOMAIN=scheduling FIRESTORE_DATABASE=adar-scheduling-db PYTHONPATH=$(pwd) \
+  python -m domains.scheduling.ingestion.seed_front_desk_demo
+```
+
+The command is idempotent: it updates the same practice, provider, service,
+and sample-booking IDs on every run. `SCHEDULING_GUEST_PRACTICE_IDS` is a
+comma-separated allowlist carried in the short-lived token. The UI can switch
+among those practices, but cannot request any other scheduling tenant.
+
+Guest authorization is deliberately narrower than `practice_staff`:
+
+- it can read only `SCHEDULING_GUEST_PRACTICE_ID`;
+- it cannot call staff CRUD, operational booking, staff-account, or trace APIs;
+- it lists and cancels only bookings created by the same guest session;
+- demo bookings use `scheduling_guest_bookings`, not the operational
+  appointment collection;
+- no confirmation or cancellation email is sent from a public demo booking;
+- token issuance and bookings are bounded, and overlapping slots are rejected;
+- `expires_at` is configured as the Firestore TTL field during deployment.
+
+`infra/deploy-scheduling.sh` enables this flow and defaults the guest practice
+to `SCHEDULING_DEFAULT_PRACTICE_ID`. Override it explicitly when the public demo
+must use another isolated practice:
+
+```bash
+SCHEDULING_GUEST_PRACTICE_ID="YOUR_DEMO_PRACTICE_ID" \
+  bash infra/deploy-scheduling.sh
+```
+
 ## Running it locally
 
 ### Step 1 — seed a demo practice (just ingestion)

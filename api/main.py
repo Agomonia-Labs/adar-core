@@ -33,6 +33,7 @@ from api.routes.admin import router as admin_router
 from api.routes.scheduling_admin import router as scheduling_admin_router
 from api.routes.scheduling_traces import router as scheduling_traces_router
 from api.routes.scheduling_directory import router as scheduling_directory_router
+from api.routes.scheduling_guest import router as scheduling_guest_router
 from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
 from src.adar import tracing
@@ -931,6 +932,10 @@ _PROD_ORIGINS = [
     "https://www.restaurants.adar.agomoniai.com",
     "https://scheduling.adar.agomoniai.com",
     "https://www.scheduling.adar.agomoniai.com",
+    "https://labs.agomoniai.com",
+    "https://www.labs.agomoniai.com",
+    "http://localhost:4177",
+    "http://127.0.0.1:4177",
     # Firebase default URLs
     "https://geetabitan-adar.web.app",
     "https://geetabitan-adar.firebaseapp.com",
@@ -940,8 +945,8 @@ _PROD_ORIGINS = [
     "https://scheduling-adar.firebaseapp.com",
 ]
 _DEV_ORIGINS = [
-    "http://localhost:6001", "http://localhost:6002", "http://localhost:5173", "http://localhost:3000",
-    "http://127.0.0.1:6001", "http://127.0.0.1:6002", "http://127.0.0.1:5173", "http://127.0.0.1:3000",
+    "http://localhost:6001", "http://localhost:6002", "http://localhost:5173", "http://localhost:4177", "http://localhost:3000",
+    "http://127.0.0.1:6001", "http://127.0.0.1:6002", "http://127.0.0.1:5173", "http://127.0.0.1:4177", "http://127.0.0.1:3000",
 ]
 _ALL_ORIGINS = _PROD_ORIGINS + (_DEV_ORIGINS if settings.APP_ENV != "production" else [])
 
@@ -1076,6 +1081,7 @@ app.include_router(admin_router)
 app.include_router(scheduling_admin_router)
 app.include_router(scheduling_traces_router)
 app.include_router(scheduling_directory_router)
+app.include_router(scheduling_guest_router)
 app.include_router(payments_router)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
