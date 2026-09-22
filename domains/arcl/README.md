@@ -52,7 +52,30 @@ http://localhost:5173/demo.html
 Backend:
 
 ```bash
+export ARCL_GUEST_ACCESS_ENABLED=true
+export ARCL_GUEST_VOICE_ENABLED=true
 bash infra/deploy.sh
+```
+
+The deployment script preserves the existing Cloud Run configuration and
+enables the public, least-privilege ARCL guest facade. Guest access uses
+short-lived JWTs and exposes only cricket chat, temporary sessions,
+capabilities, examples, STT, and TTS:
+
+```text
+POST   /api/arcl/guest/session
+GET    /api/arcl/guest/capabilities
+GET    /api/arcl/guest/examples
+POST   /api/arcl/guest/chat
+POST   /api/arcl/guest/stt
+POST   /api/arcl/guest/tts
+DELETE /api/arcl/guest/session/{session_id}
+```
+
+Run the focused guest-boundary tests before deployment:
+
+```bash
+venv/bin/python -m unittest tests.test_arcl_guest tests.test_scheduling_guest
 ```
 
 Frontend:
@@ -62,3 +85,7 @@ cd ui
 npm run build -- --mode arcl
 firebase deploy --only hosting:arcl
 ```
+
+The Agomonia Labs public experience is maintained separately in
+`/Users/brajadas/project/adar-web/arcl.html` and should be deployed only after
+the backend guest endpoints are available.

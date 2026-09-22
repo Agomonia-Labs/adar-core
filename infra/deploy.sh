@@ -11,6 +11,7 @@ docker push us-central1-docker.pkg.dev/bdas-493785/adar/arcl-api:latest
 echo "Deploying to Cloud Run..."
 gcloud run deploy adar-arcl-api \
   --image us-central1-docker.pkg.dev/bdas-493785/adar/arcl-api:latest \
-  --region us-central1 --platform managed
+  --region us-central1 --platform managed \
+  --update-env-vars "ARCL_GUEST_ACCESS_ENABLED=${ARCL_GUEST_ACCESS_ENABLED:-true},ARCL_GUEST_VOICE_ENABLED=${ARCL_GUEST_VOICE_ENABLED:-true}"
 
 echo "Done."

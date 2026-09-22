@@ -34,6 +34,12 @@ from api.routes.scheduling_admin import router as scheduling_admin_router
 from api.routes.scheduling_traces import router as scheduling_traces_router
 from api.routes.scheduling_directory import router as scheduling_directory_router
 from api.routes.scheduling_guest import router as scheduling_guest_router
+from api.routes.arcl_guest import (
+    router as arcl_guest_router,
+    enforce_query_rate_limit as enforce_arcl_guest_query_rate_limit,
+    enforce_voice_rate_limit as enforce_arcl_guest_voice_rate_limit,
+    get_arcl_guest,
+)
 from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
 from src.adar import tracing
@@ -1082,6 +1088,7 @@ app.include_router(scheduling_admin_router)
 app.include_router(scheduling_traces_router)
 app.include_router(scheduling_directory_router)
 app.include_router(scheduling_guest_router)
+app.include_router(arcl_guest_router)
 app.include_router(payments_router)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1205,11 +1212,12 @@ async def _run_agent_with_retries(runner, user_id, session_id, new_message, max_
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat(
+async def _execute_chat(
     request: ChatRequest,
     http_request: Request,
-    _auth: bool = Depends(_verify_api_key),
+    *,
+    track_account_usage: bool = True,
+    run_evaluation: bool = True,
 ):
     # Rate limiting
     client_ip = _get_client_ip(http_request)
@@ -1307,56 +1315,59 @@ async def chat(
 
         logger.info(f"Chat OK — ip={client_ip} user={request.user_id} len={len(message)}")
 
-        # Increment daily usage counter
-        try:
-            from datetime import datetime, timezone
-            from jose import jwt as _jose_jwt
-            _auth_header = http_request.headers.get("Authorization", "")
-            _token = _auth_header.replace("Bearer ", "")
-            _payload = _jose_jwt.decode(
-                _token,
-                os.environ.get('JWT_SECRET', 'change-me-in-production-use-secret-manager'),
-                algorithms=["HS256"],
-                options={"verify_exp": False},
-            )
-            _team_id = _payload.get("team_id", request.user_id)
-            if _payload.get("role") == "admin" or _team_id == "admin":
-                raise Exception("skip — admin user")
-            _today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            _cli = _firestore.AsyncClient(
-                project=settings.GCP_PROJECT_ID,
-                database=settings.FIRESTORE_DATABASE,
-            )
-            _ref = _cli.collection("adar_teams").document(_team_id)
-            _doc = await _ref.get()
-            _data = _doc.to_dict() if _doc.exists else {}
-            _current = int(_data.get("usage_today") or 0)
-            if _data.get("usage_reset_date", "") != _today:
-                _current = 0
-            await _ref.update({
-                "usage_today":      _current + 1,
-                "usage_reset_date": _today,
-            })
-            logger.info(f"Usage: team={_team_id} count={_current + 1}")
-        except Exception as _e:
-            logger.error(f"Usage increment failed: {_e}", exc_info=True)
+        # Public guest traffic is governed by its own bounded quota and must
+        # never create or mutate a customer billing/account record.
+        if track_account_usage:
+            try:
+                from datetime import datetime, timezone
+                from jose import jwt as _jose_jwt
+                _auth_header = http_request.headers.get("Authorization", "")
+                _token = _auth_header.replace("Bearer ", "")
+                _payload = _jose_jwt.decode(
+                    _token,
+                    os.environ.get('JWT_SECRET', 'change-me-in-production-use-secret-manager'),
+                    algorithms=["HS256"],
+                    options={"verify_exp": False},
+                )
+                _team_id = _payload.get("team_id", request.user_id)
+                if _payload.get("role") == "admin" or _team_id == "admin":
+                    raise Exception("skip — admin user")
+                _today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                _cli = _firestore.AsyncClient(
+                    project=settings.GCP_PROJECT_ID,
+                    database=settings.FIRESTORE_DATABASE,
+                )
+                _ref = _cli.collection("adar_teams").document(_team_id)
+                _doc = await _ref.get()
+                _data = _doc.to_dict() if _doc.exists else {}
+                _current = int(_data.get("usage_today") or 0)
+                if _data.get("usage_reset_date", "") != _today:
+                    _current = 0
+                await _ref.update({
+                    "usage_today":      _current + 1,
+                    "usage_reset_date": _today,
+                })
+                logger.info(f"Usage: team={_team_id} count={_current + 1}")
+            except Exception as _e:
+                logger.error(f"Usage increment failed: {_e}", exc_info=True)
 
         eval_result = None
-        try:
-            eval_enabled = os.environ.get("EVAL_ENABLED", "true").lower() == "true"
-            if eval_enabled and len(response_text) > 30:
-                eval_result = await evaluate_response(
-                    question=message,
-                    response=response_text,
-                    # ── CHANGE 9: team_id uses DOMAIN (was hardcoded "arcl") ──
-                    team_id=DOMAIN,
-                    session_id=str(session.id),
-                    user_id=request.user_id,
-                    enabled=True,
-                    trace_id=trace_id,
-                )
-        except Exception as eval_err:
-            logger.warning(f"Eval failed (non-fatal): {eval_err}")
+        if run_evaluation:
+            try:
+                eval_enabled = os.environ.get("EVAL_ENABLED", "true").lower() == "true"
+                if eval_enabled and len(response_text) > 30:
+                    eval_result = await evaluate_response(
+                        question=message,
+                        response=response_text,
+                        # ── CHANGE 9: team_id uses DOMAIN (was hardcoded "arcl") ──
+                        team_id=DOMAIN,
+                        session_id=str(session.id),
+                        user_id=request.user_id,
+                        enabled=True,
+                        trace_id=trace_id,
+                    )
+            except Exception as eval_err:
+                logger.warning(f"Eval failed (non-fatal): {eval_err}")
 
         # The trace was tagged with only a placeholder practice_id in
         # start_trace() (called before the agent ran, before anyone knew
@@ -1409,6 +1420,52 @@ async def chat(
         except Exception:
             pass
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat(
+    request: ChatRequest,
+    http_request: Request,
+    _auth: bool = Depends(_verify_api_key),
+):
+    return await _execute_chat(request, http_request)
+
+
+@app.post("/api/arcl/guest/chat", response_model=ChatResponse)
+async def arcl_guest_chat(
+    request: ChatRequest,
+    http_request: Request,
+    guest: dict = Depends(get_arcl_guest),
+):
+    await enforce_arcl_guest_query_rate_limit(guest)
+    scoped_request = ChatRequest(
+        message=request.message,
+        user_id=guest["sub"],
+        session_id=request.session_id,
+    )
+    return await _execute_chat(
+        scoped_request,
+        http_request,
+        track_account_usage=False,
+        run_evaluation=False,
+    )
+
+
+@app.delete("/api/arcl/guest/session/{session_id}")
+async def delete_arcl_guest_session(
+    session_id: str,
+    guest: dict = Depends(get_arcl_guest),
+):
+    try:
+        await session_service.delete_session(
+            app_name=APP_NAME,
+            user_id=guest["sub"],
+            session_id=session_id,
+        )
+        return {"deleted": True, "session_id": session_id}
+    except Exception:
+        logger.warning("Could not delete ARCL guest session %s", session_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not reset the guest session")
 
 
 @app.get("/api/sessions/{session_id}", response_model=SessionResponse)
@@ -1721,6 +1778,24 @@ async def speech_to_text(
     except Exception as e:
         logger.error(f"STT error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/arcl/guest/tts")
+async def arcl_guest_tts(
+    request: Request,
+    guest: dict = Depends(get_arcl_guest),
+):
+    await enforce_arcl_guest_voice_rate_limit(guest)
+    return await demo_tts(request)
+
+
+@app.post("/api/arcl/guest/stt")
+async def arcl_guest_stt(
+    request: Request,
+    guest: dict = Depends(get_arcl_guest),
+):
+    await enforce_arcl_guest_voice_rate_limit(guest)
+    return await speech_to_text(request, team=guest)
 
 
 @app.get("/health")
