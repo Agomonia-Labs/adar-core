@@ -1,4 +1,5 @@
 import os
+import json
 import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -62,6 +63,27 @@ class SchedulingGuestTests(unittest.IsolatedAsyncioTestCase):
             datetime(2026, 10, 1, 17, 30, tzinfo=timezone.utc),
             datetime(2026, 10, 1, 18, 0, tzinfo=timezone.utc),
         ))
+
+    def test_public_trace_is_step_level_and_excludes_customer_pii(self):
+        trace = scheduling_guest._public_trace("booking-123", {
+            "practice_id": "demo-practice",
+            "provider_name": "Demo Provider",
+            "appointment_type_name": "Planning Review",
+            "status": "confirmed",
+            "created_at": datetime(2026, 10, 1, 17, 0, tzinfo=timezone.utc),
+            "caller_name": "Private Person",
+            "caller_phone": "+1-555-0100",
+            "caller_email": "private@example.com",
+        })
+
+        self.assertEqual(trace["trace_id"], "guest-booking-123")
+        self.assertEqual(trace["projection"], "guest_safe")
+        self.assertEqual(trace["request_type"], "book_appointment")
+        self.assertGreaterEqual(len(trace["steps"]), 5)
+        serialized = json.dumps(trace)
+        self.assertNotIn("Private Person", serialized)
+        self.assertNotIn("+1-555-0100", serialized)
+        self.assertNotIn("private@example.com", serialized)
 
     async def test_guest_token_is_accepted_only_by_guest_dependency(self):
         token, _, _ = scheduling_guest._issue_guest_token("demo-practice")

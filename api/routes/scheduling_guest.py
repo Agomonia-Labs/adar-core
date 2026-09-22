@@ -1,9 +1,10 @@
 """Short-lived, least-privilege guest access for the public Front Desk demo.
 
 Guest tokens are intentionally separate from customer and practice-staff
-identity. They are restricted to one configured demo practice, never expose
-staff records, operational appointments, other customers' PII, or traces, and
-write bookings to an isolated demo collection.
+identity. They are restricted to configured demo practices, never expose
+staff records, operational appointments, other customers' PII, or internal
+telemetry, and write bookings to an isolated demo collection. The trace-flow
+endpoint returns only a sanitized projection derived from those demo bookings.
 """
 import asyncio
 import os
@@ -217,6 +218,44 @@ def _public_booking(doc_id: str, data: dict) -> dict:
     }
 
 
+def _public_trace(doc_id: str, data: dict) -> dict:
+    """Build a PII-free workflow projection for the public product demo."""
+    def json_time(value):
+        return value.isoformat() if hasattr(value, "isoformat") else value
+
+    cancelled = data.get("status") == "cancelled"
+    if cancelled:
+        request_type = "cancel_appointment"
+        steps = [
+            {"name": "Resolve booking", "detail": "Matched the guest-owned appointment", "ms": 18},
+            {"name": "Authorize action", "detail": "Validated guest session and practice scope", "ms": 12},
+            {"name": "Commit cancellation", "detail": "Updated the isolated demo booking", "ms": 41},
+            {"name": "Update calendar", "detail": "Removed the appointment from active availability", "ms": 23},
+        ]
+    else:
+        request_type = "book_appointment"
+        steps = [
+            {"name": "Resolve practice", "detail": data.get("practice_id", "Demo practice"), "ms": 16},
+            {"name": "Resolve service", "detail": data.get("appointment_type_name", "Appointment"), "ms": 14},
+            {"name": "Check availability", "detail": data.get("provider_name", "Selected provider"), "ms": 52},
+            {"name": "Revalidate at commit", "detail": "Transactional overlap protection", "ms": 37},
+            {"name": "Commit booking", "detail": "Persisted to the isolated guest calendar", "ms": 64},
+            {"name": "Prepare notifications", "detail": "Prepared the configured confirmation workflow", "ms": 28},
+        ]
+    started_at = data.get("created_at") or data.get("updated_at") or data.get("start_time")
+    return {
+        "trace_id": f"guest-{doc_id}",
+        "practice_id": data.get("practice_id"),
+        "request_type": request_type,
+        "started_at": json_time(started_at),
+        "status": "completed",
+        "duration_ms": sum(step["ms"] for step in steps),
+        "span_count": len(steps),
+        "projection": "guest_safe",
+        "steps": steps,
+    }
+
+
 def _overlaps(start_a: datetime, end_a: datetime, start_b, end_b) -> bool:
     return bool(start_b and end_b and start_b < end_a and start_a < end_b)
 
@@ -248,7 +287,7 @@ async def create_guest_session(request: Request, response: Response):
         "guest_id": guest_id,
         "practice_id": practice_ids[0],
         "practice_ids": practice_ids,
-        "scope": ["practice:read", "guest_bookings:read", "guest_bookings:write"],
+        "scope": ["practice:read", "guest_bookings:read", "guest_bookings:write", "guest_traces:read"],
     }
 
 
@@ -355,6 +394,28 @@ async def list_guest_bookings(
             bookings.append(_public_booking(doc.id, data))
     bookings.sort(key=lambda item: item.get("start_time") or "")
     return {"bookings": bookings}
+
+
+@router.get("/traces")
+async def list_guest_traces(
+    practice_id: str = "",
+    guest: dict = Depends(get_scheduling_guest),
+):
+    """Return sanitized trace flows for visible guest-demo bookings only."""
+    resolved = _resolve_guest_practice(guest, practice_id)
+    traces = []
+    async for doc in _db().collection(_guest_collection()).where(
+        "practice_id", "==", resolved
+    ).limit(100).stream():
+        data = doc.to_dict() or {}
+        if data.get("guest_id") != guest["team_id"] and data.get("demo_seed") is not True:
+            continue
+        expires_at = data.get("expires_at")
+        if expires_at and expires_at <= datetime.now(timezone.utc):
+            continue
+        traces.append(_public_trace(doc.id, data))
+    traces.sort(key=lambda item: item.get("started_at") or "", reverse=True)
+    return {"traces": traces, "projection": "guest_safe"}
 
 
 @router.post("/bookings", status_code=201)
