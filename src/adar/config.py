@@ -124,17 +124,13 @@ else:
         62: "Spring 2024",
     }
 
-    # Reverse lookup: season name → season ID
-    ARCL_SEASON_NAME_TO_ID: dict = {v: k for k, v in {
-        69: "Spring 2026",
-        68: "Winter 2025",
-        67: "Fall 2025",
-        66: "Summer 2025",
-        65: "Spring 2025",
-        64: "Fall 2024",
-        63: "Summer 2024",
-        62: "Spring 2024",
-    }.items()}
+    # Reverse lookup: season name → season ID.
+    # Derived directly from ARCL_SEASON_MAP so the two can never drift apart —
+    # this used to be a separate hand-maintained literal dict, and it silently
+    # fell a season behind (season 70 "Summer 2026" was missing here even
+    # though ARCL_SEASON_MAP had it, so anything resolving a season by NAME
+    # instead of by ID silently fell back to the previous season).
+    ARCL_SEASON_NAME_TO_ID: dict = {v: k for k, v in ARCL_SEASON_MAP.items()}
 
     # ── Scrape pages ──────────────────────────────────────────────────────────
     # List of arcl.org page paths the ingestion scraper visits.
@@ -142,7 +138,7 @@ else:
     ARCL_SCRAPE_PAGES: list = [
         f"/Pages/UI/DivHome.aspx?league_id={lid}&season_id={sid}"
         for lid in range(2, 14)
-        for sid in [69]   # extend list for multi-season scrapes
+        for sid in [max(ARCL_SEASON_MAP.keys())]   # always the current season; extend for multi-season scrapes
     ]
 
     # ── CricClubs live-data URLs ─────────────────────────────────────────────
@@ -163,6 +159,9 @@ else:
         "CRICCLUBS_RESULTS",
         f"{_CC_BASE}/ARCL/listMatches.do?league_id=0&clubId={_CC_CLUB}",
     )
+
+    # Public ARCL website (used by live_tools.get_announcements)
+    ARCL_BASE_URL = os.getenv("ARCL_BASE_URL", "https://arcl.org")
 
     # FS_* aliases — same values, available if new code prefers the prefix
     FS_RULES_COLLECTION         = ARCL_RULES_COLLECTION
@@ -394,6 +393,7 @@ class _Settings:
     CRICCLUBS_STANDINGS: str = CRICCLUBS_STANDINGS if DOMAIN == "arcl" else ""
     CRICCLUBS_SCHEDULE:  str = CRICCLUBS_SCHEDULE  if DOMAIN == "arcl" else ""
     CRICCLUBS_RESULTS:   str = CRICCLUBS_RESULTS   if DOMAIN == "arcl" else ""
+    ARCL_BASE_URL:       str = ARCL_BASE_URL       if DOMAIN == "arcl" else ""
 
     # Observability
     OTEL_ENABLED:                str  = OTEL_ENABLED

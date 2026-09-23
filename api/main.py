@@ -40,6 +40,12 @@ from api.routes.arcl_guest import (
     enforce_voice_rate_limit as enforce_arcl_guest_voice_rate_limit,
     get_arcl_guest,
 )
+from api.routes.geetabitan_guest import (
+    router as geetabitan_guest_router,
+    enforce_query_rate_limit as enforce_geetabitan_guest_query_rate_limit,
+    enforce_voice_rate_limit as enforce_geetabitan_guest_voice_rate_limit,
+    get_geetabitan_guest,
+)
 from api.routes.payments import router as payments_router
 from evaluation.judge import evaluate_response
 from src.adar import tracing
@@ -1089,6 +1095,7 @@ app.include_router(scheduling_traces_router)
 app.include_router(scheduling_directory_router)
 app.include_router(scheduling_guest_router)
 app.include_router(arcl_guest_router)
+app.include_router(geetabitan_guest_router)
 app.include_router(payments_router)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1468,6 +1475,43 @@ async def delete_arcl_guest_session(
         raise HTTPException(status_code=500, detail="Could not reset the guest session")
 
 
+@app.post("/api/geetabitan/guest/chat", response_model=ChatResponse)
+async def geetabitan_guest_chat(
+    request: ChatRequest,
+    http_request: Request,
+    guest: dict = Depends(get_geetabitan_guest),
+):
+    await enforce_geetabitan_guest_query_rate_limit(guest)
+    scoped_request = ChatRequest(
+        message=request.message,
+        user_id=guest["sub"],
+        session_id=request.session_id,
+    )
+    return await _execute_chat(
+        scoped_request,
+        http_request,
+        track_account_usage=False,
+        run_evaluation=False,
+    )
+
+
+@app.delete("/api/geetabitan/guest/session/{session_id}")
+async def delete_geetabitan_guest_session(
+    session_id: str,
+    guest: dict = Depends(get_geetabitan_guest),
+):
+    try:
+        await session_service.delete_session(
+            app_name=APP_NAME,
+            user_id=guest["sub"],
+            session_id=session_id,
+        )
+        return {"deleted": True, "session_id": session_id}
+    except Exception:
+        logger.warning("Could not delete Geetabitan guest session %s", session_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not reset the guest session")
+
+
 @app.get("/api/sessions/{session_id}", response_model=SessionResponse)
 async def get_session_endpoint(
     session_id: str,
@@ -1795,6 +1839,24 @@ async def arcl_guest_stt(
     guest: dict = Depends(get_arcl_guest),
 ):
     await enforce_arcl_guest_voice_rate_limit(guest)
+    return await speech_to_text(request, team=guest)
+
+
+@app.post("/api/geetabitan/guest/tts")
+async def geetabitan_guest_tts(
+    request: Request,
+    guest: dict = Depends(get_geetabitan_guest),
+):
+    await enforce_geetabitan_guest_voice_rate_limit(guest)
+    return await demo_tts(request)
+
+
+@app.post("/api/geetabitan/guest/stt")
+async def geetabitan_guest_stt(
+    request: Request,
+    guest: dict = Depends(get_geetabitan_guest),
+):
+    await enforce_geetabitan_guest_voice_rate_limit(guest)
     return await speech_to_text(request, team=guest)
 
 

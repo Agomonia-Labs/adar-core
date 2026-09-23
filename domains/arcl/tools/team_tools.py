@@ -36,6 +36,30 @@ TEAM_ID_CACHE: dict[str, dict[int, tuple]] = {
     },
 }
 
+# Every ARCL league_id and the division(s) it covers — must stay in sync with
+# domains/arcl/ingestion/arcl_scraper.py's LEAGUE_TO_DIVISION (duplicated here
+# rather than imported, to avoid a tools->ingestion import; both describe the
+# same arcl.org league_id namespace and only change when arcl.org adds or
+# removes a division).
+#
+# get_team_schedule() scans every one of these — a team only PLAYS within its
+# own division(s), but ARCL draws umpiring duty from the whole club/league
+# pool, so a team can be assigned to umpire a match in ANY division, not just
+# the one(s) it plays in. Scoping the schedule lookup to a single league_id
+# (the old behavior) silently hid every umpiring duty outside that one
+# division.
+ARCL_LEAGUE_DIVISIONS: dict[int, str] = {
+    2:  "Women",
+    4:  "Kids/Youth",
+    5:  "Tapeball",
+    6:  "Champions League",
+    7:  "Men Div A-D",
+    8:  "Men Div E-H",
+    9:  "Men Div G-H",
+    10: "Div H",
+    33: "Kids C",
+}
+
 
 def _resolve_season(season: str) -> tuple:
     """Resolve season name -> (season_id, resolved_name). Returns latest if empty."""
@@ -312,98 +336,120 @@ async def get_team_schedule(team_name: str, season: str = "") -> dict:
     """
     Get playing schedule and umpiring assignments LIVE from arcl.org.
 
+    Scans EVERY ARCL division's league-schedule page for the season, not
+    just the team's own division. A team only plays within its own
+    division(s), but ARCL draws umpiring assignments from the whole
+    club/league pool — a team can be assigned to umpire a match in ANY
+    division (confirmed: Agomoni Tigers has had umpiring duty in Div D,
+    Div B and Women's, none of which is a division it plays in). Scoping
+    the old version to a single league_id (found via team_id lookup)
+    silently hid every umpiring duty outside that one division.
+
     Args:
         team_name: e.g. 'Agomoni Tigers'
-        season: e.g. 'Spring 2026' (optional — latest if omitted)
+        season: e.g. 'Spring 2026' (optional — current season if omitted)
     """
     season_id, resolved_season = _resolve_season(season)
-    team_id, league_id = await _get_team_id(team_name, season_id)
+    team_lower = team_name.strip().lower()
 
-    if not team_id:
+    playing  = []
+    umpiring = []
+    errors   = []
+
+    async with httpx.AsyncClient(headers=HEADERS, timeout=15, follow_redirects=True) as client:
+        for league_id, division_label in ARCL_LEAGUE_DIVISIONS.items():
+            sched_url = (f"{ARCL_BASE}/Pages/UI/LeagueSchedule.aspx"
+                         f"?league_id={league_id}&season_id={season_id}")
+            try:
+                r = await client.get(sched_url)
+                soup = BeautifulSoup(r.text, "html.parser")
+                for tag in soup(["script", "style"]):
+                    tag.decompose()
+
+                tables = soup.find_all("table")
+                best = max(tables, key=lambda t: len(t.find_all("tr")), default=None)
+                if not best:
+                    continue
+
+                rows = best.find_all("tr")
+                if len(rows) < 2:
+                    continue
+                raw_h = [th.get_text(strip=True) for th in rows[0].find_all(["th", "td"])]
+                norm  = [h.strip().lower() for h in raw_h]
+
+                def ci(*names):
+                    for n in names:
+                        for i, h in enumerate(norm):
+                            if h == n.lower():
+                                return i
+                    for n in names:
+                        for i, h in enumerate(norm):
+                            if n.lower() in h:
+                                return i
+                    return None
+
+                dc = ci("date") or 0
+                tc = ci("start time", "time")
+                ec = ci("end time", "end")
+                gc = ci("ground", "venue")
+                t1 = ci("team1")
+                t2 = ci("team2")
+                u1 = ci("umpire")
+                u2 = ci("umpire2")
+                wc = ci("winner")
+                rc = ci("runner")
+
+                def get(cols, idx, default=""):
+                    return cols[idx] if idx is not None and idx < len(cols) else default
+
+                for row in rows[1:]:
+                    cols = [td.get_text(strip=True) for td in row.find_all("td")]
+                    if not any(cols):
+                        continue
+                    t1v = get(cols, t1); t2v = get(cols, t2)
+                    u1v = get(cols, u1); u2v = get(cols, u2)
+                    winner = get(cols, wc); runner = get(cols, rc)
+                    is_play = team_lower in t1v.lower() or team_lower in t2v.lower()
+                    is_ump  = (team_lower in u1v.lower() or team_lower in u2v.lower()) and not is_play
+                    if not is_play and not is_ump:
+                        continue
+
+                    entry = {
+                        "date": get(cols, dc), "time": get(cols, tc), "end_time": get(cols, ec),
+                        "ground": get(cols, gc), "team1": t1v, "team2": t2v,
+                        "division": division_label, "league_id": league_id,
+                        "status": "Played" if winner else "Upcoming",
+                    }
+                    if winner:
+                        entry["result"] = winner
+                    if runner:
+                        entry["margin"] = runner
+
+                    if is_play:
+                        entry["opponent"]     = t2v if team_lower in t1v.lower() else t1v
+                        entry["home_or_away"] = "Home" if team_lower in t1v.lower() else "Away"
+                        entry["umpire"]       = u1v
+                        playing.append(entry)
+                    else:
+                        umpiring.append(entry)
+
+            except Exception as e:
+                logger.warning(f"Schedule fetch failed for league_id={league_id} "
+                                f"({division_label}): {e}")
+                errors.append(f"{division_label} (league_id={league_id}): {e}")
+                continue
+
+    if not playing and not umpiring and errors and len(errors) == len(ARCL_LEAGUE_DIVISIONS):
         return {
             "team_name": team_name, "season": resolved_season,
-            "message": f"team_id not found for '{team_name}' in {resolved_season}.",
+            "message": f"Error fetching schedule for all divisions: {'; '.join(errors[:3])}",
         }
-
-    sched_url = (f"{ARCL_BASE}/Pages/UI/LeagueSchedule.aspx"
-                 f"?league_id={league_id}&season_id={season_id}")
-    team_lower     = team_name.strip().lower()
-    playing        = []
-    umpiring       = []
-
-    try:
-        async with httpx.AsyncClient(headers=HEADERS, timeout=15, follow_redirects=True) as client:
-            r = await client.get(sched_url)
-            soup = BeautifulSoup(r.text, "html.parser")
-            for tag in soup(["script","style"]): tag.decompose()
-
-            tables = soup.find_all("table")
-            best   = max(tables, key=lambda t: len(t.find_all("tr")), default=None)
-            if not best:
-                raise ValueError("No tables found")
-
-            rows  = best.find_all("tr")
-            raw_h = [th.get_text(strip=True) for th in rows[0].find_all(["th","td"])]
-            norm  = [h.strip().lower() for h in raw_h]
-
-            def ci(*names):
-                for n in names:
-                    for i, h in enumerate(norm):
-                        if h == n.lower(): return i
-                for n in names:
-                    for i, h in enumerate(norm):
-                        if n.lower() in h: return i
-                return None
-
-            dc = ci("date") or 0
-            tc = ci("start time","time")
-            ec = ci("end time","end")
-            gc = ci("ground","venue")
-            t1 = ci("team1")
-            t2 = ci("team2")
-            u1 = ci("umpire")
-            u2 = ci("umpire2")
-            wc = ci("winner")
-            rc = ci("runner")
-
-            def get(cols, idx, default=""):
-                return cols[idx] if idx is not None and idx < len(cols) else default
-
-            for row in rows[1:]:
-                cols   = [td.get_text(strip=True) for td in row.find_all("td")]
-                if not any(cols): continue
-                t1v    = get(cols, t1); t2v = get(cols, t2)
-                u1v    = get(cols, u1); u2v = get(cols, u2)
-                winner = get(cols, wc); runner = get(cols, rc)
-                is_play = team_lower in t1v.lower() or team_lower in t2v.lower()
-                is_ump  = (team_lower in u1v.lower() or team_lower in u2v.lower()) and not is_play
-                if not is_play and not is_ump: continue
-
-                entry = {
-                    "date": get(cols,dc), "time": get(cols,tc), "end_time": get(cols,ec),
-                    "ground": get(cols,gc), "team1": t1v, "team2": t2v,
-                    "status": "Played" if winner else "Upcoming",
-                }
-                if winner: entry["result"] = winner
-                if runner: entry["margin"] = runner
-
-                if is_play:
-                    entry["opponent"]     = t2v if team_lower in t1v.lower() else t1v
-                    entry["home_or_away"] = "Home" if team_lower in t1v.lower() else "Away"
-                    entry["umpire"]       = u1v
-                    playing.append(entry)
-                else:
-                    umpiring.append(entry)
-
-    except Exception as e:
-        logger.error(f"Schedule error: {e}")
-        return {"team_name": team_name, "season": resolved_season, "message": f"Error: {e}"}
 
     played   = [m for m in playing if m["status"] == "Played"]
     upcoming = [m for m in playing if m["status"] == "Upcoming"]
 
     return {
-        "team_name": team_name, "season": resolved_season, "source_url": sched_url,
+        "team_name": team_name, "season": resolved_season,
         "played_count": len(played), "upcoming_count": len(upcoming),
         "umpiring_count": len(umpiring),
         "played_matches": played, "upcoming_matches": upcoming, "umpiring_matches": umpiring,

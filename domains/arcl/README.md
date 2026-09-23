@@ -89,3 +89,12 @@ firebase deploy --only hosting:arcl
 The Agomonia Labs public experience is maintained separately in
 `/Users/brajadas/project/adar-web/arcl.html` and should be deployed only after
 the backend guest endpoints are available.
+
+## Weekly run
+```
+cd ~/project/adar-core
+set -a; source .env; set +a
+cd domains/arcl
+PYTHONPATH=~/project/adar-core python -m ingestion.run_ingestion --only teamstats --seasons 70
+
+```

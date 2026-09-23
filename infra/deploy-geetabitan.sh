@@ -59,8 +59,8 @@ gcloud run deploy "${SERVICE}" \
     --port               8040 \
     --service-account    "${SA}" \
     --add-cloudsql-instances "${SQL_INSTANCE}" \
-    --set-env-vars        "APP_NAME=adar-geetabitan-api,APP_ENV=production,GCP_PROJECT_ID=${PROJECT_ID},DOMAIN=geetabitan,FIRESTORE_DATABASE=geetabitan-db,AUTH_FIRESTORE_DATABASE=geetabitan-db,ADK_MODEL=gemini-2.5-flash,EVAL_ENABLED=true,SESSION_DB_URL=${SESSION_DB_URL}" \
-    --set-secrets         "GOOGLE_API_KEY=google-api-key:latest,GEETABITAN_API_KEY=geetabitan-api-key:latest,JWT_SECRET=geetabitan-jwt-secret:latest,ADMIN_EMAIL=geetabitan-admin-email:latest,ADMIN_PASSWORD=geetabitan-admin-password:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=geetabitan-stripe-webhook-secret:latest,STRIPE_PRICE_GEETABITAN=stripe-price-geetabitan:latest,FRONTEND_URL=geetabitan-frontend-url:latest,GEETABITAN_TTS_API_KEY=geetabitan-tts-api-key:latest,GEETABITAN_SPEECH_API_KEY=geetabitan-speech-api-key:latest,YOUTUBE_API_KEY=youtube-api-key:latest"
+    --update-env-vars     "APP_NAME=adar-geetabitan-api,APP_ENV=production,GCP_PROJECT_ID=${PROJECT_ID},DOMAIN=geetabitan,FIRESTORE_DATABASE=geetabitan-db,AUTH_FIRESTORE_DATABASE=geetabitan-db,ADK_MODEL=gemini-2.5-flash,EVAL_ENABLED=true,SESSION_DB_URL=${SESSION_DB_URL},GEETABITAN_GUEST_ACCESS_ENABLED=${GEETABITAN_GUEST_ACCESS_ENABLED:-true},GEETABITAN_GUEST_VOICE_ENABLED=${GEETABITAN_GUEST_VOICE_ENABLED:-true}" \
+    --update-secrets      "GOOGLE_API_KEY=google-api-key:latest,GEETABITAN_API_KEY=geetabitan-api-key:latest,JWT_SECRET=geetabitan-jwt-secret:latest,ADMIN_EMAIL=geetabitan-admin-email:latest,ADMIN_PASSWORD=geetabitan-admin-password:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=geetabitan-stripe-webhook-secret:latest,STRIPE_PRICE_GEETABITAN=stripe-price-geetabitan:latest,FRONTEND_URL=geetabitan-frontend-url:latest,GEETABITAN_TTS_API_KEY=geetabitan-tts-api-key:latest,GEETABITAN_SPEECH_API_KEY=geetabitan-speech-api-key:latest,YOUTUBE_API_KEY=youtube-api-key:latest"
 
 echo ""
 URL=$(gcloud run services describe "${SERVICE}" \

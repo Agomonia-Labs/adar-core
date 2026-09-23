@@ -30,46 +30,54 @@ async def get_standings(division: str = "") -> dict:
     """
     Get the current ARCL points table / standings.
 
+    Reads from Firestore (arcl_teams, kept fresh by the arcl.org
+    ingestion pipeline — domains/arcl/ingestion/run_ingestion.py
+    --only standings) via the same team_tools.get_teams_in_division()
+    that team_agent already uses. No live cricclubs.com dependency —
+    that endpoint (CRICCLUBS_STANDINGS) pointed at the wrong page
+    (listMatches.do, a match list, not a points table) and was
+    identical to CRICCLUBS_RESULTS; it was unreliable for this.
+
     Args:
-        division: Filter by division name e.g. 'Division A', 'Women' (optional)
+        division: Division name e.g. 'Division A', 'Div H', 'Women' (optional)
 
     Returns:
         Dict with standings table data and fetch timestamp
     """
-    url = CRICCLUBS_STANDINGS
-    if division:
-        url += f"&division={division.replace(' ', '+')}"
+    from domains.arcl.tools.team_tools import get_teams_in_division
 
-    soup = await _fetch_page(url)
-    if not soup:
+    teams = await get_teams_in_division(division)
+
+    if not teams:
         return {
-            "error": "Could not fetch standings from cricclubs.com",
-            "url": url,
+            "standings": [],
+            "division": division or "All divisions",
+            "source": "Firestore arcl_teams (arcl.org ingestion)",
             "fetched_at": datetime.utcnow().isoformat(),
+            "note": (
+                f"No standings found for '{division}'. Data may not be "
+                "ingested yet for this division/season — run "
+                "`python -m ingestion.run_ingestion --only standings "
+                "--leagues <id>` from domains/arcl."
+            ) if division else "No standings found.",
         }
 
-    standings = []
-    tables = soup.find_all("table")
-    for table in tables:
-        rows = table.find_all("tr")
-        for row in rows[1:]:  # skip header
-            cols = [c.get_text(strip=True) for c in row.find_all(["td", "th"])]
-            if len(cols) >= 4:
-                standings.append({
-                    "position": cols[0],
-                    "team": cols[1],
-                    "played": cols[2],
-                    "won": cols[3],
-                    "lost": cols[4] if len(cols) > 4 else "",
-                    "points": cols[-1],
-                })
-        if standings:
-            break
+    standings = [
+        {
+            "position": i + 1,
+            "team": t.get("team_name"),
+            "played": (t.get("wins", 0) or 0) + (t.get("losses", 0) or 0),
+            "won": t.get("wins", 0),
+            "lost": t.get("losses", 0),
+            "points": t.get("points", 0),
+        }
+        for i, t in enumerate(teams)
+    ]
 
     return {
         "standings": standings,
         "division": division or "All divisions",
-        "source": url,
+        "source": "Firestore arcl_teams (arcl.org ingestion)",
         "fetched_at": datetime.utcnow().isoformat(),
     }
 

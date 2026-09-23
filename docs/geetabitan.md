@@ -183,6 +183,26 @@ python -m domains.geetabitan.ingestion.swaralipi_ocr \
 | GET | `/api/usage` | JWT | Check message quota |
 | GET | `/health` | — | Health check |
 
+### Public Live Experience
+
+The Agomonia Labs Live Experience uses short-lived, domain-scoped guest tokens.
+It does not expose account, billing, poll, administration, or unrestricted
+session endpoints.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/geetabitan/guest/session` | Approved origin | Create a 30-minute guest token |
+| GET | `/api/geetabitan/guest/capabilities` | Guest token | Public feature and language metadata |
+| GET | `/api/geetabitan/guest/examples` | Guest token | Suggested Bengali questions |
+| POST | `/api/geetabitan/guest/chat` | Guest token | Ask the existing Geetabitan orchestrator |
+| POST | `/api/geetabitan/guest/tts` | Guest token | Bengali speech response |
+| POST | `/api/geetabitan/guest/stt` | Guest token | Bengali speech recognition fallback |
+| DELETE | `/api/geetabitan/guest/session/{id}` | Guest token | Delete the temporary conversation |
+
+Deploying with `infra/deploy-geetabitan.sh` enables guest text and voice by
+default. Set `GEETABITAN_GUEST_ACCESS_ENABLED=false` or
+`GEETABITAN_GUEST_VOICE_ENABLED=false` to disable either capability.
+
 ---
 
 ## Suggested Questions
