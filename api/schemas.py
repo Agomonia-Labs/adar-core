@@ -21,6 +21,7 @@ class ChatResponse(BaseModel):
     session_id: str
     user_id:    str
     eval:       dict | None = None
+    trace_id:   str | None = None
 
 
 class SessionResponse(BaseModel):

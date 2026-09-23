@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from jose import jwt
 
 from api.routes.auth import JWT_ALGORITHM, _jwt_secret, bearer_scheme, decode_token
+from api.routes.guest_traces import get_guest_trace_projection
 from src.adar.config import settings
 
 
@@ -160,7 +161,7 @@ def issue_guest_token() -> tuple[str, str, datetime]:
             "status": "active",
             "domain": "geetabitan",
             "token_use": GUEST_TOKEN_USE,
-            "scope": ["geetabitan:query", "geetabitan:voice", "geetabitan:session"],
+            "scope": ["geetabitan:query", "geetabitan:voice", "geetabitan:session", "geetabitan:trace"],
             "jti": uuid.uuid4().hex,
             "iat": now,
             "exp": expires_at,
@@ -198,7 +199,7 @@ async def create_guest_session(request: Request, response: Response):
         "expires_in": GUEST_TOKEN_TTL_SECONDS,
         "expires_at": expires_at.isoformat(),
         "guest_id": guest_id,
-        "scope": ["geetabitan:query", "geetabitan:voice", "geetabitan:session"],
+        "scope": ["geetabitan:query", "geetabitan:voice", "geetabitan:session", "geetabitan:trace"],
     }
 
 
@@ -223,6 +224,11 @@ async def get_guest_capabilities(guest: dict = Depends(get_geetabitan_guest)):
 @router.get("/examples")
 async def get_guest_examples(guest: dict = Depends(get_geetabitan_guest)):
     return {"questions": EXAMPLE_QUESTIONS, "domain": guest["domain"]}
+
+
+@router.get("/traces/{trace_id}")
+async def get_guest_trace(trace_id: str, guest: dict = Depends(get_geetabitan_guest)):
+    return await get_guest_trace_projection(trace_id, guest, "geetabitan")
 
 
 def clear_test_state() -> None:

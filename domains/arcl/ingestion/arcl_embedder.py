@@ -94,6 +94,48 @@ def _chunk_to_doc(chunk: ScrapedChunk, embedding: list[float]) -> dict:
     return doc
 
 
+def _stable_doc_id(chunk: ScrapedChunk) -> str:
+    """
+    Deterministic Firestore doc ID for a chunk, so re-ingestion OVERWRITES the
+    existing record for the same team/player/season instead of creating a new
+    document next to it.
+
+    This must be built only from a chunk's stable IDENTITY fields (who/where/
+    when the record is about) — never from chunk.content or any field whose
+    VALUE changes between ingestion runs. The previous implementation hashed
+    `content[:80]`, and for "team" (standings) and "player_season" chunks the
+    mutable stat values (wins/losses/points, batting/bowling numbers) fall
+    inside that first-80-character slice. So every time a team's record or a
+    player's stats changed, the hash — and therefore the doc_id — changed too,
+    and `.set()` wrote a brand-new document instead of overwriting the old
+    one. That's the direct cause of duplicate standings/stat records: nothing
+    ever pointed at the same doc twice.
+    """
+    import hashlib
+
+    pt = chunk.page_type
+    if pt == "team":
+        # One doc per team-per-division-per-season, regardless of that
+        # team's current wins/losses/points.
+        key_parts = ["team", chunk.team_id or chunk.team_name, chunk.season_id, chunk.league_id]
+    elif pt == "player_season":
+        # One doc per player-per-team-per-season, regardless of that
+        # player's current batting/bowling numbers.
+        key_parts = ["player_season", chunk.player_id or chunk.player_name,
+                     chunk.season_id, chunk.team_id or chunk.league_id]
+    elif pt == "player":
+        key_parts = ["player", chunk.player_id or chunk.player_name]
+    elif pt == "team_schedule":
+        key_parts = ["team_schedule", chunk.team_id or chunk.team_name, chunk.season_id]
+    else:
+        # rules / faq / about — static reference text with no mutable
+        # per-run stats, so content-keyed is still appropriate here.
+        key_parts = [pt, chunk.source_url, chunk.content[:80]]
+
+    id_src = ":".join(str(p) for p in key_parts)
+    return hashlib.md5(id_src.encode()).hexdigest()
+
+
 async def embed_and_store_chunks(
     chunks: list[ScrapedChunk],
     batch_size: int = 10,
@@ -122,10 +164,7 @@ async def embed_and_store_chunks(
 
             doc = _chunk_to_doc(chunk, embedding)
             try:
-                # Deterministic doc ID — prevents duplicates on re-ingest
-                import hashlib
-                _id_src = f"{chunk.page_type}:{chunk.source_url}:{chunk.content[:80]}"
-                doc_id  = hashlib.md5(_id_src.encode()).hexdigest()
+                doc_id = _stable_doc_id(chunk)
                 await db.collection(collection).document(doc_id).set(doc)
                 stored_counts[collection] = stored_counts.get(collection, 0) + 1
             except Exception as e:

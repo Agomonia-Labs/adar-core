@@ -1278,11 +1278,13 @@ async def _execute_chat(
         msg_low = message.lower()
         if _off_topic and _hints:
             if any(k in msg_low for k in _off_topic) and not any(k in msg_low for k in _hints):
+                await tracing.finish_trace(trace_id, status="success")
                 return ChatResponse(
                     response=_reject_msg,
                     session_id=str(session.id),
                     user_id=request.user_id,
                     eval=None,
+                    trace_id=trace_id,
                 )
         # ─────────────────────────────────────────────────────────────────────
 
@@ -1404,6 +1406,7 @@ async def _execute_chat(
                 "scores":      eval_result["scores"],
                 "explanation": eval_result.get("explanation", ""),
             } if eval_result else None,
+            trace_id=trace_id,
         )
 
     except HTTPException:

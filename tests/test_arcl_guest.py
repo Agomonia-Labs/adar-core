@@ -38,7 +38,10 @@ class ArclGuestTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(claims["role"], arcl_guest.GUEST_ROLE)
         self.assertEqual(claims["token_use"], arcl_guest.GUEST_TOKEN_USE)
         self.assertEqual(claims["domain"], "arcl")
-        self.assertEqual(claims["scope"], ["arcl:query", "arcl:voice", "arcl:session"])
+        self.assertEqual(
+            claims["scope"],
+            ["arcl:query", "arcl:voice", "arcl:session", "arcl:trace"],
+        )
         self.assertLessEqual(
             int(claims["exp"]) - int(datetime.now(timezone.utc).timestamp()),
             arcl_guest.GUEST_TOKEN_TTL_SECONDS,

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from jose import jwt
 
 from api.routes.auth import JWT_ALGORITHM, _jwt_secret, bearer_scheme, decode_token
+from api.routes.guest_traces import get_guest_trace_projection
 from src.adar.config import settings
 
 
@@ -167,7 +168,7 @@ def issue_guest_token() -> tuple[str, str, datetime]:
             "status": "active",
             "domain": "arcl",
             "token_use": GUEST_TOKEN_USE,
-            "scope": ["arcl:query", "arcl:voice", "arcl:session"],
+            "scope": ["arcl:query", "arcl:voice", "arcl:session", "arcl:trace"],
             "jti": uuid.uuid4().hex,
             "iat": now,
             "exp": expires_at,
@@ -205,7 +206,7 @@ async def create_guest_session(request: Request, response: Response):
         "expires_in": GUEST_TOKEN_TTL_SECONDS,
         "expires_at": expires_at.isoformat(),
         "guest_id": guest_id,
-        "scope": ["arcl:query", "arcl:voice", "arcl:session"],
+        "scope": ["arcl:query", "arcl:voice", "arcl:session", "arcl:trace"],
     }
 
 
@@ -231,6 +232,11 @@ async def get_guest_capabilities(guest: dict = Depends(get_arcl_guest)):
 @router.get("/examples")
 async def get_guest_examples(guest: dict = Depends(get_arcl_guest)):
     return {"questions": EXAMPLE_QUESTIONS, "domain": guest["domain"]}
+
+
+@router.get("/traces/{trace_id}")
+async def get_guest_trace(trace_id: str, guest: dict = Depends(get_arcl_guest)):
+    return await get_guest_trace_projection(trace_id, guest, "arcl")
 
 
 def clear_test_state() -> None:

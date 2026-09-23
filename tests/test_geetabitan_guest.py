@@ -40,7 +40,7 @@ class GeetabitanGuestTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(claims["domain"], "geetabitan")
         self.assertEqual(
             claims["scope"],
-            ["geetabitan:query", "geetabitan:voice", "geetabitan:session"],
+            ["geetabitan:query", "geetabitan:voice", "geetabitan:session", "geetabitan:trace"],
         )
         self.assertLessEqual(
             int(claims["exp"]) - int(datetime.now(timezone.utc).timestamp()),
