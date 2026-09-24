@@ -456,8 +456,26 @@ async def get_team_schedule(team_name: str, season: str = "") -> dict:
     }
 
 
+def _dedupe_teams(teams: list) -> list:
+    """Collapse duplicate rows for the same team (same-season re-scrapes,
+    or ingestion re-runs, can leave more than one Firestore doc for one
+    team) into a single record -- keep whichever row has the most
+    matches played, since that's the most complete/up-to-date one."""
+    best: dict[str, dict] = {}
+    for t in teams:
+        key = (t.get("team_name") or "").strip().lower()
+        if not key:
+            continue
+        played = t.get("wins", 0) + t.get("losses", 0)
+        existing = best.get(key)
+        if existing is None or played > (existing.get("wins", 0) + existing.get("losses", 0)):
+            best[key] = t
+    return list(best.values())
+
+
 async def get_teams_in_division(division: str, season: str = "") -> list:
-    """Get all teams in a division sorted by points."""
+    """Get all teams in a division sorted by points, scoped to one season
+    (the current/latest season when none is given) with one row per team."""
     div_clean  = division.strip().upper().replace("DIB","DIV")
     div_letter = div_clean.replace("DIV","").replace("DIVISION","").strip()
 
@@ -470,27 +488,32 @@ async def get_teams_in_division(division: str, season: str = "") -> list:
     _, resolved_season = _resolve_season(season)
 
     if league_id_filter:
-        f = {"league_id": league_id_filter}
-        if season: f["season"] = resolved_season
+        # Always scope to a single season -- resolved_season already
+        # defaults to the current one when the caller didn't name one.
+        # Leaving this filter off (the old behavior) returned every
+        # season's rows for the division merged together.
+        f = {"league_id": league_id_filter, "season": resolved_season}
         records = await direct_query(ARCL_TEAMS_COLLECTION, f, limit=50)
         records = [r for r in records if r.get("wins",0)>0 or r.get("losses",0)>0]
         if records:
             teams = [{"team_name":r.get("team_name"),"season":r.get("season"),
                       "division":r.get("division"),"wins":r.get("wins",0),
                       "losses":r.get("losses",0),"points":r.get("points",0)} for r in records]
+            teams = _dedupe_teams(teams)
             teams.sort(key=lambda x:x.get("points",0), reverse=True)
             return teams
 
-    results = await vector_search(ARCL_TEAMS_COLLECTION, f"division {division} {season}".strip(), top_k=30)
+    results = await vector_search(ARCL_TEAMS_COLLECTION, f"division {division} {resolved_season}".strip(), top_k=30)
     teams = [
         {"team_name":r.get("team_name"),"season":r.get("season"),
          "division":r.get("division"),"wins":r.get("wins",0),
          "losses":r.get("losses",0),"points":r.get("points",0)}
         for r in results
         if div_letter in r.get("division","").upper()
-        and (not season or season.lower() in r.get("season","").lower())
+        and resolved_season.lower() in r.get("season","").lower()
         and (r.get("wins",0)>0 or r.get("losses",0)>0)
     ]
+    teams = _dedupe_teams(teams)
     teams.sort(key=lambda x:x.get("points",0), reverse=True)
     return teams
 
