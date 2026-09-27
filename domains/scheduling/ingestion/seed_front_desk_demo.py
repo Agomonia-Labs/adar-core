@@ -114,6 +114,14 @@ async def seed(path: Path, *, dry_run: bool = False) -> list[str]:
                     "name": provider["name"],
                     "role": provider["role"],
                     "bio": provider["bio"],
+                    # Booking-notification recipient (see
+                    # api/routes/scheduling_guest.py's _send_booking_emails).
+                    # Left blank for this fictional showcase roster -- there's
+                    # no real inbox to send to -- so it falls back to the
+                    # practice's notification_email / the platform admin
+                    # address. Set a real address here (or edit the seeded
+                    # Firestore doc directly) once a provider has one.
+                    "email": provider.get("email", ""),
                     "appointment_type_ids": provider["appointment_type_ids"],
                     "working_hours": _working_hours(provider),
                     "demo_seed": True,

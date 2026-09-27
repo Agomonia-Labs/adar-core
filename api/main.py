@@ -33,7 +33,12 @@ from api.routes.admin import router as admin_router
 from api.routes.scheduling_admin import router as scheduling_admin_router
 from api.routes.scheduling_traces import router as scheduling_traces_router
 from api.routes.scheduling_directory import router as scheduling_directory_router
-from api.routes.scheduling_guest import router as scheduling_guest_router
+from api.routes.scheduling_guest import (
+    router as scheduling_guest_router,
+    get_scheduling_guest,
+    enforce_query_rate_limit as enforce_scheduling_guest_query_rate_limit,
+    enforce_voice_rate_limit as enforce_scheduling_guest_voice_rate_limit,
+)
 from api.routes.arcl_guest import (
     router as arcl_guest_router,
     enforce_query_rate_limit as enforce_arcl_guest_query_rate_limit,
@@ -1515,6 +1520,50 @@ async def delete_geetabitan_guest_session(
         raise HTTPException(status_code=500, detail="Could not reset the guest session")
 
 
+@app.post("/api/scheduling/guest/chat", response_model=ChatResponse)
+async def scheduling_guest_chat(
+    request: ChatRequest,
+    http_request: Request,
+    guest: dict = Depends(get_scheduling_guest),
+):
+    """Guest ("Ask ADAR") chat for the ADAR Front Desk mobile app -- same
+    no-login pattern as ARCL/Geetabitan guest chat, scoped to the guest
+    token's identity. Does not touch the structured booking flow (see
+    api/routes/scheduling_guest.py's /session, /providers, /bookings, etc.)
+    -- this is purely conversational Q&A (service info, hours, general
+    questions) for customers who'd rather ask than tap through the wizard.
+    """
+    await enforce_scheduling_guest_query_rate_limit(guest)
+    scoped_request = ChatRequest(
+        message=request.message,
+        user_id=guest["sub"],
+        session_id=request.session_id,
+    )
+    return await _execute_chat(
+        scoped_request,
+        http_request,
+        track_account_usage=False,
+        run_evaluation=False,
+    )
+
+
+@app.delete("/api/scheduling/guest/session/{session_id}")
+async def delete_scheduling_guest_session(
+    session_id: str,
+    guest: dict = Depends(get_scheduling_guest),
+):
+    try:
+        await session_service.delete_session(
+            app_name=APP_NAME,
+            user_id=guest["sub"],
+            session_id=session_id,
+        )
+        return {"deleted": True, "session_id": session_id}
+    except Exception:
+        logger.warning("Could not delete Scheduling guest session %s", session_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not reset the guest session")
+
+
 @app.get("/api/sessions/{session_id}", response_model=SessionResponse)
 async def get_session_endpoint(
     session_id: str,
@@ -1607,6 +1656,30 @@ async def demo_tts(request: Request):
     raw_text = (body.get("text") or "").strip()
     lang = (body.get("lang") or "en-US").strip()
     text = raw_text[:1200].strip()
+    # Strip markdown formatting before synthesis -- otherwise Google's TTS
+    # reads the literal symbols out loud (heard by the user as extra
+    # "asterisk"/stray-character words that were never part of the intended
+    # spoken reply). The LLM's replies are markdown-formatted for on-screen
+    # display, but voice playback should only speak the underlying words.
+    text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)           # code blocks
+    text = re.sub(r"`([^`]+)`", r"\1", text)                          # inline code
+    text = re.sub(r"^\s{0,3}#{1,6}\s+", "", text, flags=re.MULTILINE)  # headers
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)             # [text](link)
+    text = re.sub(r"\*\*\*([^*]+)\*\*\*", r"\1", text)               # ***bold italic***
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)                    # **bold**
+    text = re.sub(r"__([^_]+)__", r"\1", text)                        # __bold__
+    text = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"\1", text)        # *italic*
+    text = re.sub(r"(?<!_)_([^_\n]+)_(?!_)", r"\1", text)             # _italic_
+    text = re.sub(r"^\s{0,3}[-*+]\s+", "", text, flags=re.MULTILINE)   # - bullet / * bullet
+    # > blockquotes -- e.g. a reply that opens a new paragraph with a quoted
+    # line ("> Some note"). Left unstripped, Google's Chirp3-HD voices read
+    # the literal "&gt;" character out loud -- for the Bangla voice this
+    # comes out as the spoken phrase "এর থেকে বড়" ("greater than"/"bigger
+    # than this"), which is exactly the stray phrase users reported hearing
+    # at paragraph breaks and line ends. Strip the leading marker(s) here...
+    text = re.sub(r"^\s{0,3}>+\s?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"[*_`#>]+", "", text)                                # ...and any leftover stray marks (incl. stray ">")
+    text = re.sub(r"\s+", " ", text).strip()                          # collapse whitespace/newlines
     # "Dr." read by Google TTS voices is frequently mispronounced as "drive"
     # (it's ambiguous with the street-address abbreviation). When "Dr."/"Dr"
     # is used as a title — followed by a capitalized name, e.g. "Dr. Osei" —
@@ -1614,19 +1687,44 @@ async def demo_tts(request: Request):
     # the end of a sentence or followed by a lowercase word, so it's safe to
     # apply for every tenant/domain, not just scheduling.
     text = re.sub(r"\bDr\.?\s+(?=[A-Z])", "Doctor ", text)
-    if len(text) > 380:
-        parts = []
+    # Google's Chirp3-HD voices reject any individual *sentence* that runs
+    # too long ("This request contains sentences that are too long...") --
+    # evaluated on Google's own sentence-boundary parsing of our text, not
+    # on the total length we send. The previous version only kicked in
+    # past 380 total characters and inserted a break every ~360 chars,
+    # which is still long enough to trip this on a real assistant reply
+    # that has few or no natural punctuation marks (e.g. one long clause).
+    # Rewrap unconditionally: first respect any real sentence terminators
+    # already in the text, then further split anything still too long on
+    # word boundaries, so no single chunk handed to Google is long enough
+    # to be rejected as "too long" on its own.
+    SAFE_SENTENCE_CHARS = 150
+    SENTENCE_END_RE = re.compile(r"(?<=[।.!?])\s+")
+
+    def _rewrap(chunk):
+        chunk = chunk.strip()
+        if not chunk:
+            return []
+        if len(chunk) <= SAFE_SENTENCE_CHARS:
+            return [chunk]
+        pieces = []
         current = ""
-        for word in text.split():
+        for word in chunk.split():
             candidate = f"{current} {word}".strip()
-            if len(candidate) > 360 and current:
-                parts.append(current.rstrip("।.!?") + "।")
+            if len(candidate) > SAFE_SENTENCE_CHARS and current:
+                pieces.append(current.rstrip("।.!?,") + "।")
                 current = word
             else:
                 current = candidate
         if current:
-            parts.append(current.rstrip("।.!?") + "।")
-        text = " ".join(parts)
+            pieces.append(current.rstrip("।.!?,") + "।")
+        return pieces
+
+    sentences = [s for s in SENTENCE_END_RE.split(text) if s.strip()]
+    rewrapped = []
+    for sentence in sentences:
+        rewrapped.extend(_rewrap(sentence))
+    text = " ".join(rewrapped)
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
 
@@ -1671,7 +1769,12 @@ async def demo_tts(request: Request):
     voice = voice_by_language.get(primary_lang, voice_by_language["en"])
 
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        # Chirp3-HD is a higher-quality generative voice and can genuinely
+        # take longer than a short timeout allows, especially on a cold
+        # container -- 15s was tight enough to occasionally cut off a
+        # healthy request. 30s gives real synthesis room without hanging
+        # forever on a truly dead connection.
+        async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 f"https://texttospeech.googleapis.com/v1/text:synthesize?key={api_key}",
                 json={
@@ -1696,9 +1799,18 @@ async def demo_tts(request: Request):
 
     except HTTPException:
         raise
+    except (httpx.TimeoutException, httpx.TransportError) as e:
+        # These commonly stringify to "" (e.g. a bare httpx.ReadTimeout()),
+        # which is why an earlier version of this log line showed nothing
+        # useful after "TTS error:". Logging the exception's type makes
+        # that diagnosable instead of a blank message next time. 504 (not
+        # 500) also lets the mobile app's existing retry-on-gateway-error
+        # logic pick this up automatically.
+        logger.error(f"TTS network error: {type(e).__name__}: {e!r}")
+        raise HTTPException(status_code=504, detail="Text-to-speech timed out. Please try again.")
     except Exception as e:
-        logger.error(f"TTS error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"TTS error: {type(e).__name__}: {e!r}")
+        raise HTTPException(status_code=500, detail=str(e) or type(e).__name__)
 
 
 
@@ -1860,6 +1972,24 @@ async def geetabitan_guest_stt(
     guest: dict = Depends(get_geetabitan_guest),
 ):
     await enforce_geetabitan_guest_voice_rate_limit(guest)
+    return await speech_to_text(request, team=guest)
+
+
+@app.post("/api/scheduling/guest/tts")
+async def scheduling_guest_tts(
+    request: Request,
+    guest: dict = Depends(get_scheduling_guest),
+):
+    await enforce_scheduling_guest_voice_rate_limit(guest)
+    return await demo_tts(request)
+
+
+@app.post("/api/scheduling/guest/stt")
+async def scheduling_guest_stt(
+    request: Request,
+    guest: dict = Depends(get_scheduling_guest),
+):
+    await enforce_scheduling_guest_voice_rate_limit(guest)
     return await speech_to_text(request, team=guest)
 
 

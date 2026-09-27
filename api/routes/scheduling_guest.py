@@ -7,22 +7,27 @@ telemetry, and write bookings to an isolated demo collection. The trace-flow
 endpoint returns only a sanitized projection derived from those demo bookings.
 """
 import asyncio
+import logging
 import os
 import time
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from google.cloud import firestore
 from jose import jwt
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from api.routes.auth import JWT_ALGORITHM, _jwt_secret, bearer_scheme, decode_token
+from api.routes.auth import JWT_ALGORITHM, _admin_email, _jwt_secret, bearer_scheme, decode_token
+from src.adar.notify import send_appointment_confirmation_email, send_new_booking_notification_email
 from src.adar.config import settings
 
 
 router = APIRouter(prefix="/api/scheduling/guest", tags=["scheduling-guest"])
+
+logger = logging.getLogger(__name__)
 
 GUEST_ROLE = "scheduling_guest"
 GUEST_TOKEN_USE = "front_desk_demo"
@@ -42,6 +47,88 @@ GUEST_ALLOWED_ORIGINS = {
 _token_windows: dict[str, deque[float]] = defaultdict(deque)
 _token_lock = asyncio.Lock()
 
+# ── Chat + voice rate limiting (mirrors api/routes/arcl_guest.py) ───────────
+# The endpoints above (session/practices/providers/bookings) predate the
+# mobile app's chat+voice "Ask ADAR" tab -- these limits exist so that tab
+# can reuse the same guest token/session infrastructure with its own,
+# separately-tuned quotas, the same way ARCL and Geetabitan guest chat do.
+GUEST_QUERY_WINDOW_SECONDS = 60
+GUEST_QUERY_WINDOW_LIMIT = 12
+GUEST_MAX_SESSION_MESSAGES = 20
+GUEST_VOICE_WINDOW_SECONDS = 60
+GUEST_VOICE_WINDOW_LIMIT = 10
+
+_query_windows: dict[str, deque[float]] = defaultdict(deque)
+_voice_windows: dict[str, deque[float]] = defaultdict(deque)
+_message_counts: dict[str, int] = defaultdict(int)
+
+# Voice mode covers English plus the languages ADAR's other public guest
+# experiences already support (see arcl_guest.py) -- a Front Desk customer
+# can speak/read in whichever of these their practice's callers use most.
+SUPPORTED_LANGUAGES = [
+    {"code": "en-US", "label": "English"},
+    {"code": "es-US", "label": "Spanish"},
+    {"code": "bn-BD", "label": "Bangla"},
+    {"code": "hi-IN", "label": "Hindi"},
+    {"code": "ar-XA", "label": "Arabic"},
+]
+
+
+async def _consume_window(
+    windows: dict[str, deque[float]],
+    key: str,
+    window_seconds: int,
+    limit: int,
+    message: str,
+) -> None:
+    now = time.monotonic()
+    cutoff = now - window_seconds
+    async with _token_lock:
+        window = windows[key]
+        while window and window[0] < cutoff:
+            window.popleft()
+        if len(window) >= limit:
+            retry_after = max(1, int(window[0] + window_seconds - now) + 1)
+            raise HTTPException(
+                status_code=429,
+                detail=message,
+                headers={"Retry-After": str(retry_after)},
+            )
+        window.append(now)
+
+
+async def enforce_query_rate_limit(guest: dict) -> None:
+    """Applied to guest chat sends -- 12/min, 20 total per guest session,
+    same shape as ARCL/Geetabitan's guest chat limits."""
+    token_id = str(guest.get("jti") or guest.get("sub") or "unknown")
+    await _consume_window(
+        _query_windows,
+        token_id,
+        GUEST_QUERY_WINDOW_SECONDS,
+        GUEST_QUERY_WINDOW_LIMIT,
+        "Too many questions. Please wait a moment before asking again.",
+    )
+    async with _token_lock:
+        if _message_counts[token_id] >= GUEST_MAX_SESSION_MESSAGES:
+            raise HTTPException(
+                status_code=429,
+                detail="This guest session has reached its question limit. Start a new session to continue.",
+            )
+        _message_counts[token_id] += 1
+
+
+async def enforce_voice_rate_limit(guest: dict) -> None:
+    if os.environ.get("SCHEDULING_GUEST_VOICE_ENABLED", "true").lower() != "true":
+        raise HTTPException(status_code=503, detail="Front Desk guest voice is not enabled")
+    token_id = str(guest.get("jti") or guest.get("sub") or "unknown")
+    await _consume_window(
+        _voice_windows,
+        token_id,
+        GUEST_VOICE_WINDOW_SECONDS,
+        GUEST_VOICE_WINDOW_LIMIT,
+        "Too many voice requests. Please wait a moment before trying again.",
+    )
+
 
 class GuestBookingIn(BaseModel):
     practice_id: str = Field(..., min_length=1, max_length=128)
@@ -50,7 +137,19 @@ class GuestBookingIn(BaseModel):
     start_time: str = Field(..., min_length=10, max_length=64)
     caller_name: str = Field(..., min_length=1, max_length=120)
     caller_phone: str = Field("", max_length=40)
-    caller_email: str = Field("", max_length=200)
+    caller_email: str = Field(..., min_length=5, max_length=200)
+
+    @field_validator("caller_email")
+    @classmethod
+    def _validate_caller_email(cls, value: str) -> str:
+        value = value.strip()
+        # Deliberately simple shape check (one "@", a "." after it) --
+        # good enough to catch typos/junk without a new hard dependency
+        # (email-validator is not in requirements.txt).
+        local, _, domain = value.partition("@")
+        if not local or "." not in domain or domain.startswith(".") or domain.endswith("."):
+            raise ValueError("Enter a valid email address")
+        return value
     reason: str = Field("", max_length=500)
 
 
@@ -171,6 +270,29 @@ async def get_scheduling_guest(credentials=Depends(bearer_scheme)) -> dict:
     return payload
 
 
+async def get_scheduling_customer(credentials=Depends(bearer_scheme)) -> dict:
+    """A real, signed-in Front Desk account -- required to create, list, or
+    cancel a booking. This is deliberately the SAME login (email + password,
+    OTP-verified) already live at scheduling.adar.agomoniai.com, decoded with
+    auth.py's own decode_token/secret -- there is no separate "customer"
+    auth system, just the existing team login used for a different role."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Sign in to manage appointments")
+    payload = decode_token(credentials.credentials)
+    if payload.get("role") == GUEST_ROLE or payload.get("token_use") == GUEST_TOKEN_USE:
+        raise HTTPException(status_code=403, detail="Sign in with your account to manage appointments")
+    if not (payload.get("email") or "").strip():
+        raise HTTPException(status_code=403, detail="Your account has no email on file")
+    return payload
+
+
+def _resolve_customer_practice(practice_id: str) -> str:
+    resolved = (practice_id or "").strip()
+    if not resolved or resolved not in set(_guest_practice_ids()):
+        raise HTTPException(status_code=403, detail="This practice is not available")
+    return resolved
+
+
 def _resolve_guest_practice(guest: dict, practice_id: str = "") -> str:
     resolved = practice_id.strip() or guest.get("practice_id", "")
     token_ids = set(guest.get("practice_ids") or [guest.get("practice_id")])
@@ -258,6 +380,19 @@ def _public_trace(doc_id: str, data: dict) -> dict:
 
 def _overlaps(start_a: datetime, end_a: datetime, start_b, end_b) -> bool:
     return bool(start_b and end_b and start_b < end_a and start_a < end_b)
+
+
+def _format_when(dt: datetime, tz_name: str) -> str:
+    """Human-readable local time for booking-confirmation emails --
+    mirrors domains/scheduling/tools/availability_tools.py's _format_slot
+    (duplicated locally to avoid importing the agent-tools module here)."""
+    local_dt = dt
+    if tz_name:
+        try:
+            local_dt = dt.astimezone(ZoneInfo(tz_name))
+        except Exception:
+            local_dt = dt
+    return local_dt.strftime("%A, %B %-d at %-I:%M %p %Z")
 
 
 async def _active_practice(db: firestore.AsyncClient, practice_id: str):
@@ -366,7 +501,7 @@ async def list_guest_bookings(
     start: str,
     end: str,
     practice_id: str = "",
-    guest: dict = Depends(get_scheduling_guest),
+    customer: dict = Depends(get_scheduling_customer),
 ):
     try:
         start_dt = datetime.fromisoformat(start)
@@ -378,13 +513,13 @@ async def list_guest_bookings(
     if end_dt.tzinfo is None:
         end_dt = end_dt.replace(tzinfo=timezone.utc)
 
-    resolved = _resolve_guest_practice(guest, practice_id)
+    resolved = _resolve_customer_practice(practice_id)
     bookings = []
     async for doc in _db().collection(_guest_collection()).where(
         "practice_id", "==", resolved
     ).limit(100).stream():
         data = doc.to_dict() or {}
-        if data.get("guest_id") != guest["team_id"] and data.get("demo_seed") is not True:
+        if data.get("guest_id") != customer["team_id"] and data.get("demo_seed") is not True:
             continue
         starts_at = data.get("start_time")
         expires_at = data.get("expires_at")
@@ -419,11 +554,13 @@ async def list_guest_traces(
 
 
 @router.post("/bookings", status_code=201)
-async def create_guest_booking(body: GuestBookingIn, guest: dict = Depends(get_scheduling_guest)):
+async def create_guest_booking(body: GuestBookingIn, customer: dict = Depends(get_scheduling_customer)):
     db = _db()
-    practice_id = _resolve_guest_practice(guest, body.practice_id)
-    guest_id = guest["team_id"]
-    await _active_practice(db, practice_id)
+    practice_id = _resolve_customer_practice(body.practice_id)
+    guest_id = customer["team_id"]
+    customer_email = (customer.get("email") or "").strip().lower()
+    practice_doc = await _active_practice(db, practice_id)
+    practice_data = practice_doc.to_dict() or {}
 
     provider_doc = await db.collection(settings.SCHEDULING_PROVIDERS_COLLECTION).document(body.provider_id).get()
     provider = provider_doc.to_dict() or {} if provider_doc.exists else {}
@@ -511,14 +648,89 @@ async def create_guest_booking(body: GuestBookingIn, guest: dict = Depends(get_s
         if str(error) == "slot_taken":
             raise HTTPException(status_code=409, detail="That demo time is no longer available")
         raise
+
+    await _send_booking_emails(
+        practice_data=practice_data,
+        provider_data=provider,
+        appointment_type_name=appointment_type.get("name", ""),
+        caller_name=body.caller_name.strip(),
+        caller_phone=body.caller_phone.strip(),
+        caller_email=str(body.caller_email).strip(),
+        customer_email=customer_email,
+        reason=body.reason.strip(),
+        when_formatted=_format_when(starts_at, practice_data.get("timezone", "")),
+        appointment_id=appointment_id,
+    )
+
     return _public_booking(appointment_id, data)
+
+
+async def _send_booking_emails(
+    *,
+    practice_data: dict,
+    provider_data: dict,
+    appointment_type_name: str,
+    caller_name: str,
+    caller_phone: str,
+    caller_email: str,
+    customer_email: str,
+    reason: str,
+    when_formatted: str,
+    appointment_id: str,
+) -> None:
+    """Best-effort booking notification fan-out. Targets (deduped so the
+    same inbox never receives an identical email twice):
+      1) the email entered on the booking form (caller_email)
+      2) the signed-in account's own email, if different from (1)
+      3) the provider's own email, if the practice has one on file
+      4) the practice's admin/notification_email, falling back to the
+         platform ADMIN_EMAIL when the practice hasn't set one
+    A send failure here never fails the booking -- see notify.send_email,
+    which already logs and swallows SMTP errors the same way."""
+    practice_name = practice_data.get("name", "your practice")
+    provider_name = provider_data.get("name", "")
+
+    customer_targets = {addr for addr in {caller_email.lower(), customer_email.lower()} if addr}
+    for to in customer_targets:
+        try:
+            await send_appointment_confirmation_email(
+                to=to,
+                caller_name=caller_name,
+                practice_name=practice_name,
+                appointment_type_name=appointment_type_name,
+                provider_name=provider_name,
+                when_formatted=when_formatted,
+                appointment_id=appointment_id,
+            )
+        except Exception:
+            logger.exception("Failed to send booking confirmation email to %s", to)
+
+    admin_email = (practice_data.get("notification_email") or "").strip().lower() or _admin_email()
+    provider_email = (provider_data.get("email") or "").strip().lower()
+    staff_targets = {addr for addr in {admin_email, provider_email} if addr}
+    for to in staff_targets:
+        try:
+            await send_new_booking_notification_email(
+                to=to,
+                practice_name=practice_name,
+                caller_name=caller_name,
+                caller_phone=caller_phone,
+                appointment_type_name=appointment_type_name,
+                provider_name=provider_name,
+                when_formatted=when_formatted,
+                appointment_id=appointment_id,
+                caller_email=caller_email,
+                reason=reason,
+            )
+        except Exception:
+            logger.exception("Failed to send new-booking notification email to %s", to)
 
 
 @router.delete("/appointments/{appointment_id}")
 async def cancel_guest_booking(
     appointment_id: str,
     reason: str = "Cancelled from public Front Desk demo",
-    guest: dict = Depends(get_scheduling_guest),
+    customer: dict = Depends(get_scheduling_customer),
 ):
     db = _db()
     ref = db.collection(_guest_collection()).document(appointment_id)
@@ -526,9 +738,9 @@ async def cancel_guest_booking(
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Guest booking not found")
     data = doc.to_dict() or {}
-    if data.get("guest_id") != guest["team_id"]:
+    if data.get("guest_id") != customer["team_id"]:
         raise HTTPException(status_code=404, detail="Guest booking not found")
-    _resolve_guest_practice(guest, data.get("practice_id", ""))
+    _resolve_customer_practice(data.get("practice_id", ""))
     if data.get("demo_seed") is True:
         raise HTTPException(status_code=404, detail="Guest booking not found")
     if data.get("status") == "cancelled":

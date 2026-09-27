@@ -48,6 +48,7 @@ SCHEDULING_DEFAULT_PRACTICE_ID="${SCHEDULING_DEFAULT_PRACTICE_ID:-e1WJrKlyup70oc
 SCHEDULING_GUEST_PRACTICE_ID="${SCHEDULING_GUEST_PRACTICE_ID:-${SCHEDULING_DEFAULT_PRACTICE_ID}}"
 SCHEDULING_GUEST_PRACTICE_IDS="${SCHEDULING_GUEST_PRACTICE_IDS:-front-desk-health,front-desk-salon,front-desk-finance,front-desk-legal,front-desk-realestate,front-desk-tutoring}"
 SCHEDULING_GUEST_BOOKINGS_COLLECTION="${SCHEDULING_GUEST_BOOKINGS_COLLECTION:-scheduling_guest_bookings}"
+SCHEDULING_GUEST_VOICE_ENABLED="${SCHEDULING_GUEST_VOICE_ENABLED:-true}"
 
 REQUIRED_BILLING_SECRETS=(
   stripe-secret-key
@@ -141,7 +142,7 @@ gcloud run deploy "${SERVICE}" \
   --cpu 1 \
   --port 8040 \
   --service-account "${SA}" \
-  --update-env-vars "^|^APP_NAME=adar-scheduling-api|APP_ENV=production|GCP_PROJECT_ID=${PROJECT_ID}|DOMAIN=scheduling|FIRESTORE_DATABASE=adar-scheduling-db|AUTH_FIRESTORE_DATABASE=adar-scheduling-db|ADK_MODEL=gemini-2.5-flash|EVAL_ENABLED=true|BILLING_ENABLED=true|SESSION_DB_URL=sqlite+aiosqlite:////tmp/scheduling_sessions.db|FRONTEND_URL=https://scheduling.adar.agomoniai.com|SCHEDULING_DEFAULT_PRACTICE_ID=${SCHEDULING_DEFAULT_PRACTICE_ID}|SCHEDULING_GUEST_ACCESS_ENABLED=true|SCHEDULING_GUEST_PRACTICE_ID=${SCHEDULING_GUEST_PRACTICE_ID}|SCHEDULING_GUEST_PRACTICE_IDS=${SCHEDULING_GUEST_PRACTICE_IDS}|SCHEDULING_GUEST_BOOKINGS_COLLECTION=${SCHEDULING_GUEST_BOOKINGS_COLLECTION}|OTEL_ENABLED=${OTEL_ENABLED}|OTEL_SERVICE_NAME=adar-core-scheduling|OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}" \
+  --update-env-vars "^|^APP_NAME=adar-scheduling-api|APP_ENV=production|GCP_PROJECT_ID=${PROJECT_ID}|DOMAIN=scheduling|FIRESTORE_DATABASE=adar-scheduling-db|AUTH_FIRESTORE_DATABASE=adar-scheduling-db|ADK_MODEL=gemini-2.5-flash|EVAL_ENABLED=true|BILLING_ENABLED=true|SESSION_DB_URL=sqlite+aiosqlite:////tmp/scheduling_sessions.db|FRONTEND_URL=https://scheduling.adar.agomoniai.com|SCHEDULING_DEFAULT_PRACTICE_ID=${SCHEDULING_DEFAULT_PRACTICE_ID}|SCHEDULING_GUEST_ACCESS_ENABLED=true|SCHEDULING_GUEST_PRACTICE_ID=${SCHEDULING_GUEST_PRACTICE_ID}|SCHEDULING_GUEST_PRACTICE_IDS=${SCHEDULING_GUEST_PRACTICE_IDS}|SCHEDULING_GUEST_BOOKINGS_COLLECTION=${SCHEDULING_GUEST_BOOKINGS_COLLECTION}|SCHEDULING_GUEST_VOICE_ENABLED=${SCHEDULING_GUEST_VOICE_ENABLED}|OTEL_ENABLED=${OTEL_ENABLED}|OTEL_SERVICE_NAME=adar-core-scheduling|OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}" \
   --add-cloudsql-instances "${SQL_INSTANCE}" \
   --update-secrets "GOOGLE_API_KEY=google-api-key:latest,JWT_SECRET=scheduling-jwt-secret:latest,ADMIN_EMAIL=scheduling-admin-email:latest,ADMIN_PASSWORD=scheduling-admin-password:latest,SCHEDULING_API_KEY=scheduling-api-key:latest,GMAIL_USER=gmail-user:latest,GMAIL_APP_PASSWORD=gmail-app-password:latest,NOTIFY_FROM_EMAIL=from-email:latest,GEETABITAN_TTS_API_KEY=geetabitan-tts-api-key:latest,GEETABITAN_SPEECH_API_KEY=geetabitan-speech-api-key:latest,TRACE_DB_URL=scheduling-trace-db-url:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=scheduling-stripe-webhook-secret:latest,STRIPE_PRICE_FRONT_DESK_MONTHLY=scheduling-stripe-price-monthly:latest,STRIPE_PRICE_FRONT_DESK_YEARLY=scheduling-stripe-price-yearly:latest"
 
