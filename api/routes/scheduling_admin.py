@@ -144,6 +144,12 @@ class ProviderIn(BaseModel):
     name: str
     role: str = ""
     bio: str = ""
+    # Lets confirm_booking (domains/scheduling/tools/availability_tools.py)
+    # and create_guest_booking (scheduling_guest.py) notify this specific
+    # provider about a new booking, on top of the practice's own
+    # notification_email/ADMIN_EMAIL -- optional since not every practice
+    # will have entered one yet.
+    email: str = ""
     appointment_type_ids: list[str] = []
     working_hours: list[WorkingHour] = []
 
@@ -152,6 +158,7 @@ class ProviderPatch(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     bio: Optional[str] = None
+    email: Optional[str] = None
     appointment_type_ids: Optional[list[str]] = None
     working_hours: Optional[list[WorkingHour]] = None
     active: Optional[bool] = None
@@ -286,6 +293,7 @@ async def create_provider(practice_id: str, body: ProviderIn, team: dict = Depen
         "name": body.name.strip(),
         "role": body.role,
         "bio": body.bio.strip(),
+        "email": body.email.strip(),
         "appointment_type_ids": body.appointment_type_ids,
         "working_hours": [wh.model_dump() for wh in body.working_hours],
         "active": True,

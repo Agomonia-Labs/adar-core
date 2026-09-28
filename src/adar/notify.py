@@ -555,3 +555,55 @@ async def send_new_booking_notification_email(
             footer_org="Practice Scheduling Assistant",
         ),
     )
+
+
+async def send_booking_cancelled_notification_email(
+    to: str,
+    practice_name: str,
+    caller_name: str,
+    caller_phone: str,
+    appointment_type_name: str,
+    provider_name: str,
+    when_formatted: str,
+    appointment_id: str,
+    caller_email: str = "",
+    cancel_reason: str = "",
+):
+    """Staff-facing counterpart to send_new_booking_notification_email --
+    sent to the provider's own email plus the practice's notification_email
+    (falling back to ADMIN_EMAIL) whenever a booking is cancelled, from any
+    channel (the Front Desk app's My Appointments cancel button, or the
+    scheduling agent's cancel_appointment/reschedule_appointment tools), so
+    staff learn a slot just opened back up without having to check the
+    admin calendar. Best-effort -- never blocks or fails the cancellation
+    itself. See _send_cancellation_emails in api/routes/scheduling_guest.py,
+    shared by both channels."""
+    contact_line = caller_phone
+    if caller_email:
+        contact_line += f" · {caller_email}"
+    reason_line = f"<br><strong>Reason:</strong> {cancel_reason}" if cancel_reason else ""
+    body = f"""
+    <h2 style="color:#1A3326; margin-top:0;">Booking cancelled</h2>
+    <p>An appointment at <strong>{practice_name}</strong> was just cancelled.</p>
+    <div style="background:#EBF7F1; border:1px solid #C8E8D8; border-radius:8px; padding:16px; margin:20px 0;">
+      <strong>Was scheduled:</strong> {when_formatted}<br>
+      <strong>Provider:</strong> {provider_name}<br>
+      <strong>Visit type:</strong> {appointment_type_name}<br>
+      <strong>Patient:</strong> {caller_name}<br>
+      <strong>Contact:</strong> {contact_line}<br>
+      <strong>Confirmation ID:</strong> {appointment_id[:8]}{reason_line}
+    </div>
+    <p style="color:#5A8A70; font-size:0.85rem;">
+      That slot is now open again on the live calendar in the admin console.
+    </p>"""
+    await send_email(
+        to,
+        f"Booking cancelled — {caller_name} with {provider_name}, {when_formatted}",
+        _base_template(
+            "Booking cancelled",
+            body,
+            logo_text="Adar",
+            brand_name="Adar Scheduling",
+            footer_org="Practice Scheduling Assistant",
+        ),
+    )

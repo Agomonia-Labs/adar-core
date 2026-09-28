@@ -477,16 +477,39 @@ async def confirm_booking(
     practice_id: str = "",
     reason: str = "",
     caller_email: str = "",
+    tool_context: ToolContext = None,
 ) -> str:
     """Convert an active hold (from hold_slot) into a confirmed appointment.
     Fails if the hold has expired or was already used — call hold_slot again
     in that case. If caller_email is given, a confirmation email is sent
     after the booking is confirmed (best-effort — a failed send never undoes
-    the booking, since Firestore is already the source of truth by then)."""
+    the booking, since Firestore is already the source of truth by then).
+
+    This is a full production booking channel, not a demo. When this
+    conversation belongs to a signed-in ADAR Front Desk customer,
+    api/main.py's scheduling_guest_chat seeds tool_context.state with that
+    customer's real team_id/email via the ADK runner's state_delta --
+    never as an LLM-suppliable argument, so nothing typed in the
+    conversation can spoof it. When present, the appointment is tagged
+    with that account's guest_id so it shows up in the account's My
+    Appointments tab (same collection/field MyAppointmentsScreen already
+    reads for Book-tab bookings), and the full customer+provider+practice
+    email fan-out (_send_booking_emails, shared with the Book tab's REST
+    booking path in scheduling_guest.py) runs instead of the old
+    caller-email-only / practice-admin-only pair."""
     practice_id = _resolve_practice_id(practice_id)
     db = get_db()
     transaction = db.transaction()
     hold_ref = db.collection(settings.SCHEDULING_HOLDS_COLLECTION).document(hold_id)
+
+    customer_team_id = ""
+    customer_email = ""
+    if tool_context is not None:
+        try:
+            customer_team_id = (tool_context.state.get("_customer_team_id") or "").strip()
+            customer_email = (tool_context.state.get("_customer_email") or "").strip()
+        except Exception:
+            logger.warning("Could not read customer identity from tool_context.state", exc_info=True)
 
     @firestore.async_transactional
     async def _txn(txn: firestore.AsyncTransaction):
@@ -504,7 +527,7 @@ async def confirm_booking(
 
         appointment_id = str(uuid.uuid4())
         appt_ref = db.collection(settings.SCHEDULING_APPOINTMENTS_COLLECTION).document(appointment_id)
-        txn.set(appt_ref, {
+        appt_data = {
             "practice_id": practice_id,
             "provider_id": hold["provider_id"],
             "provider_name": hold["provider_name"],
@@ -517,15 +540,21 @@ async def confirm_booking(
             "caller_email": caller_email,
             "reason": reason,
             "status": "confirmed",
-            "source_channel": "voice_in_app",
+            "source_channel": "ask_adar_chat" if customer_team_id else "voice_in_app",
             "created_at": firestore.SERVER_TIMESTAMP,
             "updated_at": firestore.SERVER_TIMESTAMP,
-        })
+        }
+        if customer_team_id:
+            appt_data["guest_id"] = customer_team_id
+        txn.set(appt_ref, appt_data)
         txn.update(hold_ref, {"status": "confirmed"})
-        return appointment_id, hold["start_time"], hold["provider_name"], hold["appointment_type_name"]
+        return (
+            appointment_id, hold["start_time"], hold["provider_id"],
+            hold["provider_name"], hold["appointment_type_name"],
+        )
 
     try:
-        appointment_id, start, provider_name, appointment_type_name = await _txn(transaction)
+        appointment_id, start, provider_id, provider_name, appointment_type_name = await _txn(transaction)
     except ValueError as exc:
         reason_map = {
             "not_found": "I can't find that hold — please check availability and hold a slot again.",
@@ -535,58 +564,51 @@ async def confirm_booking(
         return reason_map.get(str(exc), "I couldn't confirm that booking — please try again.")
 
     practice_rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
-    practice = practice_rows[0] if practice_rows else {}
-    practice_name = practice.get("name") or "your practice"
+    practice_data = practice_rows[0] if practice_rows else {}
 
+    provider_data: dict = {}
+    try:
+        provider_snap = await db.collection(settings.SCHEDULING_PROVIDERS_COLLECTION).document(provider_id).get()
+        if provider_snap.exists:
+            provider_data = provider_snap.to_dict() or {}
+    except Exception:
+        logger.warning("Could not load provider %s for booking notifications", provider_id, exc_info=True)
+    provider_data.setdefault("name", provider_name)
+
+    # Shared with the Book tab's REST booking path (create_guest_booking in
+    # scheduling_guest.py) so both channels notify the same targets: the
+    # caller's typed email + the signed-in account's email (deduped), and
+    # the provider's own email + the practice admin/ADMIN_EMAIL (deduped).
+    # Imported here rather than at module load time to avoid a circular
+    # import -- api.routes.scheduling_guest is already fully loaded by the
+    # time this tool runs (domains.*.tools is imported lazily inside
+    # build_agents(), well after api/main.py finishes importing its routers).
     email_sent = False
-    if caller_email:
-        try:
-            from src.adar.notify import send_appointment_confirmation_email
-            await send_appointment_confirmation_email(
-                to=caller_email,
-                caller_name=caller_name,
-                practice_name=practice_name,
-                appointment_type_name=appointment_type_name,
-                provider_name=provider_name,
-                when_formatted=_format_slot(start),
-                appointment_id=appointment_id,
-            )
-            email_sent = True
-        except Exception:
-            logger.exception("Appointment confirmation email failed for %s (booking still confirmed)", appointment_id)
-
-    # Staff-facing "new booking" notification — separate from the caller's
-    # confirmation email above and never allowed to affect it: this is
-    # purely so front-desk staff learn about a new booking without opening
-    # the admin calendar. Falls back to the platform ADMIN_EMAIL when the
-    # practice hasn't set its own notification_email (matches today's
-    # reality that one operator runs every practice on a deployment until
-    # per-practice staff logins exist).
-    notify_to = practice.get("notification_email") or settings.ADMIN_EMAIL
-    if notify_to:
-        try:
-            from src.adar.notify import send_new_booking_notification_email
-            await send_new_booking_notification_email(
-                to=notify_to,
-                practice_name=practice_name,
-                caller_name=caller_name,
-                caller_phone=caller_phone,
-                caller_email=caller_email,
-                appointment_type_name=appointment_type_name,
-                provider_name=provider_name,
-                when_formatted=_format_slot(start),
-                appointment_id=appointment_id,
-                reason=reason,
-            )
-        except Exception:
-            logger.exception("New-booking staff notification failed for %s (booking still confirmed)", appointment_id)
+    try:
+        from api.routes.scheduling_guest import _send_booking_emails
+        await _send_booking_emails(
+            practice_data=practice_data,
+            provider_data=provider_data,
+            appointment_type_name=appointment_type_name,
+            caller_name=caller_name,
+            caller_phone=caller_phone,
+            caller_email=caller_email,
+            customer_email=customer_email,
+            reason=reason,
+            when_formatted=_format_slot(start),
+            appointment_id=appointment_id,
+        )
+        email_sent = bool(caller_email or customer_email)
+    except Exception:
+        logger.exception("Booking notification email fan-out failed for %s (booking still confirmed)", appointment_id)
 
     result = (
         f"Booked. {caller_name} is confirmed with {provider_name} for {_format_slot(start)} "
         f"(confirmation ID: {appointment_id[:8]})."
     )
-    if caller_email:
-        result += f" A confirmation email is on its way to {caller_email}." if email_sent else (
+    confirmation_target = caller_email or customer_email
+    if confirmation_target:
+        result += f" A confirmation email is on its way to {confirmation_target}." if email_sent else (
             " I tried to send a confirmation email but it didn't go through — give them the "
             "confirmation ID directly."
         )
@@ -635,8 +657,14 @@ async def _resolve_appointment(db, appointment_id: str):
     return None, None
 
 
-async def cancel_appointment(appointment_id: str, practice_id: str = "", reason: str = "") -> str:
-    """Cancel a confirmed appointment by its confirmation ID."""
+async def cancel_appointment(
+    appointment_id: str, practice_id: str = "", reason: str = "",
+    tool_context: ToolContext = None,
+) -> str:
+    """Cancel a confirmed appointment by its confirmation ID. Sends the same
+    customer+provider+practice-admin email fan-out as a Front Desk app
+    cancellation (_send_cancellation_emails, shared with cancel_guest_booking
+    in api/routes/scheduling_guest.py) -- not just a customer-only email."""
     practice_id = _resolve_practice_id(practice_id)
     db = get_db()
     ref, snap = await _resolve_appointment(db, appointment_id)
@@ -652,39 +680,65 @@ async def cancel_appointment(appointment_id: str, practice_id: str = "", reason:
         "updated_at": firestore.SERVER_TIMESTAMP,
     })
 
-    caller_email = data.get("caller_email")
-    email_sent = False
-    if caller_email:
+    customer_email = ""
+    if tool_context is not None:
         try:
-            from src.adar.notify import send_appointment_cancelled_email
-            practice_rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
-            practice_name = practice_rows[0].get("name") if practice_rows else "your practice"
-            await send_appointment_cancelled_email(
-                to=caller_email,
-                caller_name=data.get("caller_name", ""),
-                practice_name=practice_name,
-                appointment_type_name=data.get("appointment_type_name", "appointment"),
-                provider_name=data.get("provider_name", "the provider"),
-                when_formatted=_format_slot(data["start_time"]),
-                appointment_id=appointment_id,
-                cancel_reason=reason,
-            )
-            email_sent = True
+            customer_email = (tool_context.state.get("_customer_email") or "").strip()
         except Exception:
-            logger.exception("Cancellation email failed for %s (cancellation still applied)", appointment_id)
+            logger.warning("Could not read customer identity from tool_context.state", exc_info=True)
 
+    practice_rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
+    practice_data = practice_rows[0] if practice_rows else {}
+
+    provider_data: dict = {}
+    provider_id = data.get("provider_id", "")
+    if provider_id:
+        try:
+            provider_snap = await db.collection(settings.SCHEDULING_PROVIDERS_COLLECTION).document(provider_id).get()
+            if provider_snap.exists:
+                provider_data = provider_snap.to_dict() or {}
+        except Exception:
+            logger.warning("Could not load provider %s for cancellation notifications", provider_id, exc_info=True)
+    provider_data.setdefault("name", data.get("provider_name", ""))
+
+    caller_email = data.get("caller_email") or ""
+    email_sent = False
+    try:
+        from api.routes.scheduling_guest import _send_cancellation_emails
+        await _send_cancellation_emails(
+            practice_data=practice_data,
+            provider_data=provider_data,
+            appointment_type_name=data.get("appointment_type_name", "appointment"),
+            caller_name=data.get("caller_name", ""),
+            caller_phone=data.get("caller_phone", ""),
+            caller_email=caller_email,
+            customer_email=customer_email,
+            cancel_reason=reason,
+            when_formatted=_format_slot(data["start_time"]),
+            appointment_id=appointment_id,
+        )
+        email_sent = bool(caller_email or customer_email)
+    except Exception:
+        logger.exception("Cancellation email fan-out failed for %s (cancellation still applied)", appointment_id)
+
+    confirmation_target = caller_email or customer_email
     result = f"Cancelled the {data.get('appointment_type_name', 'appointment')} with {data.get('provider_name', 'the provider')} on {_format_slot(data['start_time'])}."
-    if caller_email:
+    if confirmation_target:
         result += " A cancellation email was sent." if email_sent else " (Cancellation email failed to send — let them know directly.)"
     return result
 
 
-async def reschedule_appointment(appointment_id: str, practice_id: str = "") -> str:
+async def reschedule_appointment(
+    appointment_id: str, practice_id: str = "", tool_context: ToolContext = None,
+) -> str:
     """Start a reschedule: cancels the existing appointment and tells the
     caller to pick a new time via check_availability + hold_slot. Kept as two
     steps deliberately, so the caller always confirms the new time before the
     old one is given up for good."""
-    result = await cancel_appointment(appointment_id, practice_id=practice_id, reason="reschedule requested")
+    result = await cancel_appointment(
+        appointment_id, practice_id=practice_id, reason="reschedule requested",
+        tool_context=tool_context,
+    )
     if result.startswith("Cancelled"):
         return result + " Now let's find a new time — what date or provider works best?"
     return result

@@ -15,7 +15,7 @@ from typing import Optional
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 
@@ -36,6 +36,7 @@ from api.routes.scheduling_directory import router as scheduling_directory_route
 from api.routes.scheduling_guest import (
     router as scheduling_guest_router,
     get_scheduling_guest,
+    decode_customer_token as decode_scheduling_customer_token,
     enforce_query_rate_limit as enforce_scheduling_guest_query_rate_limit,
     enforce_voice_rate_limit as enforce_scheduling_guest_voice_rate_limit,
 )
@@ -1133,7 +1134,10 @@ async def get_or_create_session(user_id: str, session_id: Optional[str]):
     )
 
 
-async def _run_agent_with_retries(runner, user_id, session_id, new_message, max_attempts: int = 3) -> str:
+async def _run_agent_with_retries(
+    runner, user_id, session_id, new_message, max_attempts: int = 3,
+    state_delta: Optional[dict] = None,
+) -> str:
     """
     Run the orchestrator and collect its final response text. Gemini
     occasionally returns a transient 503 UNAVAILABLE (a momentary outage on
@@ -1158,6 +1162,7 @@ async def _run_agent_with_retries(runner, user_id, session_id, new_message, max_
                 user_id=user_id,
                 session_id=session_id,
                 new_message=new_message,
+                state_delta=state_delta,
             ):
                 parts = (event.content.parts if event.content else None) or []
 
@@ -1230,6 +1235,7 @@ async def _execute_chat(
     *,
     track_account_usage: bool = True,
     run_evaluation: bool = True,
+    extra_state_delta: Optional[dict] = None,
 ):
     # Rate limiting
     client_ip = _get_client_ip(http_request)
@@ -1306,6 +1312,7 @@ async def _execute_chat(
                 async with tracing.span("agent_run", metadata={"adar.domain": DOMAIN}):
                     response_text = await _run_agent_with_retries(
                         runner, request.user_id, session.id, user_message,
+                        state_delta=extra_state_delta,
                     )
             except Exception:
                 if DOMAIN != "restaurants":
@@ -1520,22 +1527,161 @@ async def delete_geetabitan_guest_session(
         raise HTTPException(status_code=500, detail="Could not reset the guest session")
 
 
+# LangCode (apps/frontdesk/src/i18n.ts) -> the English language name the
+# scheduling agent's own base instructions already use ("Respond in the
+# same language the caller is writing in -- English, Bangla, Hindi, Urdu,
+# Arabic, or Spanish"). Keeps the override line's phrasing consistent with
+# what the agent already expects rather than inventing new vocabulary.
+_FRONTDESK_LANGUAGE_NAMES = {
+    "en-US": "English",
+    "es-US": "Spanish",
+    "bn-BD": "Bangla",
+    "hi-IN": "Hindi",
+    "ar-XA": "Arabic",
+}
+
+
 @app.post("/api/scheduling/guest/chat", response_model=ChatResponse)
 async def scheduling_guest_chat(
     request: ChatRequest,
     http_request: Request,
     guest: dict = Depends(get_scheduling_guest),
+    x_customer_token: Optional[str] = Header(None, alias="X-Customer-Token"),
 ):
     """Guest ("Ask ADAR") chat for the ADAR Front Desk mobile app -- same
     no-login pattern as ARCL/Geetabitan guest chat, scoped to the guest
-    token's identity. Does not touch the structured booking flow (see
-    api/routes/scheduling_guest.py's /session, /providers, /bookings, etc.)
-    -- this is purely conversational Q&A (service info, hours, general
-    questions) for customers who'd rather ask than tap through the wizard.
+    token's identity. This used to be purely conversational Q&A, but the
+    scheduling_agent (see agents_config.scheduling.json) already carries
+    the full hold_slot/confirm_booking tool set and its instructions
+    already expect a pre-chat "caller details" hint -- see the caller_name/
+    caller_phone/caller_email handling below -- so a conversation that
+    supplies one can complete a real booking, not just discuss one.
+
+    The chat itself still authenticates as the anonymous guest (Authorization:
+    Bearer <guest token>) -- that's what scopes rate limiting and the
+    allowed-practices check. Front Desk is sign-in-only, though, so the app
+    ALSO has the customer's real, signed-in account token on hand; it sends
+    that separately as X-Customer-Token. When present and valid, we attach
+    the customer's real team_id/email to this turn via the ADK runner's
+    state_delta (never as an LLM-suppliable tool argument -- a tool reading
+    it from tool_context.state can't be spoofed by anything the caller
+    types), so confirm_booking can tag any appointment booked in this
+    conversation with the signed-in account's guest_id and it shows up in
+    that account's My Appointments tab, exactly like a Book-tab booking.
+    A missing/invalid customer token just means the turn proceeds
+    anonymously, same as today.
     """
     await enforce_scheduling_guest_query_rate_limit(guest)
+
+    context_lines: list[str] = []
+
+    customer_identity = decode_scheduling_customer_token(x_customer_token or "")
+    extra_state_delta: Optional[dict] = None
+    if customer_identity:
+        extra_state_delta = {
+            "_customer_team_id": customer_identity.get("team_id") or customer_identity.get("sub"),
+            "_customer_email": (customer_identity.get("email") or "").strip().lower(),
+        }
+
+    # The app's active on-screen/voice language (LangCode, e.g. "bn-BD")
+    # picked in the header language picker. The base agent instructions
+    # only ever auto-detect language from what the caller typed, which
+    # leaves the reply in English whenever the customer types in English
+    # script (or the app sends a system-style message) even though they've
+    # explicitly chosen Bangla/Hindi/Spanish/Arabic for the rest of the
+    # app -- this override makes the reply (and therefore TTS, which just
+    # speaks whatever text comes back) follow the app's language choice
+    # instead of guessing from the message text.
+    preferred_language = _FRONTDESK_LANGUAGE_NAMES.get((request.preferred_language or "").strip())
+    if preferred_language and preferred_language != "English":
+        context_lines.append(
+            f'[Session context -- do not repeat this line to the customer: the customer has '
+            f'selected "{preferred_language}" as their language in the app. Reply in '
+            f'{preferred_language} for this entire conversation, regardless of what language '
+            f'or script the message below is written in -- even if they type '
+            f'in English, keep replying in {preferred_language}. This only affects what you '
+            f'say to the customer -- practice names, appointment type names, provider names, '
+            f'and any value you pass into a tool call must stay exactly as the tools return '
+            f'them, never translated or transliterated.]'
+        )
+
+    # The Front Desk app juggles several demo practices under one guest
+    # token (see scheduling_guest.py's /session, which mints one token
+    # scoped to every configured demo practice at once). The scheduling
+    # agent's own practice-resolution tool (find_practice, in
+    # domains/scheduling/tools/availability_tools.py) was built for a
+    # single-practice pilot and has no way to know which practice the
+    # customer has selected in the app's header picker -- left alone, it
+    # falls back to SCHEDULING_DEFAULT_PRACTICE_ID every time, which is
+    # exactly the "Ask ADAR answers for the wrong practice/provider" bug
+    # reported. Ground every turn in whatever practice_id the app says is
+    # currently selected, so switching practices mid-conversation takes
+    # effect on the very next message instead of relying on the model to
+    # notice on its own.
+    allowed_practice_ids = set(guest.get("practice_ids") or [guest.get("practice_id")])
+    selected_practice_id = (request.practice_id or "").strip()
+    if selected_practice_id and selected_practice_id in allowed_practice_ids:
+        practice_name = selected_practice_id
+        try:
+            db = _firestore.AsyncClient(
+                project=settings.GCP_PROJECT_ID,
+                database=settings.FIRESTORE_DATABASE,
+            )
+            doc = await db.collection(settings.SCHEDULING_PRACTICES_COLLECTION).document(selected_practice_id).get()
+            if doc.exists:
+                practice_name = (doc.to_dict() or {}).get("name", selected_practice_id)
+        except Exception:
+            logger.warning("Could not resolve practice name for guest chat context", exc_info=True)
+        context_lines.append(
+            f'[Session context -- do not repeat this line to the customer: they currently '
+            f'have "{practice_name}" (practice_id="{selected_practice_id}") selected in the '
+            f'app. Use this practice_id for every tool call this turn (list_providers, '
+            f'list_appointment_types, check_availability, and any other scheduling tool) -- '
+            f'this always overrides whatever practice a previous message in this conversation '
+            f'resolved to, and there is no need to call find_practice again. Only use a '
+            f'different practice_id if the customer explicitly names a different practice in '
+            f'the message below.]'
+        )
+        # api/main.py's _execute_chat only ever tags a trace's practice_id
+        # from session.state["resolved_practice_id"] -- which used to be
+        # written exclusively by find_practice (availability_tools.py). Now
+        # that we ground every turn in the app's selected practice above and
+        # tell the model there's no need to call find_practice again, that
+        # tool stops running for virtually every turn, so resolved_practice_id
+        # never gets set and every trace silently falls back to
+        # SCHEDULING_DEFAULT_PRACTICE_ID -- invisible in the admin Traces tab
+        # for any of the app's demo practices, which is why traces appeared
+        # to stop working the moment this grounding was added. Set it here
+        # directly, the same way we already do for _customer_team_id/
+        # _customer_email below, so the trace is tagged correctly even
+        # though find_practice never runs.
+        extra_state_delta = {**(extra_state_delta or {}), "resolved_practice_id": selected_practice_id}
+
+    # The Front Desk app's "Ask ADAR" tab lets the customer fill their name/
+    # phone/email into a text-box form (rather than typing it out
+    # conversationally) and sends it once, right after they save the form --
+    # not on every turn. Hand it to the agent in exactly the bracketed shape
+    # its own instructions already describe ("collected before the
+    # conversation begins ... handed to you as a bracketed hint"), so it
+    # greets/confirms once and never asks again, and has everything it
+    # needs to call confirm_booking once the customer picks a time.
+    caller_name = (request.caller_name or "").strip()[:200]
+    caller_phone = (request.caller_phone or "").strip()[:60]
+    caller_email = (request.caller_email or "").strip()[:200]
+    if caller_name and caller_phone and caller_email:
+        context_lines.append(
+            f'[Caller details collected via the pre-chat form -- name: {caller_name}; '
+            f'email: {caller_email}; phone: {caller_phone}]'
+        )
+
+    outgoing_message = (
+        "\n".join(context_lines) + "\n\n" + request.message
+        if context_lines
+        else request.message
+    )
+
     scoped_request = ChatRequest(
-        message=request.message,
+        message=outgoing_message,
         user_id=guest["sub"],
         session_id=request.session_id,
     )
@@ -1544,6 +1690,7 @@ async def scheduling_guest_chat(
         http_request,
         track_account_usage=False,
         run_evaluation=False,
+        extra_state_delta=extra_state_delta,
     )
 
 
