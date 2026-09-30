@@ -24,6 +24,7 @@ from pydantic import BaseModel, EmailStr, Field
 from google.cloud import firestore
 
 from src.adar.config import settings, DOMAIN
+from src.adar.notify import send_account_deleted_email
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,9 @@ class OTPVerifyRequest(BaseModel):
 
 class OTPResendRequest(BaseModel):
     mfa_token: str
+
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(..., min_length=1)
 
 class TeamInfo(BaseModel):
     team_id:        str
@@ -611,3 +615,60 @@ async def me(team: dict = Depends(get_current_team)):
         status=d["status"],           contact_person=d.get("contact_person", ""),
         created_at=d.get("created_at", ""),
     )
+
+
+@router.post("/delete-account")
+async def delete_account(req: DeleteAccountRequest, team: dict = Depends(get_current_team)):
+    """Self-service account deletion -- required by App Store Guideline
+    5.1.1(v) for any app that lets a customer create an account (Front
+    Desk's AccountGate does). Requires the caller's current password as a
+    confirmation step, same as a destructive action in any of the other
+    Adar apps. Deletes the team's own Firestore profile, and -- for the
+    scheduling domain specifically -- their appointment bookings too, since
+    those are keyed off this same team_id (see get_scheduling_customer /
+    create_guest_booking in scheduling_guest.py) and would otherwise be
+    orphaned. Other domains (ARCL, Geetabitan) don't yet have their own
+    per-user data beyond the team profile, so there's nothing else to
+    cascade there today.
+    """
+    if team.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Admin accounts cannot be self-deleted")
+
+    team_id = team["team_id"]
+    db = get_db()
+    doc_ref = db.collection(TEAMS_COLLECTION).document(team_id)
+    doc = await doc_ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    data = doc.to_dict()
+    if not _verify_password(req.password, data.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    email      = data.get("email", "")
+    team_name  = data.get("team_name", "")
+
+    # Cascade: scheduling bookings are stored separately, keyed by
+    # guest_id == team_id -- delete the customer's own bookings so review
+    # (and real customers) don't leave orphaned appointment records behind.
+    if DOMAIN == "scheduling":
+        bookings_collection = os.environ.get(
+            "SCHEDULING_GUEST_BOOKINGS_COLLECTION", "scheduling_guest_bookings"
+        ).strip()
+        query = db.collection(bookings_collection).where("guest_id", "==", team_id)
+        deleted_bookings = 0
+        async for booking_doc in query.stream():
+            await booking_doc.reference.delete()
+            deleted_bookings += 1
+        logger.info(f"Deleted {deleted_bookings} booking(s) for team={team_id}")
+
+    await doc_ref.delete()
+    logger.info(f"Account deleted: team={team_id} email={email}")
+
+    if email:
+        try:
+            await send_account_deleted_email(email, team_name or "there")
+        except Exception as e:
+            logger.error(f"Failed to send account-deleted email to {email}: {e}")
+
+    return {"message": "Your account has been permanently deleted."}

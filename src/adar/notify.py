@@ -607,3 +607,32 @@ async def send_booking_cancelled_notification_email(
             footer_org="Practice Scheduling Assistant",
         ),
     )
+
+
+async def send_account_deleted_email(to: str, team_name: str):
+    """Confirmation email sent when a customer deletes their own account
+    via POST /api/auth/delete-account (self-service, required by App Store
+    Guideline 5.1.1(v) for any app that supports account creation). Kept
+    domain-neutral like send_otp_email -- _BRAND already resolves the right
+    brand_name/footer_org per DOMAIN, so this reads correctly whether the
+    deleted account belonged to ARCL, Geetabitan, or Front Desk (scheduling).
+    Best-effort: send_email swallows its own errors, so a failed email never
+    blocks the deletion itself -- the account is already gone by the time
+    this is called."""
+    body = f"""
+    <h2 style="color:#1A3326; margin-top:0;">Your account has been deleted</h2>
+    <p>Hi {team_name},</p>
+    <p>As requested, your {_BRAND['brand_name']} account and all associated data
+      have been permanently deleted.</p>
+    <div style="background:#F5F5F5; border:1px solid #E0E0E0; border-radius:8px; padding:16px; margin:20px 0;">
+      This action cannot be undone. If you'd like to use {_BRAND['brand_name']} again,
+      you're welcome to create a new account at any time.
+    </div>
+    <p style="color:#5A8A70; font-size:0.85rem;">
+      If you didn't request this, please contact us immediately by replying to this email.
+    </p>"""
+    await send_email(
+        to,
+        f"Your {_BRAND['brand_name']} account has been deleted",
+        _base_template("Account deleted", body),
+    )
