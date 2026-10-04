@@ -1,0 +1,87 @@
+name: projects/bdas-493785/dashboards/adar-geetabitan-usage
+displayName: ADAR Geetabitan Live Usage
+mosaicLayout:
+  columns: 12
+  tiles:
+    - xPos: 0
+      yPos: 0
+      width: 4
+      height: 4
+      widget:
+        title: API hits per hour
+        scorecard:
+          timeSeriesQuery:
+            timeSeriesFilter:
+              filter: metric.type="logging.googleapis.com/user/adar_geetabitan_api_hits" AND resource.type="cloud_run_revision"
+              aggregation:
+                alignmentPeriod: 3600s
+                perSeriesAligner: ALIGN_SUM
+                crossSeriesReducer: REDUCE_SUM
+    - xPos: 4
+      yPos: 0
+      width: 4
+      height: 4
+      widget:
+        title: API hits per day
+        scorecard:
+          timeSeriesQuery:
+            timeSeriesFilter:
+              filter: metric.type="logging.googleapis.com/user/adar_geetabitan_api_hits" AND resource.type="cloud_run_revision"
+              aggregation:
+                alignmentPeriod: 86400s
+                perSeriesAligner: ALIGN_SUM
+                crossSeriesReducer: REDUCE_SUM
+    - xPos: 8
+      yPos: 0
+      width: 4
+      height: 4
+      widget:
+        title: API hits per 30 days
+        scorecard:
+          timeSeriesQuery:
+            timeSeriesFilter:
+              filter: metric.type="logging.googleapis.com/user/adar_geetabitan_api_hits" AND resource.type="cloud_run_revision"
+              aggregation:
+                alignmentPeriod: 2592000s
+                perSeriesAligner: ALIGN_SUM
+                crossSeriesReducer: REDUCE_SUM
+    - xPos: 0
+      yPos: 4
+      width: 12
+      height: 5
+      widget:
+        title: Guest activity by day
+        xyChart:
+          chartOptions:
+            mode: COLOR
+          yAxis:
+            label: Requests
+            scale: LINEAR
+          dataSets:
+            - legendTemplate: Sessions
+              plotType: LINE
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: metric.type="logging.googleapis.com/user/adar_geetabitan_sessions" AND resource.type="cloud_run_revision"
+                  aggregation:
+                    alignmentPeriod: 86400s
+                    perSeriesAligner: ALIGN_SUM
+                    crossSeriesReducer: REDUCE_SUM
+            - legendTemplate: Questions
+              plotType: LINE
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: metric.type="logging.googleapis.com/user/adar_geetabitan_questions" AND resource.type="cloud_run_revision"
+                  aggregation:
+                    alignmentPeriod: 86400s
+                    perSeriesAligner: ALIGN_SUM
+                    crossSeriesReducer: REDUCE_SUM
+            - legendTemplate: Voice requests
+              plotType: LINE
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: metric.type="logging.googleapis.com/user/adar_geetabitan_voice_requests" AND resource.type="cloud_run_revision"
+                  aggregation:
+                    alignmentPeriod: 86400s
+                    perSeriesAligner: ALIGN_SUM
+                    crossSeriesReducer: REDUCE_SUM

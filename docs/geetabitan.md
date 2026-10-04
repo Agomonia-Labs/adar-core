@@ -130,6 +130,65 @@ npm run build -- --mode geetabitan
 firebase deploy --only hosting:geetabitan
 ```
 
+## Live Experience Usage
+
+Production usage is measured with four Cloud Logging counter metrics. This
+uses the existing Cloud Run request logs and doesn't store question text:
+
+| Metric | Meaning |
+|--------|---------|
+| `adar_geetabitan_api_hits` | All non-preflight guest API requests |
+| `adar_geetabitan_sessions` | Temporary guest sessions created |
+| `adar_geetabitan_questions` | Questions submitted to the chat endpoint |
+| `adar_geetabitan_voice_requests` | Speech-to-text and text-to-speech requests |
+
+Run the usage report for rolling hourly, daily, weekly, and monthly totals:
+
+```bash
+cd /Users/brajadas/project/adar-core
+bash infra/geetabitan-usage.sh
+```
+
+The report also shows one row for each of the last seven calendar days. It uses
+Pacific Time by default. To report dates in Bangladesh time:
+
+```bash
+REPORT_TIMEZONE=Asia/Dhaka bash infra/geetabitan-usage.sh
+```
+
+The managed dashboard is named **ADAR Geetabitan Live Usage**. To validate or
+recreate it from source control:
+
+```bash
+gcloud monitoring dashboards create \
+  --project=bdas-493785 \
+  --validate-only \
+  --config-from-file=infra/geetabitan-usage-dashboard.yaml
+
+gcloud monitoring dashboards create \
+  --project=bdas-493785 \
+  --config-from-file=infra/geetabitan-usage-dashboard.yaml
+```
+
+To use another project or service:
+
+```bash
+PROJECT_ID=your-project SERVICE_NAME=your-service \
+  bash infra/geetabitan-usage.sh
+```
+
+In Google Cloud Console, open **Monitoring > Metrics Explorer** and select a
+metric under `logging.googleapis.com/user/`. Use **Sum** and an alignment
+period of `1 hour` or `1 day`; change the dashboard time range to 30 days for
+the monthly view. Log-based metrics begin collecting after they are created
+and aren't populated retroactively. The script above reads retained request
+logs, so it can report recent activity that predates metric creation.
+
+For page views, unique visitors, retention, and approximate country reporting,
+link Firebase project `bdas-493785` to a GA4 property and instrument the public
+website. The Firebase web configuration currently has no GA4 measurement ID,
+so geographic website analytics are not yet active.
+
 ---
 
 ## Ingestion Pipeline
