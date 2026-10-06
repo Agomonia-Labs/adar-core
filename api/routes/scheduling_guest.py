@@ -612,8 +612,22 @@ async def create_guest_booking(body: GuestBookingIn, customer: dict = Depends(ge
         raise HTTPException(status_code=400, detail="start_time must be an ISO 8601 datetime")
     if starts_at.tzinfo is None:
         starts_at = starts_at.replace(tzinfo=timezone.utc)
-    if starts_at <= datetime.now(timezone.utc):
+    now = datetime.now(timezone.utc)
+    if starts_at <= now:
         raise HTTPException(status_code=400, detail="Bookings must be in the future")
+    # This REST path (unlike the voice/chat tools' check_availability, which
+    # only ever offers slots already inside the window) lets the client pick
+    # any start_time directly, so the practice's own lead_time_minutes/
+    # max_advance_days guardrails have to be re-checked here too -- otherwise
+    # a customer could book arbitrarily far out (or with no notice at all)
+    # regardless of what the practice configured, e.g. the 7-day cap a
+    # dine-in restaurant practice relies on.
+    lead_time_minutes = int(practice_data.get("lead_time_minutes") or 120)
+    max_advance_days = int(practice_data.get("max_advance_days") or 60)
+    if starts_at < now + timedelta(minutes=lead_time_minutes):
+        raise HTTPException(status_code=400, detail=f"Bookings need at least {lead_time_minutes} minutes' notice")
+    if starts_at > now + timedelta(days=max_advance_days):
+        raise HTTPException(status_code=400, detail=f"Bookings can only be made up to {max_advance_days} days in advance")
 
     duration = int(appointment_type.get("duration_minutes", 30))
     ends_at = starts_at + timedelta(minutes=duration)

@@ -130,6 +130,29 @@ async def _get_practice_tz(practice_id: str) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
+async def _get_practice_guardrails(practice_id: str) -> tuple[ZoneInfo, int, int]:
+    """Like _get_practice_tz, but also returns the practice's own
+    lead_time_minutes/max_advance_days. These are stored on the practice doc
+    at creation (see scheduling_admin.py's PracticeIn / run_ingestion.py) but
+    check_availability/get_weekly_availability previously never read them
+    back -- they silently fell through to compute_open_slots's hardcoded
+    module defaults (120min/60days) for every practice regardless of what
+    was actually configured. A practice that needs a tighter window (e.g. a
+    restaurant capped at max_advance_days=7 for dine-in reservations) wasn't
+    actually enforced. One query, reused for tz + both guardrails."""
+    rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
+    doc = rows[0] if rows else {}
+    tz_name = doc.get("timezone") or "UTC"
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        logger.warning("Unknown timezone %r for practice %s; defaulting to UTC", tz_name, practice_id)
+        tz = ZoneInfo("UTC")
+    lead_time_minutes = int(doc.get("lead_time_minutes") or DEFAULT_LEAD_TIME_MINUTES)
+    max_advance_days = int(doc.get("max_advance_days") or DEFAULT_MAX_ADVANCE_DAYS)
+    return tz, lead_time_minutes, max_advance_days
+
+
 async def _find_appointment_type(practice_id: str, appointment_type_name: str) -> Optional[dict]:
     rows = await direct_query(settings.SCHEDULING_APPOINTMENT_TYPES_COLLECTION, {"practice_id": practice_id}, limit=50)
     # Missing `active` (every type seeded before the admin console added this
@@ -279,7 +302,7 @@ async def check_availability(
     if not provider:
         return "I couldn't find an available provider for that appointment type."
 
-    tz = await _get_practice_tz(practice_id)
+    tz, lead_time_minutes, max_advance_days = await _get_practice_guardrails(practice_id)
     window_start = None
     if start_date:
         try:
@@ -294,6 +317,8 @@ async def check_availability(
         buffer_minutes=int(appt_type.get("buffer_minutes", 0)),
         now=datetime.now(tz),
         days_ahead=days_ahead,
+        lead_time_minutes=lead_time_minutes,
+        max_advance_days=max_advance_days,
         tz=tz,
         window_start=window_start,
     )
@@ -333,7 +358,7 @@ async def get_weekly_availability(
     if not provider:
         return "I couldn't find an available provider for that appointment type."
 
-    tz = await _get_practice_tz(practice_id)
+    tz, lead_time_minutes, max_advance_days = await _get_practice_guardrails(practice_id)
     now = datetime.now(tz)
     busy = await _busy_intervals(practice_id, provider["doc_id"], tz)
     # One scan across the whole span, generous max_results so it isn't cut
@@ -345,6 +370,8 @@ async def get_weekly_availability(
         buffer_minutes=int(appt_type.get("buffer_minutes", 0)),
         now=now,
         days_ahead=weeks_ahead * 7,
+        lead_time_minutes=lead_time_minutes,
+        max_advance_days=max_advance_days,
         tz=tz,
         max_results=2000,
     )
