@@ -85,6 +85,20 @@ def _strip_song_ids(text: str) -> str:
     return text
 
 
+def _strip_scheduling_internals(text: str) -> str:
+    """Remove the scheduling agent's internal slot_start_iso marker from
+    user-facing output -- same precedent as _strip_song_ids above. The
+    agent's own instructions already tell it never to read this bracket
+    (or any part of it) out loud; it needs the exact timestamp in its own
+    context to pass to hold_slot, but repeatedly still echoed it into the
+    reply shown to the caller. Rather than keep tightening the wording and
+    hoping, strip it here unconditionally so a raw ISO timestamp can never
+    reach the customer regardless of what the model does."""
+    if not text:
+        return text
+    return re.sub(r"\s*\[slot_start_iso:?[^\]]*\]", "", text, flags=re.IGNORECASE)
+
+
 def _is_youtube_play_request(text: str) -> bool:
     return bool(re.search(r"youtube|youtu\.be|ইউটিউব|play|listen|শুন|শোন|লিংক", text or "", re.IGNORECASE))
 
@@ -1324,6 +1338,7 @@ async def _execute_chat(
         if not response_text:
             response_text = "I couldn't find an answer. Please try rephrasing your question."
         response_text = _strip_song_ids(response_text)
+        response_text = _strip_scheduling_internals(response_text)
         if DOMAIN == "geetabitan" and _is_youtube_play_request(message) and not _has_youtube_url(response_text):
             try:
                 from domains.geetabitan.tools.song_tools import play_youtube_song
@@ -1620,6 +1635,7 @@ async def scheduling_guest_chat(
     # notice on its own.
     allowed_practice_ids = set(guest.get("practice_ids") or [guest.get("practice_id")])
     selected_practice_id = (request.practice_id or "").strip()
+    practice_tz_name = None
     if selected_practice_id and selected_practice_id in allowed_practice_ids:
         practice_name = selected_practice_id
         try:
@@ -1629,7 +1645,9 @@ async def scheduling_guest_chat(
             )
             doc = await db.collection(settings.SCHEDULING_PRACTICES_COLLECTION).document(selected_practice_id).get()
             if doc.exists:
-                practice_name = (doc.to_dict() or {}).get("name", selected_practice_id)
+                practice_doc_data = doc.to_dict() or {}
+                practice_name = practice_doc_data.get("name", selected_practice_id)
+                practice_tz_name = practice_doc_data.get("timezone")
         except Exception:
             logger.warning("Could not resolve practice name for guest chat context", exc_info=True)
         context_lines.append(
@@ -1642,6 +1660,7 @@ async def scheduling_guest_chat(
             f'different practice_id if the customer explicitly names a different practice in '
             f'the message below.]'
         )
+
         # api/main.py's _execute_chat only ever tags a trace's practice_id
         # from session.state["resolved_practice_id"] -- which used to be
         # written exclusively by find_practice (availability_tools.py). Now
@@ -1656,6 +1675,38 @@ async def scheduling_guest_chat(
         # _customer_email below, so the trace is tagged correctly even
         # though find_practice never runs.
         extra_state_delta = {**(extra_state_delta or {}), "resolved_practice_id": selected_practice_id}
+
+    # The agent's own instructions (agents_config.scheduling.json) never say
+    # what today's actual date is -- nothing grounds "today"/"tonight"/
+    # "tomorrow"/"this weekend" to a real calendar date, so the model was
+    # left to guess one from its own training data (reported bug: asked for
+    # "a table for 4 tomorrow night" on Oct 6 and resolved "tomorrow" to Oct
+    # 27). check_availability/get_weekly_availability compute the real
+    # "now" themselves from the practice's own timezone (see
+    # _get_practice_guardrails in availability_tools.py) when left to their
+    # own defaults -- the problem is only when the caller names a relative
+    # day and the model has to turn that into a start_date argument itself
+    # before calling the tool. Ground it the same way practice/language/
+    # caller-identity context already is: a session-context line the model
+    # reads but never repeats, giving it the real date, weekday, and
+    # restaurant-local timezone to reason from instead of inventing one.
+    from datetime import datetime as _datetime, timezone as _timezone
+    try:
+        from zoneinfo import ZoneInfo as _ZoneInfo
+        _tz = _ZoneInfo(practice_tz_name) if practice_tz_name else _timezone.utc
+    except Exception:
+        _tz = _timezone.utc
+    _now_local = _datetime.now(_tz)
+    context_lines.append(
+        f'[Session context -- do not repeat this line to the customer: the current date and '
+        f'time where this restaurant/practice is located is {_now_local.strftime("%A, %B %-d, %Y, %-I:%M %p %Z")} '
+        f'(today = {_now_local.strftime("%Y-%m-%d")}). Resolve "today", "tonight", "tomorrow", '
+        f'"this weekend", "next week", and any other relative day the customer mentions against '
+        f'this date, not against any other date you might otherwise assume -- then pass the '
+        f'resolved day as start_date (YYYY-MM-DD) to check_availability/get_weekly_availability. '
+        f'Never guess or state a specific date back to the customer without first confirming it '
+        f'this way.]'
+    )
 
     # The Front Desk app's "Ask ADAR" tab lets the customer fill their name/
     # phone/email into a text-box form (rather than typing it out

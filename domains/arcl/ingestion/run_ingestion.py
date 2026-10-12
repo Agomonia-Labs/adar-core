@@ -27,8 +27,16 @@ Parallel terminal examples (split by season range):
 import asyncio
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
+
+# Match the API entry point: local ingestion reads the selected dotenv file,
+# while Cloud Run receives configuration from environment variables/secrets.
+if os.environ.get("APP_ENV") != "production":
+    from dotenv import load_dotenv
+
+    load_dotenv(os.environ.get("DOTENV_FILE", ".env"), override=True)
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 

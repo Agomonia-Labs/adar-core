@@ -128,6 +128,14 @@ class PracticeIn(BaseModel):
     timezone: str = "UTC"
     lead_time_minutes: int = 120
     max_advance_days: int = 60
+    # How far apart candidate appointment start times are, in minutes (see
+    # compute_open_slots in availability_tools.py). Default of 15 keeps
+    # every practice that doesn't set this unchanged; a restaurant's dine-in
+    # practice sets this to 60 at enable-time (adar-rag's enable_dine_in)
+    # so the chat assistant offers "5:00 PM, 6:00 PM, 7:00 PM" rather than
+    # every 15-minute mark, which read as far more options than a table
+    # reservation actually has.
+    slot_step_minutes: int = 15
     notification_email: str = ""
 
 
@@ -136,6 +144,7 @@ class PracticePatch(BaseModel):
     timezone: Optional[str] = None
     lead_time_minutes: Optional[int] = None
     max_advance_days: Optional[int] = None
+    slot_step_minutes: Optional[int] = None
     active: Optional[bool] = None
     notification_email: Optional[str] = None
 
@@ -220,6 +229,7 @@ async def create_practice(body: PracticeIn, _: dict = Depends(get_admin)):
         "timezone": body.timezone,
         "lead_time_minutes": body.lead_time_minutes,
         "max_advance_days": body.max_advance_days,
+        "slot_step_minutes": body.slot_step_minutes,
         # Where new-booking notifications go (see confirm_booking in
         # availability_tools.py) — falls back to the platform ADMIN_EMAIL
         # at send time when left blank, so this is optional here.

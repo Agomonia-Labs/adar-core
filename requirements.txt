@@ -4,7 +4,7 @@ pydantic>=2.9.0
 pydantic-settings>=2.6.0
 
 # Google ADK + Gemini (use google-genai, NOT google-generativeai — they conflict)
-google-adk>=0.4.0
+google-adk==2.8.0  # pinned: an unpinned >=0.4.0 silently picked up a newer ADK on scheduling's last rebuild whose LlmAgent.canonical_model raises instead of falling back when no model is set -- see src/adar/agents/agents.py's explicit model= fix
 google-genai>=1.0.0
 google-cloud-firestore>=2.19.0
 

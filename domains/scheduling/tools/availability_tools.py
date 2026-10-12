@@ -16,6 +16,7 @@ faster lock (e.g. Redis) in front of this — see the build plan, Phase 3.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, time as dt_time, date
 from typing import Optional
@@ -113,11 +114,37 @@ def compute_open_slots(
 
 # ── Firestore-backed lookups ──────────────────────────────────────────────────
 
-def _resolve_practice_id(practice_id: str) -> str:
+def _resolve_practice_id(practice_id: str, tool_context: ToolContext = None) -> str:
     """Every tool takes practice_id so multi-practice deployments work later
     (§5 of the build plan), but a single-practice pilot shouldn't require the
-    LLM to know or guess it — fall back to the deployment's configured default."""
-    return (practice_id or "").strip() or settings.SCHEDULING_DEFAULT_PRACTICE_ID
+    LLM to know or guess it — fall back to the deployment's configured default.
+
+    A multi-practice caller (e.g. ADAR Eats' dine-in assistant, one restaurant
+    per practice; Front Desk's multi-practice "Ask ADAR") can't rely on that
+    global default, and api/main.py's scheduling_guest_chat already grounds
+    every turn by writing the app's actual selected practice_id into
+    tool_context.state["resolved_practice_id"] (the same mechanism find_practice
+    uses) alongside a text instruction telling the model to pass practice_id on
+    every tool call. The text instruction is the only thing most of these
+    tools relied on until now -- if the model ever omits the optional
+    practice_id argument on a single turn (nothing stops it; it's not
+    required), the call silently fell through all the way to
+    SCHEDULING_DEFAULT_PRACTICE_ID (a different practice entirely, with its
+    own hours/timezone) instead of the practice the conversation is actually
+    about. Checking tool_context.state here first closes that gap
+    deterministically, the same way customer identity is already threaded
+    through state rather than left to the model to repeat correctly."""
+    explicit = (practice_id or "").strip()
+    if explicit:
+        return explicit
+    if tool_context is not None:
+        try:
+            grounded = (tool_context.state.get("resolved_practice_id") or "").strip()
+        except Exception:
+            grounded = ""
+        if grounded:
+            return grounded
+    return settings.SCHEDULING_DEFAULT_PRACTICE_ID
 
 
 async def _get_practice_tz(practice_id: str) -> ZoneInfo:
@@ -130,16 +157,19 @@ async def _get_practice_tz(practice_id: str) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
-async def _get_practice_guardrails(practice_id: str) -> tuple[ZoneInfo, int, int]:
+async def _get_practice_guardrails(practice_id: str) -> tuple[ZoneInfo, int, int, int]:
     """Like _get_practice_tz, but also returns the practice's own
-    lead_time_minutes/max_advance_days. These are stored on the practice doc
-    at creation (see scheduling_admin.py's PracticeIn / run_ingestion.py) but
-    check_availability/get_weekly_availability previously never read them
-    back -- they silently fell through to compute_open_slots's hardcoded
-    module defaults (120min/60days) for every practice regardless of what
-    was actually configured. A practice that needs a tighter window (e.g. a
-    restaurant capped at max_advance_days=7 for dine-in reservations) wasn't
-    actually enforced. One query, reused for tz + both guardrails."""
+    lead_time_minutes/max_advance_days/slot_step_minutes. These are stored
+    on the practice doc at creation (see scheduling_admin.py's PracticeIn /
+    run_ingestion.py) but check_availability/get_weekly_availability
+    previously never read them back -- they silently fell through to
+    compute_open_slots's hardcoded module defaults (120min/60days/15min)
+    for every practice regardless of what was actually configured. A
+    practice that needs a tighter window (e.g. a restaurant capped at
+    max_advance_days=7 for dine-in reservations) wasn't actually enforced,
+    and nor was a coarser slot_step_minutes (e.g. a restaurant offering
+    hour-aligned reservation times instead of every 15 minutes). One
+    query, reused for tz + all three guardrails."""
     rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
     doc = rows[0] if rows else {}
     tz_name = doc.get("timezone") or "UTC"
@@ -150,7 +180,8 @@ async def _get_practice_guardrails(practice_id: str) -> tuple[ZoneInfo, int, int
         tz = ZoneInfo("UTC")
     lead_time_minutes = int(doc.get("lead_time_minutes") or DEFAULT_LEAD_TIME_MINUTES)
     max_advance_days = int(doc.get("max_advance_days") or DEFAULT_MAX_ADVANCE_DAYS)
-    return tz, lead_time_minutes, max_advance_days
+    slot_step_minutes = int(doc.get("slot_step_minutes") or DEFAULT_SLOT_STEP_MINUTES)
+    return tz, lead_time_minutes, max_advance_days, slot_step_minutes
 
 
 async def _find_appointment_type(practice_id: str, appointment_type_name: str) -> Optional[dict]:
@@ -175,6 +206,37 @@ async def _find_provider(practice_id: str, provider_name: Optional[str]) -> Opti
         if name_low in row.get("name", "").strip().lower():
             return row
     return None
+
+
+_ROLE_SEATS_RE = re.compile(r"^(\d+)-top$")
+
+
+def _seats_from_role(role: str) -> int:
+    """Dine-in tables are stored as providers with role="<seats>-top" (e.g.
+    "4-top") -- see adar-rag's backend/routes/restaurant.py, which uses the
+    identical convention for the structured booking screen's table tiers.
+    Returns 0 (never matches a party size) for a non-dine-in provider whose
+    role is blank or doesn't follow that pattern, e.g. a clinician."""
+    m = _ROLE_SEATS_RE.match((role or "").strip())
+    return int(m.group(1)) if m else 0
+
+
+async def _find_providers_for_party_size(practice_id: str, party_size: int) -> list[dict]:
+    """A restaurant has several same-size tables (separate providers, grouped
+    into a tier only for display -- see the dine-in build plan), so "do you
+    have a table for 4" must check every table that seats 4+, not just one.
+    _find_provider(practice_id, None) -- the old behavior when the caller
+    gave no specific resource name -- picks a single arbitrary provider
+    (Firestore's first result) and reports based on that one table alone;
+    if that particular table happened to be busy, the caller was told
+    "no availability" even with other same-size tables standing empty.
+    Returns every active table that seats at least party_size, smallest
+    first (so a party of 2 is offered a 2-top before a 6-top), mirroring
+    adar-rag's own tiering/ordering for the structured booking screen."""
+    rows = await direct_query(settings.SCHEDULING_PROVIDERS_COLLECTION, {"practice_id": practice_id, "active": True}, limit=50)
+    candidates = [r for r in rows if _seats_from_role(r.get("role") or "") >= party_size]
+    candidates.sort(key=lambda r: _seats_from_role(r.get("role") or ""))
+    return candidates
 
 
 async def _busy_intervals(practice_id: str, provider_id: str, tz: ZoneInfo) -> list[tuple[datetime, datetime]]:
@@ -205,15 +267,28 @@ async def _busy_intervals(practice_id: str, provider_id: str, tz: ZoneInfo) -> l
     return intervals
 
 
-def _format_slot(dt: datetime) -> str:
+def _format_slot(dt: datetime, tz: Optional[ZoneInfo] = None) -> str:
+    """Human-readable local time for a slot/appointment. Pass `tz` (the
+    practice's own ZoneInfo, from _get_practice_tz/_get_practice_guardrails)
+    whenever `dt` was just read back out of a Firestore document --
+    Firestore always stores/returns timestamps as UTC-aware regardless of
+    the zone used when the value was originally written, so an unconverted
+    dt here renders "UTC" no matter what the restaurant's own hours are
+    configured in. A dt that's already in-memory in the practice's own zone
+    (e.g. hold_slot's own `start`, or check_availability's computed slots,
+    both never re-read from Firestore before formatting) doesn't need it,
+    so tz stays optional. Mirrors api/routes/scheduling_guest.py's
+    _format_when, which already does this for booking-confirmation emails."""
+    if tz is not None and hasattr(dt, "astimezone"):
+        dt = dt.astimezone(tz)
     return dt.strftime("%A, %B %-d at %-I:%M %p %Z") if hasattr(dt, "strftime") else str(dt)
 
 
 # ── Agent-facing tools ─────────────────────────────────────────────────────────
 
-async def list_appointment_types(practice_id: str = "") -> str:
+async def list_appointment_types(practice_id: str = "", tool_context: ToolContext = None) -> str:
     """List the appointment types this practice offers, with typical duration."""
-    practice_id = _resolve_practice_id(practice_id)
+    practice_id = _resolve_practice_id(practice_id, tool_context)
     rows = await direct_query(settings.SCHEDULING_APPOINTMENT_TYPES_COLLECTION, {"practice_id": practice_id}, limit=50)
     rows = [r for r in rows if r.get("active") is not False]
     if not rows:
@@ -222,9 +297,9 @@ async def list_appointment_types(practice_id: str = "") -> str:
     return "Available appointment types:\n" + "\n".join(lines)
 
 
-async def list_providers(practice_id: str = "", appointment_type_name: str = "") -> str:
+async def list_providers(practice_id: str = "", appointment_type_name: str = "", tool_context: ToolContext = None) -> str:
     """List bookable providers at this practice, optionally filtered by appointment type."""
-    practice_id = _resolve_practice_id(practice_id)
+    practice_id = _resolve_practice_id(practice_id, tool_context)
     rows = await direct_query(settings.SCHEDULING_PROVIDERS_COLLECTION, {"practice_id": practice_id, "active": True}, limit=50)
     if appointment_type_name:
         appt_type = await _find_appointment_type(practice_id, appointment_type_name)
@@ -281,59 +356,168 @@ async def find_practice(name: str = "", tool_context: ToolContext = None) -> str
     return "More than one practice matches — which one did you mean?\n" + "\n".join(lines)
 
 
+# Matches the time-of-day vocabulary given to the model in
+# agents_config.scheduling.json's scheduling_agent instructions, so the
+# two stay in lockstep -- end hour is exclusive except "night"/"tonight",
+# which is open-ended (filtered by >= start hour only, so it naturally
+# includes everything up to closing regardless of how late that is).
+_TIME_OF_DAY_WINDOWS: dict[str, tuple[int, Optional[int]]] = {
+    "morning": (6, 11),
+    "noon": (11, 13),
+    "midday": (11, 13),
+    "afternoon": (13, 17),
+    "evening": (17, 20),
+    "night": (17, None),
+    "tonight": (17, None),
+}
+
+
+def _filter_slots_by_time_of_day(slots: list[datetime], time_of_day: str) -> list[datetime]:
+    window = _TIME_OF_DAY_WINDOWS.get((time_of_day or "").strip().lower())
+    if not window:
+        return slots
+    start_hour, end_hour = window
+    return [s for s in slots if s.hour >= start_hour and (end_hour is None or s.hour < end_hour)]
+
+
 async def check_availability(
     appointment_type_name: str,
     practice_id: str = "",
     provider_name: str = "",
+    party_size: int = 0,
     days_ahead: int = 7,
     start_date: str = "",
+    time_of_day: str = "",
+    tool_context: ToolContext = None,
 ) -> str:
-    """Find open appointment slots for a given appointment type (and optionally
-    a specific provider). By default looks at the next `days_ahead` days
-    starting today. Pass start_date (YYYY-MM-DD) to look at a specific future
-    week/window instead — e.g. after get_weekly_availability shows which weeks
-    have openings and the caller picks one. Always call this before proposing
-    a time to the caller."""
-    practice_id = _resolve_practice_id(practice_id)
+    """Find open appointment slots for a given appointment type. By default
+    looks at the next `days_ahead` days starting today. Pass start_date
+    (YYYY-MM-DD) to look at a specific future week/window instead -- e.g.
+    after get_weekly_availability shows which weeks have openings and the
+    caller picks one. Always call this before proposing a time to the caller.
+
+    Pass party_size (number of guests) whenever the caller gave one, instead
+    of provider_name -- a dine-in practice has several identical tables of
+    the same size, modeled as separate providers, and this checks every
+    table that fits that many people rather than one arbitrary one (a
+    caller is never going to name a specific table). Only pass provider_name
+    when the caller named a specific resource directly (e.g. a clinician by
+    name) -- leave party_size at 0 in that case.
+
+    Pass time_of_day ("morning", "noon", "afternoon", "evening", or
+    "night"/"tonight") whenever the caller named one, instead of filtering
+    the results yourself before speaking -- this guarantees the slots you
+    read back actually fall in the window the caller asked for, rather than
+    relying on you to notice and discard a mismatched one (e.g. a caller
+    asking for "tomorrow night" must never be read a morning or afternoon
+    time). Leave it blank when the caller didn't name a time of day."""
+    practice_id = _resolve_practice_id(practice_id, tool_context)
     appt_type = await _find_appointment_type(practice_id, appointment_type_name)
     if not appt_type:
         return f"I couldn't find an appointment type called '{appointment_type_name}'. Call list_appointment_types to see what's offered."
-    provider = await _find_provider(practice_id, provider_name or None)
-    if not provider:
-        return "I couldn't find an available provider for that appointment type."
 
-    tz, lead_time_minutes, max_advance_days = await _get_practice_guardrails(practice_id)
+    providers: list[dict]
+    if provider_name:
+        provider = await _find_provider(practice_id, provider_name)
+        if not provider:
+            return "I couldn't find an available provider for that appointment type."
+        providers = [provider]
+        subject = provider["name"]
+    else:
+        # No specific resource named -- check every active provider that
+        # fits (party_size filters by size; party_size=0 means "any size",
+        # so this still checks ALL of them). This is deliberately the
+        # default whenever provider_name is blank, not conditioned on the
+        # model actually having passed party_size: relying on the model to
+        # remember a new argument every time proved unreliable (the same
+        # lesson as this practice's other instruction-only fixes this
+        # session), so "no name given" now always means "check everything",
+        # which is also simply more correct than picking one arbitrary
+        # provider even for a single-resource-per-visit practice.
+        providers = await _find_providers_for_party_size(practice_id, party_size or 0)
+        if not providers:
+            return (f"No table here seats a party of {party_size}." if party_size
+                    else "I couldn't find an available provider for that appointment type.")
+        subject = f"a table for {party_size}" if party_size else "any available provider"
+
+    tz, lead_time_minutes, max_advance_days, slot_step_minutes = await _get_practice_guardrails(practice_id)
     window_start = None
     if start_date:
         try:
             window_start = datetime.combine(datetime.fromisoformat(start_date).date(), dt_time(0, 0), tzinfo=tz)
         except ValueError:
             return "That doesn't look like a valid date — please use YYYY-MM-DD."
-    busy = await _busy_intervals(practice_id, provider["doc_id"], tz)
-    slots = compute_open_slots(
-        working_hours=provider.get("working_hours") or [],
-        busy_intervals=busy,
-        duration_minutes=int(appt_type.get("duration_minutes", 30)),
-        buffer_minutes=int(appt_type.get("buffer_minutes", 0)),
-        now=datetime.now(tz),
-        days_ahead=days_ahead,
-        lead_time_minutes=lead_time_minutes,
-        max_advance_days=max_advance_days,
-        tz=tz,
-        window_start=window_start,
-    )
+
+    # Union the open slots across every qualifying table/provider -- a time
+    # is offerable as long as AT LEAST ONE of them is free then, not only
+    # the first one Firestore happens to return (see
+    # _find_providers_for_party_size for why checking just one table was
+    # the actual bug: a caller was told "no availability" some nights
+    # purely because the one table checked was busy, with other same-size
+    # tables standing empty).
+    all_slots_set: set[datetime] = set()
+    for p in providers:
+        busy = await _busy_intervals(practice_id, p["doc_id"], tz)
+        p_slots = compute_open_slots(
+            working_hours=p.get("working_hours") or [],
+            busy_intervals=busy,
+            duration_minutes=int(appt_type.get("duration_minutes", 30)),
+            buffer_minutes=int(appt_type.get("buffer_minutes", 0)),
+            now=datetime.now(tz),
+            days_ahead=days_ahead,
+            lead_time_minutes=lead_time_minutes,
+            max_advance_days=max_advance_days,
+            tz=tz,
+            window_start=window_start,
+            slot_step_minutes=slot_step_minutes,
+            # compute_open_slots defaults to max_results=12 and stops
+            # scanning the instant it hits that cap -- fine for "give me a
+            # few options", wrong here: with a normal multi-hour working day
+            # (e.g. 11am-10pm), the 12th candidate (at slot_step_minutes
+            # apart) can land in the early afternoon, so it never even
+            # reaches evening/night slots to report them. That's what made
+            # the time_of_day filter correctly report "no night slots" --
+            # the slots it was filtering had already been truncated away
+            # before generation got that far. A generous cap here (we
+            # filter/trim down to a caller-facing 12 AFTER merging all
+            # providers and applying time_of_day below) ensures a full
+            # day's -- or week's -- worth of real candidates actually gets
+            # generated before any filtering happens.
+            max_results=500,
+        )
+        all_slots_set.update(p_slots)
+    all_slots = sorted(all_slots_set)
+
     window_desc = f"the week of {window_start.strftime('%B %-d')}" if window_start else f"the next {days_ahead} days"
+    if not all_slots:
+        return f"{subject} has no open '{appt_type['name']}' slots in {window_desc}. Try a different week{' or party size' if party_size else ' or provider'}."
+
+    slots = _filter_slots_by_time_of_day(all_slots, time_of_day)
     if not slots:
-        return f"{provider['name']} has no open '{appt_type['name']}' slots in {window_desc}. Try a different week or provider."
+        # Slots exist that day/week, just not in the window the caller
+        # named -- say so plainly instead of reading back one of the
+        # mismatched ones (the actual bug being fixed here: a caller
+        # asking for "tomorrow night" was being told "no" and then handed
+        # a morning slot anyway).
+        label = (time_of_day or "").strip().lower()
+        other_times_exist = any(True for _ in all_slots)
+        suffix = " There are openings at other times — want to hear those instead?" if other_times_exist else ""
+        return f"{subject} has no {label} '{appt_type['name']}' slots in {window_desc}.{suffix}"
+
+    # Cap how many we read back after merging/filtering, same as the old
+    # single-provider max_results=12 default.
+    slots = slots[:12]
+
     # Give the caller-facing text alongside the exact ISO timestamp (with UTC
     # offset) for the model to copy verbatim into hold_slot's slot_start_iso
     # -- don't reconstruct it from the human-readable time, since that's lost
     # the offset and led to hold_slot crashing on naive-vs-aware comparisons.
     lines = [f"{i + 1}. {_format_slot(s)} [slot_start_iso: {s.isoformat()}]" for i, s in enumerate(slots)]
     return (
-        f"Open '{appt_type['name']}' slots with {provider['name']} ({window_desc}):\n" + "\n".join(lines) +
+        f"Open '{appt_type['name']}' slots for {subject} ({window_desc}):\n" + "\n".join(lines) +
         "\n\nTo book one, tell me which time and your name — I'll hold it for a few minutes while we confirm. "
-        "When calling hold_slot, pass the bracketed slot_start_iso value exactly as shown, not a reconstructed time."
+        "When calling hold_slot, pass the bracketed slot_start_iso value exactly as shown, not a reconstructed time"
+        + (f", along with the same party_size ({party_size})." if party_size else ".")
     )
 
 
@@ -341,7 +525,9 @@ async def get_weekly_availability(
     appointment_type_name: str,
     practice_id: str = "",
     provider_name: str = "",
+    party_size: int = 0,
     weeks_ahead: int = 8,
+    tool_context: ToolContext = None,
 ) -> str:
     """Give a broad view of which upcoming weeks have any openings at all —
     call this when the caller wants to browse rather than pick a specific day
@@ -349,36 +535,60 @@ async def get_weekly_availability(
     about two months. Returns which weekdays have at least one open slot per
     week, NOT specific times — once the caller picks a week, call
     check_availability with start_date set to that week's Monday to get exact
-    times to offer."""
-    practice_id = _resolve_practice_id(practice_id)
+    times to offer.
+
+    Pass party_size (and leave provider_name blank), same as
+    check_availability, when the caller gave a party size rather than
+    naming a specific resource — this checks every table/provider that
+    fits, not one arbitrary one."""
+    practice_id = _resolve_practice_id(practice_id, tool_context)
     appt_type = await _find_appointment_type(practice_id, appointment_type_name)
     if not appt_type:
         return f"I couldn't find an appointment type called '{appointment_type_name}'. Call list_appointment_types to see what's offered."
-    provider = await _find_provider(practice_id, provider_name or None)
-    if not provider:
-        return "I couldn't find an available provider for that appointment type."
 
-    tz, lead_time_minutes, max_advance_days = await _get_practice_guardrails(practice_id)
+    if provider_name:
+        provider = await _find_provider(practice_id, provider_name)
+        if not provider:
+            return "I couldn't find an available provider for that appointment type."
+        providers = [provider]
+        subject = provider["name"]
+    else:
+        # Same reasoning as check_availability: no name given means check
+        # every active provider, not one arbitrary pick -- regardless of
+        # whether party_size was actually passed this turn.
+        providers = await _find_providers_for_party_size(practice_id, party_size or 0)
+        if not providers:
+            return (f"No table here seats a party of {party_size}." if party_size
+                    else "I couldn't find an available provider for that appointment type.")
+        subject = f"a table for {party_size}" if party_size else "any available provider"
+
+    tz, lead_time_minutes, max_advance_days, slot_step_minutes = await _get_practice_guardrails(practice_id)
     now = datetime.now(tz)
-    busy = await _busy_intervals(practice_id, provider["doc_id"], tz)
     # One scan across the whole span, generous max_results so it isn't cut
     # off partway through — this is a summary pass, not the final slot list.
-    slots = compute_open_slots(
-        working_hours=provider.get("working_hours") or [],
-        busy_intervals=busy,
-        duration_minutes=int(appt_type.get("duration_minutes", 30)),
-        buffer_minutes=int(appt_type.get("buffer_minutes", 0)),
-        now=now,
-        days_ahead=weeks_ahead * 7,
-        lead_time_minutes=lead_time_minutes,
-        max_advance_days=max_advance_days,
-        tz=tz,
-        max_results=2000,
-    )
+    # Union across every qualifying provider, same reasoning as
+    # check_availability: one table being booked up doesn't mean the whole
+    # week is closed when others of the same size are free.
+    slots_set: set[datetime] = set()
+    for p in providers:
+        busy = await _busy_intervals(practice_id, p["doc_id"], tz)
+        slots_set.update(compute_open_slots(
+            working_hours=p.get("working_hours") or [],
+            busy_intervals=busy,
+            duration_minutes=int(appt_type.get("duration_minutes", 30)),
+            buffer_minutes=int(appt_type.get("buffer_minutes", 0)),
+            now=now,
+            days_ahead=weeks_ahead * 7,
+            lead_time_minutes=lead_time_minutes,
+            max_advance_days=max_advance_days,
+            tz=tz,
+            max_results=2000,
+        ))
+    slots = sorted(slots_set)
     if not slots:
         return (
-            f"{provider['name']} has no open '{appt_type['name']}' slots in the next "
-            f"{weeks_ahead} weeks. Try a different provider or appointment type."
+            f"{subject} has no open '{appt_type['name']}' slots in the next "
+            f"{weeks_ahead} weeks. Try a different {'party size' if party_size else 'provider'} or appointment type."
         )
 
     # Group by ISO week (Monday-anchored), independent of the practice's
@@ -402,51 +612,26 @@ async def get_weekly_availability(
         )
 
     return (
-        f"Weeks with openings for '{appt_type['name']}' with {provider['name']} "
+        f"Weeks with openings for '{appt_type['name']}' with {subject} "
         f"(next {weeks_ahead} weeks):\n" + "\n".join(lines) +
         "\n\nAsk which week works, then call check_availability with that week's "
         "Monday as start_date to get exact times."
     )
 
 
-async def hold_slot(
-    appointment_type_name: str,
-    provider_name: str,
-    slot_start_iso: str,
-    caller_name: str,
-    practice_id: str = "",
-) -> str:
-    """Place a short-lived hold on a specific slot (from check_availability's
-    results) so it can't be double-booked while the caller confirms. Returns a
-    hold_id — pass it to confirm_booking within a few minutes."""
-    practice_id = _resolve_practice_id(practice_id)
-    appt_type = await _find_appointment_type(practice_id, appointment_type_name)
-    provider = await _find_provider(practice_id, provider_name)
-    if not appt_type or not provider:
-        return "I couldn't match that appointment type and provider — please check availability again."
-
-    try:
-        start = datetime.fromisoformat(slot_start_iso)
-    except ValueError:
-        return "That doesn't look like a valid time — please pick one of the times I listed."
-    if start.tzinfo is None:
-        # check_availability only ever shows the caller/LLM a human-readable
-        # time string (see _format_slot), never a raw offset-aware ISO
-        # timestamp -- so the model sometimes reconstructs slot_start_iso
-        # without a UTC offset. Assume it means the practice's own local
-        # time (which is what the human-readable string was rendered in),
-        # rather than crashing when comparing against Firestore's
-        # timezone-aware timestamps below.
-        start = start.replace(tzinfo=await _get_practice_tz(practice_id))
-    duration = int(appt_type.get("duration_minutes", 30))
-    end = start + timedelta(minutes=duration)
-
+async def _attempt_hold_txn(practice_id: str, provider: dict, appt_type: dict, start: datetime, end: datetime, caller_name: str) -> str:
+    """One provider's worth of hold_slot's transactional overlap check +
+    write, factored out so hold_slot can try it against several candidate
+    tables in turn when it was given a party_size instead of one specific
+    provider. Raises ValueError("slot_taken"/"slot_held") if that table
+    isn't actually free at this time -- the caller loops to the next
+    candidate on that, exactly as if it had called check_availability for
+    just that one table and gotten no results."""
     db = get_db()
     transaction = db.transaction()
 
     @firestore.async_transactional
     async def _txn(txn: firestore.AsyncTransaction):
-        # Re-check for overlapping confirmed appointments / active holds inside the transaction.
         appts_ref = db.collection(settings.SCHEDULING_APPOINTMENTS_COLLECTION)
         holds_ref = db.collection(settings.SCHEDULING_HOLDS_COLLECTION)
         now = datetime.now(start.tzinfo or ZoneInfo("UTC"))
@@ -483,13 +668,74 @@ async def hold_slot(
         })
         return hold_id
 
-    try:
-        hold_id = await _txn(transaction)
-    except ValueError as exc:
-        if str(exc) in ("slot_taken", "slot_held"):
-            return "Sorry — that slot was just taken. Please call check_availability again for current openings."
-        raise
+    return await _txn(transaction)
 
+
+async def hold_slot(
+    appointment_type_name: str,
+    slot_start_iso: str,
+    caller_name: str,
+    provider_name: str = "",
+    party_size: int = 0,
+    practice_id: str = "",
+    tool_context: ToolContext = None,
+) -> str:
+    """Place a short-lived hold on a specific slot (from check_availability's
+    results) so it can't be double-booked while the caller confirms. Returns a
+    hold_id — pass it to confirm_booking within a few minutes.
+
+    Pass the SAME party_size you gave check_availability (and leave
+    provider_name blank) when that's how you found this slot — a dine-in
+    table reservation has several same-size tables, and this tries each one
+    that fits the party until it finds one actually free at this exact
+    time, rather than failing just because one arbitrary table is busy."""
+    practice_id = _resolve_practice_id(practice_id, tool_context)
+    appt_type = await _find_appointment_type(practice_id, appointment_type_name)
+    if not appt_type:
+        return "I couldn't match that appointment type — please check availability again."
+
+    if provider_name:
+        provider = await _find_provider(practice_id, provider_name)
+        providers = [provider] if provider else []
+    else:
+        # Same reasoning as check_availability: no name given means try
+        # every active provider in turn, not one arbitrary pick.
+        providers = await _find_providers_for_party_size(practice_id, party_size or 0)
+    if not providers:
+        return "I couldn't match that to an available table/provider — please check availability again."
+
+    try:
+        start = datetime.fromisoformat(slot_start_iso)
+    except ValueError:
+        return "That doesn't look like a valid time — please pick one of the times I listed."
+    if start.tzinfo is None:
+        # check_availability only ever shows the caller/LLM a human-readable
+        # time string (see _format_slot), never a raw offset-aware ISO
+        # timestamp -- so the model sometimes reconstructs slot_start_iso
+        # without a UTC offset. Assume it means the practice's own local
+        # time (which is what the human-readable string was rendered in),
+        # rather than crashing when comparing against Firestore's
+        # timezone-aware timestamps below.
+        start = start.replace(tzinfo=await _get_practice_tz(practice_id))
+    duration = int(appt_type.get("duration_minutes", 30))
+    end = start + timedelta(minutes=duration)
+
+    held_provider = None
+    hold_id = None
+    for candidate in providers:
+        try:
+            hold_id = await _attempt_hold_txn(practice_id, candidate, appt_type, start, end, caller_name)
+            held_provider = candidate
+            break
+        except ValueError as exc:
+            if str(exc) in ("slot_taken", "slot_held"):
+                continue
+            raise
+
+    if hold_id is None:
+        return "Sorry — that slot was just taken. Please call check_availability again for current openings."
+
+    provider = held_provider
     return (
         f"Held {_format_slot(start)} with {provider['name']} for {HOLD_TTL_MINUTES} minutes "
         f"(hold_id: {hold_id}). Confirm the caller's phone number and reason for visit, then call "
@@ -524,7 +770,7 @@ async def confirm_booking(
     email fan-out (_send_booking_emails, shared with the Book tab's REST
     booking path in scheduling_guest.py) runs instead of the old
     caller-email-only / practice-admin-only pair."""
-    practice_id = _resolve_practice_id(practice_id)
+    practice_id = _resolve_practice_id(practice_id, tool_context)
     db = get_db()
     transaction = db.transaction()
     hold_ref = db.collection(settings.SCHEDULING_HOLDS_COLLECTION).document(hold_id)
@@ -592,6 +838,15 @@ async def confirm_booking(
 
     practice_rows = await direct_query(settings.SCHEDULING_PRACTICES_COLLECTION, {"practice_id": practice_id}, limit=1)
     practice_data = practice_rows[0] if practice_rows else {}
+
+    # `start` just came back out of the hold doc via the transaction above,
+    # so it's UTC-aware regardless of the practice's configured zone (see
+    # _format_slot) -- re-localize once here, before either the email or
+    # the chat reply below format it.
+    try:
+        start = start.astimezone(await _get_practice_tz(practice_id))
+    except Exception:
+        logger.warning("Could not localize booking time to practice %s timezone", practice_id, exc_info=True)
 
     provider_data: dict = {}
     try:
@@ -692,7 +947,7 @@ async def cancel_appointment(
     customer+provider+practice-admin email fan-out as a Front Desk app
     cancellation (_send_cancellation_emails, shared with cancel_guest_booking
     in api/routes/scheduling_guest.py) -- not just a customer-only email."""
-    practice_id = _resolve_practice_id(practice_id)
+    practice_id = _resolve_practice_id(practice_id, tool_context)
     db = get_db()
     ref, snap = await _resolve_appointment(db, appointment_id)
     if ref is None or not snap.exists or snap.to_dict().get("practice_id") != practice_id:
@@ -701,6 +956,15 @@ async def cancel_appointment(
     data = snap.to_dict()
     if data.get("status") == "cancelled":
         return "That appointment is already cancelled."
+    # data["start_time"] just came back out of Firestore, so it's UTC-aware
+    # regardless of the practice's configured zone (see _format_slot) --
+    # re-localize once here, before either the email or the chat reply
+    # below format it.
+    if data.get("start_time") is not None:
+        try:
+            data["start_time"] = data["start_time"].astimezone(await _get_practice_tz(practice_id))
+        except Exception:
+            logger.warning("Could not localize cancellation time to practice %s timezone", practice_id, exc_info=True)
     await ref.update({
         "status": "cancelled",
         "cancel_reason": reason,
@@ -771,10 +1035,10 @@ async def reschedule_appointment(
     return result
 
 
-async def list_my_appointments(caller_phone: str, practice_id: str = "") -> str:
+async def list_my_appointments(caller_phone: str, practice_id: str = "", tool_context: ToolContext = None) -> str:
     """Look up upcoming confirmed appointments by the caller's phone number
     (a soft identity match — no clinical data is read back)."""
-    practice_id = _resolve_practice_id(practice_id)
+    practice_id = _resolve_practice_id(practice_id, tool_context)
     rows = await direct_query(
         settings.SCHEDULING_APPOINTMENTS_COLLECTION,
         {"practice_id": practice_id, "caller_phone": caller_phone, "status": "confirmed"},
@@ -782,6 +1046,16 @@ async def list_my_appointments(caller_phone: str, practice_id: str = "") -> str:
     )
     if not rows:
         return "I don't see any upcoming appointments under that phone number."
+    # Each row's start_time just came back out of Firestore, so it's
+    # UTC-aware regardless of the practice's configured zone (see
+    # _format_slot) -- re-localize before formatting below.
+    tz = await _get_practice_tz(practice_id)
+    for r in rows:
+        if r.get("start_time") is not None:
+            try:
+                r["start_time"] = r["start_time"].astimezone(tz)
+            except Exception:
+                logger.warning("Could not localize appointment time to practice %s timezone", practice_id, exc_info=True)
     lines = [
         f"- {r.get('appointment_type_name', 'Appointment')} with {r.get('provider_name', 'provider')} "
         f"on {_format_slot(r['start_time'])} (confirmation ID: {r['doc_id'][:8]})"

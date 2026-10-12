@@ -44,6 +44,12 @@ _client: Optional[genai.Client] = None
 def get_client() -> genai.Client:
     global _client
     if _client is None:
+        if not settings.GOOGLE_API_KEY:
+            raise RuntimeError(
+                "GOOGLE_API_KEY is not configured for ARCL ingestion. "
+                "For local runs, set it in .env or export it before starting Python. "
+                "For Cloud Run, bind GOOGLE_API_KEY to the google-api-key secret."
+            )
         _client = genai.Client(api_key=settings.GOOGLE_API_KEY)
     return _client
 

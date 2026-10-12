@@ -21,6 +21,8 @@ import json
 import os
 import pathlib
 
+from src.adar.config import ADK_MODEL
+
 # ── CHANGED: domain-aware config path ────────────────────────────────────────
 _DOMAIN      = os.getenv("DOMAIN", "arcl")
 _CONFIG_PATH = pathlib.Path(__file__).parent / f"agents_config.{_DOMAIN}.json"
@@ -58,6 +60,7 @@ def build_agents():
             tools = [registry[t] for t in spec["tools"] if t in registry]
             agent_map[spec["name"]] = LlmAgent(
                 name=spec["name"],
+                model=ADK_MODEL,
                 instruction=spec["instruction"],
                 tools=tools,
                 **( {"generate_content_config": _gen_cfg} if _gen_cfg else {} ),
@@ -69,6 +72,7 @@ def build_agents():
             subs = [agent_map[n] for n in spec["sub_agents"] if n in agent_map]
             agent_map[spec["name"]] = LlmAgent(
                 name=spec["name"],
+                model=ADK_MODEL,
                 instruction=spec["instruction"],
                 sub_agents=subs,
                 **( {"generate_content_config": _gen_cfg} if _gen_cfg else {} ),

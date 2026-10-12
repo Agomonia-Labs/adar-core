@@ -235,7 +235,17 @@ async def _enforce_token_rate_limit(request: Request) -> None:
         window.append(now)
 
 
-def _issue_guest_token(practice_ids: str | list[str]) -> tuple[str, str, datetime]:
+def _issue_guest_token(practice_ids: str | list[str], scope_mode: str = "demo") -> tuple[str, str, datetime]:
+    """scope_mode distinguishes the two shapes of guest token this endpoint
+    issues: "demo" (the original Front Desk behavior -- practice_ids drawn
+    from the env-configured SCHEDULING_GUEST_PRACTICE_IDS allowlist, and
+    get_scheduling_guest re-checks that subset on every call) vs
+    "single_practice" (a token scoped to exactly one caller-supplied
+    practice_id that was validated as active at mint time -- used by other
+    ADAR apps, like Eats' dine-in assistant, whose practice isn't and can't
+    be in that fixed demo allowlist; get_scheduling_guest skips the
+    allowlist subset check for this mode since mint-time validation already
+    covers it)."""
     if isinstance(practice_ids, str):
         practice_ids = [practice_ids]
     default_practice_id = practice_ids[0]
@@ -250,6 +260,7 @@ def _issue_guest_token(practice_ids: str | list[str]) -> tuple[str, str, datetim
             "status": "active",
             "practice_id": default_practice_id,
             "practice_ids": practice_ids,
+            "scope_mode": scope_mode,
             "token_use": GUEST_TOKEN_USE,
             "jti": uuid.uuid4().hex,
             "iat": now,
@@ -268,9 +279,17 @@ async def get_scheduling_guest(credentials=Depends(bearer_scheme)) -> dict:
     payload = decode_token(credentials.credentials)
     if payload.get("role") != GUEST_ROLE or payload.get("token_use") != GUEST_TOKEN_USE:
         raise HTTPException(status_code=403, detail="A Front Desk guest token is required")
-    configured_ids = set(_guest_practice_ids())
     token_ids = set(payload.get("practice_ids") or [payload.get("practice_id")])
-    if not token_ids or not token_ids.issubset(configured_ids):
+    if not token_ids:
+        raise HTTPException(status_code=403, detail="Guest token is not valid for the configured demo practices")
+    if payload.get("scope_mode") == "single_practice":
+        # Minted by create_guest_session for a caller-supplied practice_id
+        # (e.g. Eats' dine-in assistant) -- already validated as an active
+        # practice at mint time, so it doesn't need to be (and can't be) in
+        # the Front Desk demo allowlist below.
+        return payload
+    configured_ids = set(_guest_practice_ids())
+    if not token_ids.issubset(configured_ids):
         raise HTTPException(status_code=403, detail="Guest token is not valid for the configured demo practices")
     return payload
 
@@ -433,15 +452,37 @@ async def _active_practice(db: firestore.AsyncClient, practice_id: str):
 
 @router.post("/session", status_code=201)
 async def create_guest_session(request: Request, response: Response):
-    """Issue a short-lived token for the configured public demo practices."""
+    """Issue a short-lived guest token.
+
+    With no body (Front Desk's own "Ask ADAR"/booking flows): the original
+    behavior -- scoped to every practice in the env-configured
+    SCHEDULING_GUEST_PRACTICE_IDS demo allowlist.
+
+    With {"practice_id": "..."} in the body (other ADAR apps whose practice
+    isn't a Front Desk demo practice, e.g. Eats' dine-in assistant, scoped
+    to the one restaurant the customer is viewing): scoped to just that
+    practice_id, once validated as a real, active practice -- bypassing the
+    demo allowlist entirely rather than requiring every restaurant's
+    practice_id to be added to it (which wouldn't scale across however many
+    restaurants self-serve dine-in setup)."""
     _require_guest_enabled()
     _enforce_allowed_origin(request)
     await _enforce_token_rate_limit(request)
-    practice_ids = _guest_practice_ids()
     db = _db()
-    for practice_id in practice_ids:
-        await _active_practice(db, practice_id)
-    token, guest_id, expires_at = _issue_guest_token(practice_ids)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    requested_practice_id = (body.get("practice_id") or "").strip() if isinstance(body, dict) else ""
+    if requested_practice_id:
+        await _active_practice(db, requested_practice_id)
+        practice_ids = [requested_practice_id]
+        token, guest_id, expires_at = _issue_guest_token(practice_ids, scope_mode="single_practice")
+    else:
+        practice_ids = _guest_practice_ids()
+        for practice_id in practice_ids:
+            await _active_practice(db, practice_id)
+        token, guest_id, expires_at = _issue_guest_token(practice_ids, scope_mode="demo")
     response.headers["Cache-Control"] = "no-store"
     return {
         "access_token": token,
