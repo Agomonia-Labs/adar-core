@@ -966,6 +966,11 @@ _PROD_ORIGINS = [
     "https://www.scheduling.adar.agomoniai.com",
     "https://labs.agomoniai.com",
     "https://www.labs.agomoniai.com",
+    # ADAR Eats web app (adar-rag/ui/eats) -- its dine-in assistant talks
+    # to this deployment's scheduling guest-chat endpoints directly from
+    # the browser, same as the mobile app does from a device.
+    "https://eats.agomoniai.com",
+    "https://www.eats.agomoniai.com",
     "http://localhost:4177",
     "http://127.0.0.1:4177",
     # Firebase default URLs
@@ -975,6 +980,8 @@ _PROD_ORIGINS = [
     "https://restaurants-adar.firebaseapp.com",
     "https://scheduling-adar.web.app",
     "https://scheduling-adar.firebaseapp.com",
+    "https://eats-adar.web.app",
+    "https://eats-adar.firebaseapp.com",
 ]
 _DEV_ORIGINS = [
     "http://localhost:6001", "http://localhost:6002", "http://localhost:5173", "http://localhost:4177", "http://localhost:3000",

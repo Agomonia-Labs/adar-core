@@ -445,6 +445,18 @@ async def list_bookings(
             "caller_email": d.get("caller_email"),
             "reason": d.get("reason"),
             "status": d.get("status"),
+            # Set by confirm_booking (availability_tools.py) when this
+            # appointment was booked by a signed-in customer via a chat/
+            # voice assistant (e.g. ADAR Front Desk's "Ask ADAR" or ADAR
+            # Eats' dine-in assistant) rather than a staff admin booking --
+            # the caller app's own account id, same value used to tag that
+            # account's "My Appointments"/"My reservations" view. Admin
+            # callers (adar-rag's owner dashboard, Front Desk's own admin
+            # screens) were already reading everything else in this dict;
+            # this was the one field missing for a caller-app backend to
+            # reconcile an assistant-made booking back into its own
+            # per-customer records.
+            "guest_id": d.get("guest_id"),
         })
     out.sort(key=lambda a: a["start_time"] or "")
     return {"bookings": out}

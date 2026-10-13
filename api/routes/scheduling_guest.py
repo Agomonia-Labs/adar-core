@@ -47,6 +47,17 @@ GUEST_ALLOWED_ORIGINS = {
     "https://www.labs.agomoniai.com",
     "http://localhost:4177",
     "http://127.0.0.1:4177",
+    # ADAR Eats web app's dine-in assistant ("Ask the assistant" on the
+    # Dine-In tab) -- calls this same guest-chat flow directly from the
+    # browser, scoped to a practice_id instead of the demo allowlist (see
+    # create_guest_session below), but still has to clear this origin
+    # check first.
+    "https://eats.agomoniai.com",
+    "https://www.eats.agomoniai.com",
+    "https://eats-adar.web.app",
+    "https://eats-adar.firebaseapp.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 }
 
 _token_windows: dict[str, deque[float]] = defaultdict(deque)
@@ -213,7 +224,7 @@ def _enforce_allowed_origin(request: Request) -> None:
     if origin and origin not in GUEST_ALLOWED_ORIGINS:
         raise HTTPException(
             status_code=403,
-            detail="Guest Front Desk must run from Agomonia Labs or http://localhost:4177",
+            detail="Guest access must run from Agomonia Labs, ADAR Eats, or a local dev server",
         )
 
 
@@ -294,6 +305,30 @@ async def get_scheduling_guest(credentials=Depends(bearer_scheme)) -> dict:
     return payload
 
 
+# ADAR Eats' own backend (adar-rag) signs its customer JWTs with a
+# DIFFERENT secret than this service's -- adar-core's own tokens use
+# JWT_SECRET (see api/routes/auth.py's _jwt_secret()), while adar-rag
+# signs with JWT_SECRET_KEY (adar-rag/backend/auth/service.py). Both are
+# HS256 and both put the user id under the "sub" claim, so the two are
+# otherwise compatible -- but decode_customer_token below was only ever
+# trying adar-core's own secret, which can never verify a token actually
+# signed by adar-rag. That silently broke the one thing this function
+# exists for when the caller is an Eats customer (DineInAssistant.jsx
+# sends its `eats_token` as X-Customer-Token exactly so a dine-in
+# booking made through chat can be tagged with that customer's real
+# account id): the decode always raised on signature mismatch, this
+# function's `except Exception: return None` swallowed it, and every
+# assistant-made reservation ended up untagged -- invisible in the
+# customer's own "My reservations" list and uncancellable by them,
+# even though the owner could still see it (not account-scoped there).
+# Reading the SAME env var name adar-rag signs with lets ops mirror one
+# secret value under both names without any further code change; if
+# that env var isn't set in this service's environment, this fallback
+# is simply skipped (never a hard failure).
+def _eats_jwt_secret() -> str | None:
+    return os.environ.get("JWT_SECRET_KEY") or None
+
+
 def decode_customer_token(token: str) -> dict | None:
     """Same identity check as get_scheduling_customer below, but for a raw
     token string instead of FastAPI's bearer-scheme dependency. Used by
@@ -301,16 +336,27 @@ def decode_customer_token(token: str) -> dict | None:
     signed-in customer's real identity to an otherwise-anonymous guest chat
     turn (via a separate X-Customer-Token header -- the chat's own
     Authorization header stays the anonymous guest token, which is what
-    scopes rate limiting and the allowed-practices check). Returns None
-    rather than raising on any failure: a missing, stale, or malformed
-    customer token should just mean the turn stays anonymous, never break
-    the conversation."""
+    scopes rate limiting and the allowed-practices check). Tries this
+    service's own signing secret first (a native Front Desk customer
+    login), then falls back to ADAR Eats' own secret (see
+    _eats_jwt_secret above) for a customer token minted by that separate
+    service. Returns None rather than raising on any failure: a missing,
+    stale, or malformed customer token should just mean the turn stays
+    anonymous, never break the conversation."""
     if not token:
         return None
+    payload = None
     try:
         payload = decode_token(token)
     except Exception:
-        return None
+        eats_secret = _eats_jwt_secret()
+        if eats_secret:
+            try:
+                payload = jwt.decode(token, eats_secret, algorithms=[JWT_ALGORITHM])
+            except Exception:
+                return None
+        else:
+            return None
     if payload.get("role") == GUEST_ROLE or payload.get("token_use") == GUEST_TOKEN_USE:
         return None
     if not (payload.get("email") or "").strip():
