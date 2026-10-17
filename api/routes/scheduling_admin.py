@@ -517,6 +517,23 @@ async def create_booking(practice_id: str, body: BookingIn, team: dict = Depends
         raise HTTPException(status_code=400, detail="start_time must be an ISO 8601 datetime")
     if start.tzinfo is None:
         start = start.replace(tzinfo=dt_timezone.utc)
+
+    # Staff booking a walk-in/phone call directly bypasses check_availability
+    # (which only ever offers slots already inside the window), so the
+    # practice's own lead_time_minutes/max_advance_days guardrails have to be
+    # re-checked here too -- otherwise a staff member could book arbitrarily
+    # far out (or with no notice at all) regardless of what the practice
+    # configured, e.g. the 7-day cap a dine-in restaurant practice relies on.
+    practice_snap = await db.collection(settings.SCHEDULING_PRACTICES_COLLECTION).document(practice_id).get()
+    practice_data = practice_snap.to_dict() if practice_snap.exists else {}
+    now = datetime.now(dt_timezone.utc)
+    lead_time_minutes = int(practice_data.get("lead_time_minutes") or 120)
+    max_advance_days = int(practice_data.get("max_advance_days") or 60)
+    if start < now + timedelta(minutes=lead_time_minutes):
+        raise HTTPException(status_code=400, detail=f"Bookings need at least {lead_time_minutes} minutes' notice")
+    if start > now + timedelta(days=max_advance_days):
+        raise HTTPException(status_code=400, detail=f"Bookings can only be made up to {max_advance_days} days in advance")
+
     duration = int(appt_type.get("duration_minutes", 30))
     buffer_minutes = int(appt_type.get("buffer_minutes", 0))
     end = start + timedelta(minutes=duration)

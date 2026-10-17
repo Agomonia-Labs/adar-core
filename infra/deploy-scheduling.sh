@@ -44,6 +44,7 @@ REGISTRY="${REGISTRY:-${REGION}-docker.pkg.dev/${PROJECT_ID}/adar}"
 IMAGE="${IMAGE:-${REGISTRY}/scheduling-api:latest}"
 SERVICE="${SERVICE:-adar-scheduling-api}"
 SA="${SA:-adar-sa@${PROJECT_ID}.iam.gserviceaccount.com}"
+MIN_INSTANCES="${MIN_INSTANCES:-1}"
 SCHEDULING_DEFAULT_PRACTICE_ID="${SCHEDULING_DEFAULT_PRACTICE_ID:-e1WJrKlyup70ocTA5yGY}"
 SCHEDULING_GUEST_PRACTICE_ID="${SCHEDULING_GUEST_PRACTICE_ID:-${SCHEDULING_DEFAULT_PRACTICE_ID}}"
 SCHEDULING_GUEST_PRACTICE_IDS="${SCHEDULING_GUEST_PRACTICE_IDS:-front-desk-health,front-desk-salon,front-desk-finance,front-desk-legal,front-desk-realestate,front-desk-tutoring}"
@@ -142,7 +143,7 @@ gcloud run deploy "${SERVICE}" \
   --region "${REGION}" \
   --platform managed \
   --allow-unauthenticated \
-  --min-instances 0 \
+  --min-instances "${MIN_INSTANCES}" \
   --max-instances 3 \
   --memory 1Gi \
   --cpu 1 \
