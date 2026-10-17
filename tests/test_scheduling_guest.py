@@ -96,6 +96,35 @@ class SchedulingGuestTests(unittest.IsolatedAsyncioTestCase):
             await get_scheduling_staff(team=claims)
         self.assertEqual(error.exception.status_code, 403)
 
+    async def test_booking_actor_accepts_public_guest_token(self):
+        token, _, _ = scheduling_guest._issue_guest_token("demo-practice")
+        actor = await scheduling_guest.get_scheduling_booking_actor(
+            credentials=SimpleNamespace(credentials=token),
+        )
+
+        self.assertTrue(scheduling_guest._is_guest_actor(actor))
+        self.assertEqual(actor["practice_id"], "demo-practice")
+
+    async def test_booking_actor_preserves_signed_in_customer(self):
+        from jose import jwt
+
+        token = jwt.encode(
+            {
+                "team_id": "customer-123",
+                "email": "customer@example.com",
+                "role": "user",
+                "exp": datetime.now(timezone.utc).timestamp() + 300,
+            },
+            os.environ["JWT_SECRET"],
+            algorithm="HS256",
+        )
+        actor = await scheduling_guest.get_scheduling_booking_actor(
+            credentials=SimpleNamespace(credentials=token),
+        )
+
+        self.assertFalse(scheduling_guest._is_guest_actor(actor))
+        self.assertEqual(actor["team_id"], "customer-123")
+
     async def test_guest_dependency_rejects_a_staff_token_shape(self):
         from jose import jwt
 

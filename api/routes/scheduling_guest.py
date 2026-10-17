@@ -380,6 +380,25 @@ async def get_scheduling_customer(credentials=Depends(bearer_scheme)) -> dict:
     return payload
 
 
+async def get_scheduling_booking_actor(credentials=Depends(bearer_scheme)) -> dict:
+    """Accept either the public demo guest or a signed-in customer.
+
+    The Labs Front Desk uses an isolated guest calendar, while the production
+    scheduling and Eats clients use real customer appointments. Keeping the
+    distinction in one dependency prevents one mode from disabling the other.
+    """
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    payload = decode_token(credentials.credentials)
+    if payload.get("role") == GUEST_ROLE or payload.get("token_use") == GUEST_TOKEN_USE:
+        return await get_scheduling_guest(credentials)
+    return await get_scheduling_customer(credentials)
+
+
+def _is_guest_actor(actor: dict) -> bool:
+    return actor.get("role") == GUEST_ROLE and actor.get("token_use") == GUEST_TOKEN_USE
+
+
 def _resolve_customer_practice(practice_id: str) -> str:
     resolved = (practice_id or "").strip()
     if not resolved or resolved not in set(_guest_practice_ids()):
@@ -617,7 +636,7 @@ async def list_guest_bookings(
     start: str,
     end: str,
     practice_id: str = "",
-    customer: dict = Depends(get_scheduling_customer),
+    actor: dict = Depends(get_scheduling_booking_actor),
 ):
     try:
         start_dt = datetime.fromisoformat(start)
@@ -629,15 +648,24 @@ async def list_guest_bookings(
     if end_dt.tzinfo is None:
         end_dt = end_dt.replace(tzinfo=timezone.utc)
 
-    resolved = _resolve_customer_practice(practice_id)
+    is_guest = _is_guest_actor(actor)
+    resolved = (
+        _resolve_guest_practice(actor, practice_id)
+        if is_guest
+        else _resolve_customer_practice(practice_id)
+    )
+    collection = _guest_collection() if is_guest else settings.SCHEDULING_APPOINTMENTS_COLLECTION
     bookings = []
-    async for doc in _db().collection(settings.SCHEDULING_APPOINTMENTS_COLLECTION).where(
+    async for doc in _db().collection(collection).where(
         "practice_id", "==", resolved
     ).limit(200).stream():
         data = doc.to_dict() or {}
-        if data.get("guest_id") != customer["team_id"]:
+        if data.get("guest_id") != actor["team_id"] and not (is_guest and data.get("demo_seed") is True):
             continue
         starts_at = data.get("start_time")
+        expires_at = data.get("expires_at")
+        if is_guest and expires_at and expires_at <= datetime.now(timezone.utc):
+            continue
         if starts_at and start_dt <= starts_at < end_dt:
             bookings.append(_public_booking(doc.id, data))
     bookings.sort(key=lambda item: item.get("start_time") or "")
@@ -667,19 +695,17 @@ async def list_guest_traces(
 
 
 @router.post("/bookings", status_code=201)
-async def create_guest_booking(body: GuestBookingIn, customer: dict = Depends(get_scheduling_customer)):
-    """Books a real appointment for a signed-in ADAR Front Desk customer --
-    this app is a full production booking channel, not a demo, so this
-    writes straight into SCHEDULING_APPOINTMENTS_COLLECTION, the same
-    collection scheduling_admin.py's practice-admin console and provider
-    calendar read from (and the same one the Ask ADAR chat agent's
-    hold_slot/confirm_booking tools already write into). No artificial
-    per-customer booking cap or expiry -- those only ever made sense for
-    the old throwaway public demo."""
+async def create_guest_booking(body: GuestBookingIn, actor: dict = Depends(get_scheduling_booking_actor)):
+    """Create an isolated demo booking or a real customer appointment."""
     db = _db()
-    practice_id = _resolve_customer_practice(body.practice_id)
-    guest_id = customer["team_id"]
-    customer_email = (customer.get("email") or "").strip().lower()
+    is_guest = _is_guest_actor(actor)
+    practice_id = (
+        _resolve_guest_practice(actor, body.practice_id)
+        if is_guest
+        else _resolve_customer_practice(body.practice_id)
+    )
+    guest_id = actor["team_id"]
+    customer_email = (actor.get("email") or "").strip().lower()
     practice_doc = await _active_practice(db, practice_id)
     practice_data = practice_doc.to_dict() or {}
 
@@ -716,6 +742,20 @@ async def create_guest_booking(body: GuestBookingIn, customer: dict = Depends(ge
     if starts_at > now + timedelta(days=max_advance_days):
         raise HTTPException(status_code=400, detail=f"Bookings can only be made up to {max_advance_days} days in advance")
 
+    if is_guest:
+        active_count = 0
+        async for existing in db.collection(_guest_collection()).where(
+            "guest_id", "==", guest_id
+        ).limit(GUEST_MAX_BOOKINGS + 1).stream():
+            existing_data = existing.to_dict() or {}
+            expires_at = existing_data.get("expires_at")
+            if existing_data.get("status") == "confirmed" and (
+                not expires_at or expires_at > datetime.now(timezone.utc)
+            ):
+                active_count += 1
+        if active_count >= GUEST_MAX_BOOKINGS:
+            raise HTTPException(status_code=429, detail="This guest session has reached its demo booking limit")
+
     duration = int(appointment_type.get("duration_minutes", 30))
     ends_at = starts_at + timedelta(minutes=duration)
     appointment_id = str(uuid.uuid4())
@@ -733,10 +773,12 @@ async def create_guest_booking(body: GuestBookingIn, customer: dict = Depends(ge
         "caller_email": body.caller_email.strip(),
         "reason": body.reason.strip(),
         "status": "confirmed",
-        "source_channel": "front_desk_app",
+        "source_channel": "public_demo" if is_guest else "front_desk_app",
         "created_at": firestore.SERVER_TIMESTAMP,
         "updated_at": firestore.SERVER_TIMESTAMP,
     }
+    if is_guest:
+        data["expires_at"] = datetime.now(timezone.utc) + timedelta(hours=GUEST_BOOKING_TTL_HOURS)
 
     transaction = db.transaction()
 
@@ -753,7 +795,20 @@ async def create_guest_booking(body: GuestBookingIn, customer: dict = Depends(ge
             if _overlaps(starts_at, ends_at, current.get("start_time"), current.get("end_time")):
                 raise ValueError("slot_taken")
 
-        txn.set(db.collection(settings.SCHEDULING_APPOINTMENTS_COLLECTION).document(appointment_id), data)
+        async for existing in db.collection(_guest_collection()).where(
+            "practice_id", "==", practice_id
+        ).limit(1000).stream(transaction=txn):
+            current = existing.to_dict() or {}
+            if current.get("provider_id") != body.provider_id or current.get("status") != "confirmed":
+                continue
+            expires_at = current.get("expires_at")
+            if expires_at and expires_at <= datetime.now(timezone.utc):
+                continue
+            if _overlaps(starts_at, ends_at, current.get("start_time"), current.get("end_time")):
+                raise ValueError("slot_taken")
+
+        collection = _guest_collection() if is_guest else settings.SCHEDULING_APPOINTMENTS_COLLECTION
+        txn.set(db.collection(collection).document(appointment_id), data)
 
     try:
         await _create_if_available(transaction)
@@ -762,18 +817,19 @@ async def create_guest_booking(body: GuestBookingIn, customer: dict = Depends(ge
             raise HTTPException(status_code=409, detail="That time is no longer available")
         raise
 
-    await _send_booking_emails(
-        practice_data=practice_data,
-        provider_data=provider,
-        appointment_type_name=appointment_type.get("name", ""),
-        caller_name=body.caller_name.strip(),
-        caller_phone=body.caller_phone.strip(),
-        caller_email=str(body.caller_email).strip(),
-        customer_email=customer_email,
-        reason=body.reason.strip(),
-        when_formatted=_format_when(starts_at, practice_data.get("timezone", "")),
-        appointment_id=appointment_id,
-    )
+    if not is_guest:
+        await _send_booking_emails(
+            practice_data=practice_data,
+            provider_data=provider,
+            appointment_type_name=appointment_type.get("name", ""),
+            caller_name=body.caller_name.strip(),
+            caller_phone=body.caller_phone.strip(),
+            caller_email=str(body.caller_email).strip(),
+            customer_email=customer_email,
+            reason=body.reason.strip(),
+            when_formatted=_format_when(starts_at, practice_data.get("timezone", "")),
+            appointment_id=appointment_id,
+        )
 
     return _public_booking(appointment_id, data)
 
@@ -905,22 +961,32 @@ async def _send_cancellation_emails(
 async def cancel_guest_booking(
     appointment_id: str,
     reason: str = "Cancelled from ADAR Front Desk app",
-    customer: dict = Depends(get_scheduling_customer),
+    actor: dict = Depends(get_scheduling_booking_actor),
 ):
-    """Cancels a signed-in customer's own booking and sends the same
+    """Cancel a guest demo booking or a signed-in customer's own booking.
+
+    Signed-in customer cancellations send the same
     customer+provider+practice-admin email fan-out confirm_booking sends
-    on a new booking (_send_cancellation_emails, shared with the
-    scheduling agent's cancel_appointment tool) -- this used to silently
-    update the booking's status with no email at all."""
+    on a new booking; isolated guest-demo cancellations do not notify real
+    customers or practice staff.
+    """
     db = _db()
-    ref = db.collection(settings.SCHEDULING_APPOINTMENTS_COLLECTION).document(appointment_id)
+    is_guest = _is_guest_actor(actor)
+    collection = _guest_collection() if is_guest else settings.SCHEDULING_APPOINTMENTS_COLLECTION
+    ref = db.collection(collection).document(appointment_id)
     doc = await ref.get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Booking not found")
     data = doc.to_dict() or {}
-    if data.get("guest_id") != customer["team_id"]:
+    if data.get("guest_id") != actor["team_id"]:
         raise HTTPException(status_code=404, detail="Booking not found")
-    practice_id = _resolve_customer_practice(data.get("practice_id", ""))
+    practice_id = (
+        _resolve_guest_practice(actor, data.get("practice_id", ""))
+        if is_guest
+        else _resolve_customer_practice(data.get("practice_id", ""))
+    )
+    if is_guest and data.get("demo_seed") is True:
+        raise HTTPException(status_code=404, detail="Booking not found")
     if data.get("status") == "cancelled":
         raise HTTPException(status_code=400, detail="Booking is already cancelled")
     await ref.update({
@@ -929,6 +995,9 @@ async def cancel_guest_booking(
         "updated_at": firestore.SERVER_TIMESTAMP,
     })
     data["status"] = "cancelled"
+
+    if is_guest:
+        return _public_booking(appointment_id, data)
 
     try:
         practice_snap = await db.collection(settings.SCHEDULING_PRACTICES_COLLECTION).document(practice_id).get()
@@ -955,7 +1024,7 @@ async def cancel_guest_booking(
         caller_name=data.get("caller_name", ""),
         caller_phone=data.get("caller_phone", ""),
         caller_email=(data.get("caller_email") or "").strip(),
-        customer_email=(customer.get("email") or "").strip().lower(),
+        customer_email=(actor.get("email") or "").strip().lower(),
         cancel_reason=reason[:500],
         when_formatted=_format_when(data["start_time"], practice_data.get("timezone", "")),
         appointment_id=appointment_id,
