@@ -94,11 +94,17 @@ const TENANTS = {
   },
 
   geetabitan: {
+    // Tenant id/env var stays "geetabitan" (VITE_DOMAIN=geetabitan) so no
+    // deployment config needs to change — only the DISPLAYED branding below
+    // is "Sursangam" now that the web assistant covers both Rabindra Sangeet
+    // and Nazrul Geeti. iOS is a separate native/RN app with its own
+    // hardcoded branding (see adar-mobile) and is NOT affected by this —
+    // it needs its own dedicated update later.
     id:            'geetabitan',
-    appTitle:      'আদর · গীতবিতান',
-    name:          'গীতবিতান — রবীন্দ্রনাথ ঠাকুরের গান',
-    shortName:     'Geetabitan',
-    subtitle:      'রবীন্দ্রসঙ্গীত সহায়ক',
+    appTitle:      'আদর · সুরসঙ্গম',
+    name:          'সুরসঙ্গম — রবীন্দ্রসঙ্গীত ও নজরুলগীতি',
+    shortName:     'Sursangam',
+    subtitle:      'রবীন্দ্রসঙ্গীত ও নজরুলগীতি সহায়ক',
     logoText:      'আদর',
 
     // Colors — deep red and gold for Tagore / Rabindra Sangeet
@@ -120,12 +126,12 @@ const TENANTS = {
 
     // Chat strings
     welcomeMessage:
-      'স্বাগতম! আমি আদর — গীতবিতানের সহায়ক। রবীন্দ্রনাথ ঠাকুরের যেকোনো গান, ' +
-      'রাগ, তাল, পর্যায়, বা গানের অর্থ সম্পর্কে প্রশ্ন করুন।\n\nকী জানতে চান?',
+      'স্বাগতম! আমি আদর — সুরসঙ্গমের সহায়ক। রবীন্দ্রনাথ ঠাকুর বা কাজী নজরুল ইসলামের ' +
+      'যেকোনো গান, রাগ, তাল, পর্যায়/সংকলন, বা গানের অর্থ সম্পর্কে প্রশ্ন করুন।\n\nকী জানতে চান?',
     placeholder:    'বাংলায় গান খুঁজুন…',
-    typingText:     'গীতবিতান খোঁজা হচ্ছে…',
-    clearMessage:   'Session cleared. রবীন্দ্রসঙ্গীত বিষয়ে কিছু জানতে চাইলে বলুন।',
-    footerText:     'Powered by Adar · গীতবিতান',
+    typingText:     'গান খোঁজা হচ্ছে…',
+    clearMessage:   'Session cleared. রবীন্দ্রসঙ্গীত বা নজরুলগীতি বিষয়ে কিছু জানতে চাইলে বলুন।',
+    footerText:     'Powered by Adar · সুরসঙ্গম',
     evalLabels: {
       accuracy: 'যথার্থতা',
       completeness: 'সম্পূর্ণতা',
@@ -182,15 +188,43 @@ const TENANTS = {
       'ভোরের গান কী কী?',
     ],
 
+    // Nazrul Geeti suggested questions — additive, separate pool from
+    // suggestedQuestions above (which stays the Rabindra Sangeet set so
+    // today's random-6 behavior is unchanged). Surfaced via a composer
+    // toggle in the chat UI — wiring that toggle into App.jsx (reading this
+    // array and passing the selected composer through to the chat request)
+    // is the next incremental step, not yet done in this pass.
+    suggestedQuestionsNazrul: [
+      // গান খোঁজা
+      'বাগিচায় বুলবুলি তুই গানটি খুঁজুন',
+      'কারার ঐ লৌহকপাট গানটি দেখাও',
+      'মোরা ঝঞ্জার মতো উদ্দাম গানটি দেখাও',
+      'দূর দ্বীপবাসিনী গানটি দেখাও',
+      // সংকলন অনুযায়ী
+      'বুলবুল সংকলনের গানগুলো দেখাও',
+      'সন্ধ্যা সংকলনে কতটি গান আছে?',
+      'জুলফিকার সংকলনের গান দেখাও',
+      'বনগীতি সংকলনের গান কী কী?',
+      // রাগ ও তাল অনুযায়ী
+      'ভৈরবী রাগে নজরুলগীতি দেখাও',
+      'দাদরা তালে নজরুলগীতি কী কী আছে?',
+      // অর্থ ও ব্যাখ্যা
+      'কারার ঐ লৌহকপাট গানের অর্থ কী?',
+      'বাগিচায় বুলবুলি তুই গানের প্রেক্ষাপট বলো',
+      // বিশেষ অনুসন্ধান
+      'দেশপ্রেমের নজরুলগীতি দেখাও',
+      'বিদ্রোহের গান দেখাও',
+    ],
+
     // Register page
     registerSubtitle:    '14-day free trial · No credit card until trial ends',
-    showTeamDropdown:    false,     // no team list for Geetabitan
+    showTeamDropdown:    false,     // no team list for Sursangam
     teamDropdownLabel:   '',
     teamDropdownHelper:  '',
 
     // Login page
-    loginTitle:   'আদর · গীতবিতান',
-    loginCaption: 'Powered by Adar · গীতবিতান',
+    loginTitle:   'আদর · সুরসঙ্গম',
+    loginCaption: 'Powered by Adar · সুরসঙ্গম',
   },
 
   restaurants: {

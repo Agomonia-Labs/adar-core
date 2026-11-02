@@ -9,9 +9,31 @@ import unicodedata
 from functools import lru_cache
 from pathlib import Path
 
+from typing import Literal
+
 from src.adar.db import direct_query, get_documents_by_field, get_db, vector_search
-from domains.geetabitan.config import FIRESTORE_COLLECTION
+from domains.geetabitan.config import (
+    FIRESTORE_COLLECTION,
+    NAZRUL_FIRESTORE_COLLECTION,
+)
 from domains.geetabitan.data.raag_metadata import TAAL_DATA
+
+Composer = Literal["rabindra", "nazrul"]
+
+_COMPOSER_COLLECTIONS: dict[str, str] = {
+    "rabindra": FIRESTORE_COLLECTION,
+    "nazrul": NAZRUL_FIRESTORE_COLLECTION,
+}
+
+
+def _collection_for(composer: Composer = "rabindra") -> str:
+    """Firestore collection for a composer. Defaults to today's only
+    collection, so every existing (no-argument) call site is unaffected."""
+    return _COMPOSER_COLLECTIONS.get(composer, FIRESTORE_COLLECTION)
+
+
+def _other_composer(composer: Composer) -> Composer:
+    return "nazrul" if composer == "rabindra" else "rabindra"
 
 
 # ── Taal lookup — case-insensitive fallback ───────────────────────────────────
@@ -87,21 +109,29 @@ def _find_local_song(query: str) -> dict | None:
 
 # ── Internal: fetch one doc by its Firestore document ID ─────────────────────
 
-async def _get_doc_by_id(doc_id: str) -> dict | None:
+async def _get_doc_by_id(doc_id: str, composer: Composer = "rabindra") -> dict | None:
     try:
         db  = get_db()
-        doc = await db.collection(FIRESTORE_COLLECTION).document(doc_id).get()
+        doc = await db.collection(_collection_for(composer)).document(doc_id).get()
     except Exception:
         return None
     if not doc.exists:
-        return None
+        # song_id alone doesn't say which catalog it came from — fall back
+        # to the other composer's collection before giving up.
+        other = _other_composer(composer)
+        try:
+            doc = await db.collection(_collection_for(other)).document(doc_id).get()
+        except Exception:
+            return None
+        if not doc.exists:
+            return None
     data = doc.to_dict()
     data["doc_id"] = doc.id
     data.pop("embedding", None)
     return data
 
 
-async def _resolve_song_doc(song_id_or_query: str) -> dict | None:
+async def _resolve_song_doc(song_id_or_query: str, composer: Composer = "rabindra") -> dict | None:
     """Resolve a Firestore ID, visible title, first line, or user query to a song."""
     raw = _normalize_text(song_id_or_query)
     if not raw:
@@ -111,7 +141,7 @@ async def _resolve_song_doc(song_id_or_query: str) -> dict | None:
     if marker:
         raw = marker.group(1).strip()
 
-    doc = await _get_doc_by_id(raw)
+    doc = await _get_doc_by_id(raw, composer)
     if doc:
         return doc
 
@@ -119,9 +149,11 @@ async def _resolve_song_doc(song_id_or_query: str) -> dict | None:
     if not query:
         return None
 
+    collection = _collection_for(composer)
+
     for field in ("title", "first_line"):
         matches = await get_documents_by_field(
-            collection=FIRESTORE_COLLECTION,
+            collection=collection,
             field=field,
             value=query,
             limit=1,
@@ -129,14 +161,17 @@ async def _resolve_song_doc(song_id_or_query: str) -> dict | None:
         if matches:
             return matches[0]
 
-    local_match = _find_local_song(query)
-    if local_match:
-        local_id = _doc_id_from_doc(local_match)
-        firestore_doc = await _get_doc_by_id(local_id) if local_id else None
-        return firestore_doc or local_match
+    if composer == "rabindra":
+        # The local JSON cache only mirrors the original Rabindra Sangeet
+        # catalog — Nazrul Geeti always resolves via Firestore.
+        local_match = _find_local_song(query)
+        if local_match:
+            local_id = _doc_id_from_doc(local_match)
+            firestore_doc = await _get_doc_by_id(local_id, composer) if local_id else None
+            return firestore_doc or local_match
 
     matches = await vector_search(
-        collection=FIRESTORE_COLLECTION,
+        collection=collection,
         query=query,
         top_k=1,
     )
@@ -192,12 +227,19 @@ def _song_card(doc: dict) -> str:
     beats_str = f" | {beats} মাত্রা" if beats else ""
     song_id = _doc_id_from_doc(doc)
 
+    # Rabindra Sangeet is organized by পর্যায় (paryay); Nazrul Geeti docs
+    # carry সংকলন (category/book name) instead — show whichever applies.
+    if doc.get("source") == "nazrul":
+        group_label, group_value = "সংকলন", doc.get("category", "—")
+    else:
+        group_label, group_value = "পর্যায়", doc.get("paryay", "—")
+
     lines = [
         f"[song_id:{song_id}]" if song_id else "",
         "─────────────────────────────",
         f"🎵 **{doc['title']}**",
         "─────────────────────────────",
-        f"পর্যায়: {doc.get('paryay', '—')}  |  রাগ: {raag}  |  তাল: {taal}{beats_str}",
+        f"{group_label}: {group_value}  |  রাগ: {raag}  |  তাল: {taal}{beats_str}",
         "",
         _format_lyrics(doc),
     ]
@@ -206,10 +248,11 @@ def _song_card(doc: dict) -> str:
 
 # ── Song retrieval tools ──────────────────────────────────────────────────────
 
-async def get_song_by_title(title: str) -> str:
-    """Fetch a Tagore song by title, first line, or close query.
+async def get_song_by_title(title: str, composer: Composer = "rabindra") -> str:
+    """Fetch a song (Rabindra Sangeet by default, or Nazrul Geeti when
+    composer="nazrul") by title, first line, or close query.
     Returns complete song with formatted lyrics."""
-    doc = await _resolve_song_doc(title)
+    doc = await _resolve_song_doc(title, composer)
     if doc:
         return _song_card(doc)
     return (
@@ -218,9 +261,9 @@ async def get_song_by_title(title: str) -> str:
     )
 
 
-async def get_full_song(song_id: str) -> str:
+async def get_full_song(song_id: str, composer: Composer = "rabindra") -> str:
     """Retrieve complete formatted lyrics of a song by its song_id."""
-    doc = await _get_doc_by_id(song_id)
+    doc = await _get_doc_by_id(song_id, composer)
     if not doc:
         return "গান পাওয়া যায়নি। অনুগ্রহ করে গানের নাম দিয়ে আবার খুঁজুন।"
     return _song_card(doc)
@@ -248,9 +291,32 @@ async def get_songs_by_paryay(paryay: str) -> str:
     return f"**{paryay}** পর্যায়ের গানসমূহ:\n" + "\n".join(lines) + suffix
 
 
-async def get_song_stanza(song_id: str, stanza_number: int) -> str:
+async def get_songs_by_category(category: str) -> str:
+    """List all Nazrul Geeti songs in a given book/collection (সংকলন),
+    e.g. 'বুলবুল', 'সন্ধ্যা' — the Nazrul equivalent of get_songs_by_paryay."""
+    results = await direct_query(
+        collection=NAZRUL_FIRESTORE_COLLECTION,
+        filters={"category": category},
+        limit=500,
+    )
+    if not results:
+        return f"'{category}' সংকলনে কোনো গান পাওয়া যায়নি।"
+
+    lines = [
+        f"- **{r['title']}** | রাগ: {r.get('raag', '—')} | "
+        f"তাল: {r.get('taal', '—')}"
+        for r in results[:25]
+    ]
+    suffix = (
+        f"\n\n_(মোট {len(results)}টি গান। নির্দিষ্ট গান দেখতে গানের নাম বলুন।)_"
+        if len(results) > 25 else ""
+    )
+    return f"**{category}** সংকলনের গানসমূহ:\n" + "\n".join(lines) + suffix
+
+
+async def get_song_stanza(song_id: str, stanza_number: int, composer: Composer = "rabindra") -> str:
     """Get a specific stanza (স্তবক) of a song. stanza_number is 1-based."""
-    doc = await _get_doc_by_id(song_id)
+    doc = await _get_doc_by_id(song_id, composer)
     if not doc:
         return "গান পাওয়া যায়নি।"
     stanzas = doc.get("stanzas", [])
@@ -263,31 +329,6 @@ async def get_song_stanza(song_id: str, stanza_number: int) -> str:
     if idx < 0 or idx >= len(stanzas):
         return f"স্তবক {stanza_number} পাওয়া যায়নি। এই গানে {len(stanzas)}টি স্তবক আছে।"
     return f"**স্তবক {stanza_number}:**\n\n{stanzas[idx]}"
-
-
-
-    """List all raags with arohi, aborohi, vadi, samvadi and mood."""
-    from domains.geetabitan.data.raag_metadata import RAAG_DATA, TAAL_DATA
-    raags = {k: v for k, v in RAAG_DATA.items() if k not in TAAL_DATA}
-    lines = ["## গীতবিতানে প্রচলিত রাগসমূহ\n"]
-    for name, meta in raags.items():
-        arohi   = meta.get("arohi",   "—")
-        aborohi = meta.get("aborohi", "—")
-        vadi    = meta.get("vadi",    "—")
-        samvadi = meta.get("samvadi", "—")
-        komal   = meta.get("komal",   "")
-        entry = (
-            f"### {name}\n"
-            f"**সময়:** {meta.get('time','—')} | **মেজাজ:** {meta.get('mood','—')}\n"
-            f"**আরোহী:** {arohi}\n"
-            f"**অবরোহী:** {aborohi}\n"
-            f"**বাদী:** {vadi} | **সমবাদী:** {samvadi}"
-        )
-        if komal and komal != "—":
-            entry += f" | **কোমল:** {komal}"
-        lines.append(entry)
-    lines.append(f"\n_মোট {len(raags)}টি রাগ। যেকোনো রাগের গান দেখতে রাগের নাম বলুন।_")
-    return "\n\n".join(lines)
 
 
 async def list_raags() -> str:
@@ -369,21 +410,28 @@ async def _search_youtube(query: str, max_results: int = 5) -> list[dict]:
         return []
 
 
-async def get_youtube_url(song_id: str) -> str:
+async def get_youtube_url(song_id: str, composer: Composer = "rabindra") -> str:
     """Search YouTube for actual videos of this song. Returns direct watch links
     when videos are found, plus singer-specific search links as fallback."""
     import urllib.parse
-    doc = await _get_doc_by_id(song_id)
+    doc = await _get_doc_by_id(song_id, composer)
     if not doc:
         return "গান পাওয়া যায়নি।"
+
+    # The doc itself says which catalog it's from — trust that over the
+    # caller's composer guess (a bare song_id alone doesn't encode it).
+    is_nazrul = doc.get("source") == "nazrul"
 
     first_line = doc.get("first_line", doc.get("title", ""))
     title      = doc.get("title", "")
     display    = first_line or title
 
+    genre_bn = "নজরুলগীতি" if is_nazrul else "রবীন্দ্রসঙ্গীত"
+    genre_en = "Nazrul Geeti" if is_nazrul else "Rabindra Sangeet"
+
     # ── Search YouTube for actual videos ──────────────────────────────────
-    results_bn = await _search_youtube(f"{display} রবীন্দ্রসঙ্গীত", max_results=8)
-    results_en = await _search_youtube(f"{title} Rabindra Sangeet", max_results=5) if not results_bn else []
+    results_bn = await _search_youtube(f"{display} {genre_bn}", max_results=8)
+    results_en = await _search_youtube(f"{title} {genre_en}", max_results=5) if not results_bn else []
     results    = results_bn or results_en
 
     # Deduplicate by videoId
@@ -410,7 +458,7 @@ async def get_youtube_url(song_id: str) -> str:
                      " নিচের শিল্পী-ভিত্তিক অনুসন্ধান ব্যবহার করুন।_\n")
 
     # ── Section 2: Singer-specific search links ───────────────────────────
-    SINGERS = [
+    RABINDRA_SINGERS = [
         ("সুচিত্রা মিত্র",        "Suchitra Mitra",          "লেজেন্ডারি"),
         ("দেবব্রত বিশ্বাস",       "Debabrata Biswas",         "লেজেন্ডারি"),
         ("কণিকা বন্দ্যোপাধ্যায়",  "Kanika Bandyopadhyay",    "লেজেন্ডারি"),
@@ -426,11 +474,24 @@ async def get_youtube_url(song_id: str) -> str:
         ("শ্রেয়া ঘোষাল",          "Shreya Ghoshal",           "ক্রসওভার"),
     ]
 
+    NAZRUL_SINGERS = [
+        ("ফিরোজা বেগম",          "Firoza Begum",             "লেজেন্ডারি"),
+        ("আব্বাসউদ্দীন আহমেদ",    "Abbasuddin Ahmed",         "লেজেন্ডারি"),
+        ("সোহরাব হোসেন",         "Sohrab Hossain",            "লেজেন্ডারি"),
+        ("খালিদ হোসেন",          "Khalid Hossain",            "লেজেন্ডারি"),
+        ("ইন্দ্রাণী সেন",         "Indrani Sen",                "সমসাময়িক"),
+        ("মঞ্জু দত্ত",            "Manju Dutta",                "সমসাময়িক"),
+        ("নাশিদ কামাল",          "Nashid Kamal",               "সমসাময়িক"),
+        ("সুজিত মুস্তফা",         "Sujit Mustafa",              "সমসাময়িক"),
+    ]
+
+    SINGERS = NAZRUL_SINGERS if is_nazrul else RABINDRA_SINGERS
+
     lines.append("### 🎵 শিল্পী অনুযায়ী অনুসন্ধান\n")
     lines.append("| শিল্পী | ধরন | YouTube অনুসন্ধান |")
     lines.append("|---|---|---|")
     for bn, en, cat in SINGERS:
-        q   = urllib.parse.quote(f"{title} {en} Rabindra Sangeet")
+        q   = urllib.parse.quote(f"{title} {en} {genre_en}")
         url = f"https://www.youtube.com/results?search_query={q}"
         lines.append(f"| {bn} | {cat} | [🔍 খুঁজুন]({url}) |")
 
@@ -454,13 +515,14 @@ def _looks_like_generic_youtube_request(query: str) -> bool:
     return any(term in text for term in generic_terms) and len(text) <= 80
 
 
-async def _find_song_for_youtube(query: str) -> dict | None:
+async def _find_song_for_youtube(query: str, composer: Composer = "rabindra") -> dict | None:
     query = (query or "").strip()
+    collection = _collection_for(composer)
 
     if query:
         if not _looks_like_generic_youtube_request(query):
             exact = await get_documents_by_field(
-                collection=FIRESTORE_COLLECTION,
+                collection=collection,
                 field="title",
                 value=query,
                 limit=1,
@@ -469,16 +531,21 @@ async def _find_song_for_youtube(query: str) -> dict | None:
                 return exact[0]
 
         matches = await vector_search(
-            collection=FIRESTORE_COLLECTION,
+            collection=collection,
             query=query,
             top_k=1,
         )
         if matches:
             return matches[0]
 
-    for title in ("আমার সোনার বাংলা", "যদি তোর ডাক শুনে কেউ না আসে", "আনন্দধারা বহিছে ভুবনে"):
+    fallback_titles = (
+        ("বাগিচায় বুলবুলি তুই", "কারার ঐ লৌহকপাট", "মোরা ঝঞ্জার মতো উদ্দাম")
+        if composer == "nazrul"
+        else ("আমার সোনার বাংলা", "যদি তোর ডাক শুনে কেউ না আসে", "আনন্দধারা বহিছে ভুবনে")
+    )
+    for title in fallback_titles:
         exact = await get_documents_by_field(
-            collection=FIRESTORE_COLLECTION,
+            collection=collection,
             field="title",
             value=title,
             limit=1,
@@ -487,20 +554,21 @@ async def _find_song_for_youtube(query: str) -> dict | None:
             return exact[0]
 
     matches = await vector_search(
-        collection=FIRESTORE_COLLECTION,
-        query=query or "জনপ্রিয় রবীন্দ্রসঙ্গীত",
+        collection=collection,
+        query=query or ("জনপ্রিয় নজরুলগীতি" if composer == "nazrul" else "জনপ্রিয় রবীন্দ্রসঙ্গীত"),
         top_k=1,
     )
     return matches[0] if matches else None
 
 
-async def play_youtube_song(query: str = "") -> str:
-    """Find a requested or representative Rabindra Sangeet and return YouTube links.
+async def play_youtube_song(query: str = "", composer: Composer = "rabindra") -> str:
+    """Find a requested or representative song (Rabindra Sangeet by default,
+    Nazrul Geeti when composer="nazrul") and return YouTube links.
 
     This hides internal Firestore IDs from the assistant response while still
     allowing a direct play/listen request to resolve a song and produce links.
     """
-    doc = await _find_song_for_youtube(query)
+    doc = await _find_song_for_youtube(query, composer)
     if not doc:
         return "YouTube-এ চালানোর মতো গান খুঁজে পাওয়া যায়নি। অনুগ্রহ করে গানের নামটি বলুন।"
 
@@ -509,7 +577,7 @@ async def play_youtube_song(query: str = "") -> str:
         title = doc.get("title", "")
         if title:
             exact = await get_documents_by_field(
-                collection=FIRESTORE_COLLECTION,
+                collection=_collection_for(composer),
                 field="title",
                 value=title,
                 limit=1,
@@ -519,12 +587,12 @@ async def play_youtube_song(query: str = "") -> str:
     if not song_id:
         return "গানটি পাওয়া গেছে, কিন্তু YouTube লিংক তৈরির জন্য দরকারি তথ্য পাওয়া যায়নি।"
 
-    return await get_youtube_url(song_id)
+    return await get_youtube_url(song_id, composer)
 
 
-async def get_song_summary(song_id: str) -> str:
+async def get_song_summary(song_id: str, composer: Composer = "rabindra") -> str:
     """Return the full pre-generated summary — context, meaning, emotion, imagery."""
-    doc = await _resolve_song_doc(song_id)
+    doc = await _resolve_song_doc(song_id, composer)
     if not doc:
         return "গান পাওয়া যায়নি। অনুগ্রহ করে গানের নাম দিয়ে আবার চেষ্টা করুন।"
     summary = doc.get("summary")
@@ -542,11 +610,11 @@ async def get_song_summary(song_id: str) -> str:
     )
 
 
-async def summarize_aspect(song_id: str, aspect: str) -> str:
+async def summarize_aspect(song_id: str, aspect: str, composer: Composer = "rabindra") -> str:
     """Return or generate one aspect of a song summary.
     song_id can be a Firestore song_id, a [song_id:...] marker, or a song title/query.
     aspect: context | meaning | emotion | imagery | all"""
-    doc = await _resolve_song_doc(song_id)
+    doc = await _resolve_song_doc(song_id, composer)
     if not doc:
         return "গান পাওয়া যায়নি। অনুগ্রহ করে গানের নাম দিয়ে আবার চেষ্টা করুন।"
 
@@ -560,18 +628,23 @@ async def summarize_aspect(song_id: str, aspect: str) -> str:
 
     if aspect == "all":
         if cached:
-            return await get_song_summary(song_id)
+            return await get_song_summary(song_id, composer)
     elif cached.get(aspect):
         return (
             f"**{doc['title']}** — {label_map.get(aspect, aspect)}:\n\n"
             f"{cached[aspect]}"
         )
 
-    from domains.geetabitan.ingestion.geetabitan_summarizer import generate_and_store_summary
+    # The doc's own 'source' decides which summarizer prompt applies, so a
+    # Nazrul doc gets the Nazrul-scholar prompt even without composer="nazrul".
+    if doc.get("source") == "nazrul":
+        from domains.geetabitan.ingestion.nazrul_summarizer import generate_and_store_summary
+    else:
+        from domains.geetabitan.ingestion.geetabitan_summarizer import generate_and_store_summary
     summary = await generate_and_store_summary(doc)
 
     if aspect == "all":
-        return await get_song_summary(song_id)
+        return await get_song_summary(song_id, composer)
 
     return (
         f"**{doc['title']}** — {label_map.get(aspect, aspect)}:\n\n"

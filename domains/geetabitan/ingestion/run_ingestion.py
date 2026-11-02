@@ -13,6 +13,15 @@ Usage:
 
     # Force-regenerate summaries (skip cache)
     PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only summaries --force
+
+    # Nazrul Geeti (additive, separate collection — never touches Rabindra data):
+    #   1) Drop extracted lyrics into domains/geetabitan/data/nazrul_songs_raw.json
+    #      (see nazrul_lyrics_loader.py's docstring for the expected shape)
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only nazrul-load
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only nazrul-embed
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only nazrul-summaries
+    # ...or all three Nazrul stages in one go:
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only nazrul
 """
 
 import argparse
@@ -21,6 +30,7 @@ import json
 from pathlib import Path
 
 SONGS_PATH = Path(__file__).parent.parent / "data" / "songs.json"
+NAZRUL_SONGS_PATH = Path(__file__).parent.parent / "data" / "nazrul_songs.json"
 
 
 async def step_scrape():
@@ -83,6 +93,45 @@ async def step_summarize(songs: list[dict] | None, force: bool):
     await summarize_all(songs, force=force, delay=0.5)
 
 
+async def step_nazrul_load():
+    from domains.geetabitan.ingestion.nazrul_lyrics_loader import load_and_normalize
+    print("=== Nazrul Step 1: Loading & normalizing nazrul_songs_raw.json ===")
+    load_and_normalize()
+
+
+async def step_nazrul_embed():
+    from domains.geetabitan.ingestion.nazrul_embedder import embed_all
+
+    if not NAZRUL_SONGS_PATH.exists():
+        raise FileNotFoundError(
+            f"{NAZRUL_SONGS_PATH} not found. Run --only nazrul-load first."
+        )
+    songs = json.loads(NAZRUL_SONGS_PATH.read_text(encoding="utf-8"))
+    print(f"=== Nazrul Step 2: Embedding {len(songs)} songs into Firestore ===")
+    songs = await embed_all(songs)
+
+    NAZRUL_SONGS_PATH.write_text(
+        json.dumps(songs, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print("Nazrul embedding complete. nazrul_songs.json updated with firestore_ids.")
+    return songs
+
+
+async def step_nazrul_summarize(songs: list[dict] | None, force: bool):
+    from domains.geetabitan.ingestion.nazrul_summarizer import summarize_all
+
+    if songs is None:
+        if not NAZRUL_SONGS_PATH.exists():
+            raise FileNotFoundError(
+                f"{NAZRUL_SONGS_PATH} not found. Run --only nazrul-embed first."
+            )
+        songs = json.loads(NAZRUL_SONGS_PATH.read_text(encoding="utf-8"))
+
+    print(f"=== Nazrul Step 3: Generating summaries (force={force}) ===")
+    await summarize_all(songs, force=force, delay=0.5)
+
+
 async def main(only: str | None, force: bool):
     songs = None
 
@@ -100,6 +149,20 @@ async def main(only: str | None, force: bool):
 
     elif only == "summaries":
         await step_summarize(songs=None, force=force)
+
+    elif only == "nazrul-load":
+        await step_nazrul_load()
+
+    elif only == "nazrul-embed":
+        await step_nazrul_embed()
+
+    elif only == "nazrul-summaries":
+        await step_nazrul_summarize(songs=None, force=force)
+
+    elif only == "nazrul":
+        await step_nazrul_load()
+        nazrul_songs = await step_nazrul_embed()
+        await step_nazrul_summarize(songs=nazrul_songs, force=force)
 
     else:
         # Full pipeline
@@ -120,9 +183,15 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--only",
-        choices=["scrape", "bengali", "enrich", "songs", "summaries"],
+        choices=[
+            "scrape", "bengali", "enrich", "songs", "summaries",
+            "nazrul-load", "nazrul-embed", "nazrul-summaries", "nazrul",
+        ],
         default=None,
-        help="scrape | bengali | songs | summaries (default: all)",
+        help=(
+            "scrape | bengali | enrich | songs | summaries (Rabindra Sangeet, default: all) "
+            "| nazrul-load | nazrul-embed | nazrul-summaries | nazrul (Nazrul Geeti, additive)"
+        ),
     )
     parser.add_argument(
         "--meta-only", action="store_true",

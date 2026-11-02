@@ -37,6 +37,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["আসাবরী", "মালকোষ"],
         "rabindra_note": "গীতবিতানে সর্বাধিক ব্যবহৃত রাগ। রবীন্দ্রনাথ ভৈরবীকে বিদায়, করুণ রস ও ভোরের আবেগের প্রধান বাহন হিসেবে ব্যবহার করেছেন। পূজা ও প্রেম উভয় পর্যায়ে বহুল প্রচলিত।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "কাহারবা", "রূপকড়া"],
         "description":  "গীতবিতানের সর্বাধিক ব্যবহৃত রাগ। সব স্বর কোমল। বিদায় ও করুণ আবেগের জন্য বিখ্যাত।",
     },
@@ -56,6 +57,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "গ ধ",
         "similar_raag": ["পহাড়ি", "দেশ"],
         "rabindra_note": "রবীন্দ্রনাথ বাংলার বাউল সুর থেকে অনুপ্রেরণা নিয়ে এই রাগরূপ তৈরি করেছেন। স্বদেশ পর্যায়ের গানে এবং 'আমার সোনার বাংলা'-তে বিশেষভাবে ব্যবহৃত।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "কাহারবা"],
         "description":  "বাংলার লোকসুরের প্রভাবে তৈরি। স্বদেশ পর্যায়ের অনেক গানে ব্যবহৃত।",
     },
@@ -75,6 +77,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["পিলু", "খাম্বাজ"],
         "rabindra_note": "রবীন্দ্রনাথ কাফি রাগে গভীর প্রেম ও বিরহের গান রচনা করেছেন। রাতের নিবিড় আবেগ প্রকাশে এই রাগের ব্যবহার উল্লেখযোগ্য।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "তিনতাল", "কাহারবা"],
         "description":  "রাতের রাগ। গ ও নি কোমল। প্রেম ও বিরহের গানে বহুল ব্যবহৃত।",
     },
@@ -94,6 +97,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "শুদ্ধ মধ্যম (মা)",
         "similar_raag": ["ইমন কল্যাণ", "হামির", "ভূপালি"],
         "rabindra_note": "রবীন্দ্রনাথের অত্যন্ত প্রিয় রাগ। সন্ধ্যার উদার ও প্রশান্ত আবেগে রচিত পূজা পর্যায়ের অনেক গানে ব্যবহৃত। তীব্র মধ্যম এই রাগের বিশেষ পরিচয়।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "একতাল", "ঝাঁপতাল"],
         "description":  "সন্ধ্যার রাগ। একমাত্র তীব্র মধ্যম ব্যবহৃত।",
     },
@@ -113,6 +117,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["কাফি", "খাম্বাজ"],
         "rabindra_note": "হালকা ও সহজ মেজাজের গানে রবীন্দ্রনাথ পিলু ব্যবহার করেছেন। শুদ্ধ ও কোমল স্বরের মিশ্রণে এই রাগ চপল ভাব প্রকাশে উপযুক্ত।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "কাহারবা"],
         "description":  "হালকা মেজাজের গানে ব্যবহৃত।",
     },
@@ -132,6 +137,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "রে (আরোহে)",
         "similar_raag": ["যোগিয়া", "খাম্বাজ"],
         "rabindra_note": "রবীন্দ্রনাথ বেহাগে গভীর প্রেমের গান রচনা করেছেন। আরোহে রে বর্জিত হওয়ায় এই রাগের চলন বিশেষ কোমল ও ভাবুক।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "ঝাঁপতাল", "একতাল"],
         "description":  "রাতের কোমল রাগ। আরোহে রে বর্জিত।",
     },
@@ -151,6 +157,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["কাফি", "দেশ", "জয়জয়ন্তী"],
         "rabindra_note": "উৎসব ও প্রেমের গানে রবীন্দ্রনাথ খাম্বাজ ব্যবহার করেছেন। অবরোহে কোমল নিষাদের ব্যবহার এই রাগকে বিশেষ মাধুর্য দেয়।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "তিনতাল", "কাহারবা"],
         "description":  "উৎসবমুখর রাগ।",
     },
@@ -170,6 +177,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "মা নি",
         "similar_raag": ["দেশকার", "ইমন"],
         "rabindra_note": "পূজা পর্যায়ের গানে রবীন্দ্রনাথ ভূপালি রাগ বহুল ব্যবহার করেছেন। মা ও নি বর্জিত হওয়ায় এই রাগের সরল কাঠামো ভক্তিরসে বিশেষ উপযুক্ত।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "একতাল"],
         "description":  "ঔড়ব-ঔড়ব রাগ। মা ও নি বর্জিত।",
     },
@@ -189,6 +197,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["বাউল", "ভৈরবী"],
         "rabindra_note": "বৈষ্ণব কীর্তনের সুর থেকে অনুপ্রাণিত। রবীন্দ্রনাথ এই রাগাঙ্গে ভক্তি ও আধ্যাত্মিক গান রচনা করেছেন।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["কাহারবা", "দাদরা"],
         "description":  "বৈষ্ণব সংগীতের প্রভাবে তৈরি।",
     },
@@ -208,6 +217,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "রাগভেদে",
         "similar_raag": [],
         "rabindra_note": "রবীন্দ্রনাথ কখনো একাধিক রাগের মিশ্রণে নতুন সুর তৈরি করেছেন। এই মিশ্র রাগগুলি গীতবিতানের বৈচিত্র্যের অন্যতম প্রকাশ।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["কাহারবা", "দাদরা"],
         "description":  "একাধিক রাগের মিশ্রণে তৈরি।",
     },
@@ -227,6 +237,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["আসাবরী", "তোড়ি"],
         "rabindra_note": "তান্ত্রিক গাম্ভীর্যে রচিত গানে রবীন্দ্রনাথ দরবারি কানাড়া ব্যবহার করেছেন। গ॒ তে মীড়ের ব্যবহার এই রাগের বিশেষ পরিচয়।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["ঝুমরা", "তিনতাল"],
         "description":  "গভীর রাতের রাগ। তিনটি কোমল স্বর।",
     },
@@ -246,6 +257,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "রে পা",
         "similar_raag": ["ভৈরবী", "চন্দ্রকোষ"],
         "rabindra_note": "রবীন্দ্রনাথ মালকোষে আধ্যাত্মিক ও রহস্যময় ভাবের গান রচনা করেছেন। রে ও পা বর্জিত হওয়ায় এই রাগের চলন বিশেষ গম্ভীর।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "একতাল"],
         "description":  "ঔড়ব-ঔড়ব রাগ। রে ও পা বর্জিত।",
     },
@@ -265,6 +277,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "গ (আরোহে)",
         "similar_raag": ["হামির", "কামোদ"],
         "rabindra_note": "রাতের ভক্তিমূলক গানে রবীন্দ্রনাথ কেদার ব্যবহার করেছেন। তীব্র ও শুদ্ধ মধ্যম উভয়ের ব্যবহার এই রাগকে বিশেষ করে তোলে।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "একতাল"],
         "description":  "রাতের ভক্তিমূলক রাগ।",
     },
@@ -284,6 +297,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "গ ধ",
         "similar_raag": ["পূরবী", "মারওয়া"],
         "rabindra_note": "সন্ধ্যার গম্ভীর ভক্তিমূলক গানে রবীন্দ্রনাথ শ্রী রাগ ব্যবহার করেছেন। কোমল ঋষভ ও তীব্র মধ্যমের সমন্বয় এই রাগকে বিশেষ মর্যাদা দেয়।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["ঝাঁপতাল", "তিনতাল"],
         "description":  "সন্ধ্যার গম্ভীর রাগ।",
     },
@@ -303,6 +317,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["বিভাস", "ভৈরবী"],
         "rabindra_note": "ভোরের গম্ভীর গানে রবীন্দ্রনাথ ভৈরব ব্যবহার করেছেন। ভৈরবীর সাথে পার্থক্য হলো গান্ধার শুদ্ধ। ভক্তিরসের প্রকাশে উপযুক্ত।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "চৌতাল"],
         "description":  "ভোরের গম্ভীর রাগ।",
     },
@@ -322,6 +337,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["মিয়াঁ কি তোড়ি", "গুর্জরী তোড়ি"],
         "rabindra_note": "সকালের করুণ রসে রচিত গানে রবীন্দ্রনাথ তোড়ি ব্যবহার করেছেন। তিনটি কোমল স্বর ও তীব্র মধ্যমের সমন্বয় এই রাগকে অত্যন্ত মার্গীয় করে তোলে।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "ঝাঁপতাল"],
         "description":  "সকালের করুণ রাগ।",
     },
@@ -341,6 +357,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "গ ধ",
         "similar_raag": ["মধ্যমাদ সারঙ্গ", "বৃন্দাবনী সারঙ্গ"],
         "rabindra_note": "বর্ষার গানে রবীন্দ্রনাথ সারঙ্গ রাগ ব্যবহার করেছেন। গ ও ধ বর্জিত হওয়ায় এই রাগের চলন সরল ও প্রবহমান। প্রকৃতি পর্যায়ের অনেক গানে ব্যবহৃত।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "কাহারবা"],
         "description":  "বর্ষার রাগ। গ ও ধ বর্জিত।",
     },
@@ -360,6 +377,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "গ মা নি",
         "similar_raag": ["ভৈরব", "রামকেলী"],
         "rabindra_note": "ভোরের কোমল আবেগ প্রকাশে রবীন্দ্রনাথ বিভাস ব্যবহার করেছেন। গ মা নি বর্জিত হওয়ায় এই রাগের চলন অত্যন্ত সরল ও শান্তিময়।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "একতাল"],
         "description":  "ভোরের কোমল রাগ। গ মা নি বর্জিত।",
     },
@@ -379,6 +397,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "রে পা ধ (আরোহে)",
         "similar_raag": ["পূরবী", "বসন্ত বাহার"],
         "rabindra_note": "বসন্তের উৎসবমুখর গানে রবীন্দ্রনাথ বসন্ত রাগ ব্যবহার করেছেন। তীব্র মধ্যম ও কোমল গান্ধার এই রাগের বিশেষ পরিচয়।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "তিনতাল"],
         "description":  "বসন্তকালীন উৎসবের রাগ।",
     },
@@ -398,6 +417,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "পা (আরোহে)",
         "similar_raag": ["পূরবী", "রামপুরি ললিত"],
         "rabindra_note": "ভোরের কোমল মিষ্টি আবেগে রচিত গানে রবীন্দ্রনাথ ললিত ব্যবহার করেছেন। পঞ্চম বর্জিত ও তিনটি কোমল স্বরের সমন্বয় এই রাগকে বিশেষ করে তোলে।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["ঝাঁপতাল", "তিনতাল"],
         "description":  "ভোরের কোমল মিষ্টি রাগ।",
     },
@@ -417,6 +437,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["দেশ", "খাম্বাজ"],
         "rabindra_note": "উৎসব ও আনন্দের গানে রবীন্দ্রনাথ জয়জয়ন্তী ব্যবহার করেছেন। শুদ্ধ ও কোমল উভয় গান্ধার ও নিষাদের ব্যবহার এই রাগকে বৈচিত্র্যময় করে তোলে।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "কাহারবা"],
         "description":  "উৎসবমুখর রাতের রাগ।",
     },
@@ -436,6 +457,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["কেদার", "ইমন"],
         "rabindra_note": "সন্ধ্যার উদার আবেগে রচিত গানে রবীন্দ্রনাথ হামির ব্যবহার করেছেন। অবরোহে তীব্র ও শুদ্ধ উভয় মধ্যমের ব্যবহার এই রাগকে বিশেষ করে তোলে।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল"],
         "description":  "কল্যাণ ঠাট।",
     },
@@ -455,6 +477,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "—",
         "similar_raag": ["শ্রী", "মারওয়া", "পূরিয়া"],
         "rabindra_note": "সন্ধ্যার বিষণ্ণ বিদায়ের আবেগে রবীন্দ্রনাথ পূরবী ব্যবহার করেছেন। তিনটি কোমল স্বর ও তীব্র মধ্যমের সমন্বয়ে এই রাগ গভীর আবেগ প্রকাশ করে।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["ঝুমরা", "তিনতাল"],
         "description":  "সন্ধ্যার বিষণ্ণ রাগ।",
     },
@@ -474,6 +497,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "গ (আরোহে)",
         "similar_raag": ["দরবারি", "ভৈরবী"],
         "rabindra_note": "সকালের করুণ রসে রচিত গানে রবীন্দ্রনাথ আসাবরী ব্যবহার করেছেন। তিনটি কোমল স্বর বিশিষ্ট এই রাগ বিষণ্ণতা ও করুণ আবেগ প্রকাশে উপযুক্ত।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["তিনতাল", "ঝাঁপতাল"],
         "description":  "সকালের করুণ রাগ।",
     },
@@ -493,6 +517,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "গ ধ (আরোহে)",
         "similar_raag": ["বাউল", "পহাড়ি", "খাম্বাজ"],
         "rabindra_note": "দেশপ্রেম ও আনন্দের গানে রবীন্দ্রনাথ দেশ রাগ ব্যবহার করেছেন। আরোহে গ ধ বর্জিত ও অবরোহে কোমল নিষাদের বিশেষ ব্যবহার লক্ষ্যণীয়।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "কাহারবা"],
         "description":  "রাতের আনন্দমুখর রাগ।",
     },
@@ -512,6 +537,7 @@ RAAG_DATA: dict[str, dict] = {
         "varjit":       "মা নি",
         "similar_raag": ["বাউল", "ভূপালি"],
         "rabindra_note": "পার্বত্য সুরের আভাসযুক্ত সহজ ও সরল গানে রবীন্দ্রনাথ পহাড়ি ব্যবহার করেছেন। মা ও নি বর্জিত হওয়ায় এই রাগের চলন অত্যন্ত স্বচ্ছ ও লোকজ।",
+        "nazrul_note": "",  # TODO: backfill from Nazrul Institute sources
         "beats_common": ["দাদরা", "কাহারবা"],
         "description":  "লোকসুরের প্রভাবিত সহজ রাগ। মা ও নি বর্জিত।",
     },

@@ -8,7 +8,7 @@ import unicodedata
 from src.adar.db import vector_search, direct_query
 from domains.geetabitan.config import FIRESTORE_COLLECTION
 from domains.geetabitan.data.raag_metadata import RAAG_DATA, TAAL_DATA
-from domains.geetabitan.tools.song_tools import _song_card, _taal_meta
+from domains.geetabitan.tools.song_tools import _song_card, _taal_meta, _collection_for, Composer
 
 
 def _normalize_bengali(text: str) -> str:
@@ -16,31 +16,36 @@ def _normalize_bengali(text: str) -> str:
     return text.replace("\u200c", "").replace("\u200d", "").strip()
 
 
-async def vector_search_songs(query: str) -> str:
-    """Search Geetabitan for Tagore songs matching a Bengali query.
+async def vector_search_songs(query: str, composer: Composer = "rabindra") -> str:
+    """Search Geetabitan (Rabindra Sangeet by default, or Nazrul Geeti when
+    composer="nazrul") for songs matching a Bengali query.
     Returns top 3 matching songs with full formatted lyrics."""
     query   = _normalize_bengali(query)
     results = await vector_search(
-        collection=FIRESTORE_COLLECTION,
+        collection=_collection_for(composer),
         query=query,
         top_k=3,
     )
     if not results:
+        if composer == "nazrul":
+            return "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো নজরুলগীতি পাওয়া যায়নি।"
         return "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো গান গীতবিতানে পাওয়া যায়নি।"
 
     parts = [_song_card(r) for r in results]
     return "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n".join(parts)
 
 
-async def get_songs_by_raag(raag: str, paryay: str = None) -> str:
-    """List all Tagore songs in a given raag (রাগ).
-    Optionally filter by paryay. Shows song title and taal for each result."""
+async def get_songs_by_raag(raag: str, paryay: str = None, composer: Composer = "rabindra") -> str:
+    """List all songs in a given raag (রাগ) — Rabindra Sangeet by default,
+    or Nazrul Geeti when composer="nazrul".
+    Optionally filter by paryay (or, for Nazrul, category). Shows song title
+    and taal for each result."""
     filters: dict = {"raag": raag}
     if paryay:
-        filters["paryay"] = paryay
+        filters["category" if composer == "nazrul" else "paryay"] = paryay
 
     results = await direct_query(
-        collection=FIRESTORE_COLLECTION,
+        collection=_collection_for(composer),
         filters=filters,
         limit=30,
     )
@@ -61,15 +66,17 @@ async def get_songs_by_raag(raag: str, paryay: str = None) -> str:
     return header + "\n".join(lines)
 
 
-async def get_songs_by_taal(taal: str, paryay: str = None) -> str:
-    """List all Tagore songs in a given taal (তাল).
-    Optionally filter by paryay. Shows song title and raag for each result."""
+async def get_songs_by_taal(taal: str, paryay: str = None, composer: Composer = "rabindra") -> str:
+    """List all songs in a given taal (তাল) — Rabindra Sangeet by default,
+    or Nazrul Geeti when composer="nazrul".
+    Optionally filter by paryay (or, for Nazrul, category). Shows song title
+    and raag for each result."""
     filters: dict = {"taal": taal}
     if paryay:
-        filters["paryay"] = paryay
+        filters["category" if composer == "nazrul" else "paryay"] = paryay
 
     results = await direct_query(
-        collection=FIRESTORE_COLLECTION,
+        collection=_collection_for(composer),
         filters=filters,
         limit=30,
     )
@@ -90,9 +97,10 @@ async def get_songs_by_taal(taal: str, paryay: str = None) -> str:
     return header + "\n".join(lines)
 
 
-async def describe_raag(raag: str) -> str:
+async def describe_raag(raag: str, composer: Composer = "rabindra") -> str:
     """Return full classical description of a raag — arohi, aborohi, pakad,
-    jaati, vadi, samvadi, varjit, similar raags, Rabindra usage note."""
+    jaati, vadi, samvadi, varjit, similar raags, and a composer-specific
+    usage note (Rabindra by default, Nazrul when composer="nazrul")."""
     meta = RAAG_DATA.get(raag)
     if not meta:
         return (
@@ -100,7 +108,7 @@ async def describe_raag(raag: str) -> str:
             f"সঠিক বানান নিশ্চিত করুন বা অন্য রাগের নাম দিন।"
         )
     all_results = await direct_query(
-        collection=FIRESTORE_COLLECTION,
+        collection=_collection_for(composer),
         filters={"raag": raag},
         limit=500,
     )
@@ -110,7 +118,14 @@ async def describe_raag(raag: str) -> str:
     komal   = meta.get("komal", "—") or "—"
     varjit  = meta.get("varjit", "—") or "—"
     taals   = ", ".join(meta.get("beats_common", [])) or "—"
-    rabindra_note = meta.get("rabindra_note", "—") or "—"
+    if composer == "nazrul":
+        usage_label = "নজরুলগীতিতে ব্যবহার"
+        usage_note  = meta.get("nazrul_note", "") or "তথ্য এখনো সংযোজিত হয়নি।"
+        count_label = "নজরুলগীতিতে গান"
+    else:
+        usage_label = "রবীন্দ্র ব্যবহার"
+        usage_note  = meta.get("rabindra_note", "—") or "—"
+        count_label = "গীতবিতানে গান"
 
     table = (
         f"## {raag}\n\n"
@@ -130,16 +145,17 @@ async def describe_raag(raag: str) -> str:
         f"| বর্জিত স্বর | {varjit} |\n"
         f"| সমজাতীয় রাগ | {similar} |\n"
         f"| প্রচলিত তাল | {taals} |\n"
-        f"| গীতবিতানে গান | {count}টি |\n\n"
-        f"**রবীন্দ্র ব্যবহার:** {rabindra_note}\n\n"
+        f"| {count_label} | {count}টি |\n\n"
+        f"**{usage_label}:** {usage_note}\n\n"
         f"_এই রাগের গান দেখতে চাইলে বলুন।_"
     )
     return table
 
 
-async def describe_taal(taal: str) -> str:
+async def describe_taal(taal: str, composer: Composer = "rabindra") -> str:
     """Return musical description of a taal — beat count, vibhag, tempo,
-    feel, and count of Tagore songs that use it."""
+    feel, and count of songs that use it (Rabindra Sangeet by default, or
+    Nazrul Geeti when composer="nazrul")."""
     meta = _taal_meta(taal)
     if not meta:
         return (
@@ -147,11 +163,12 @@ async def describe_taal(taal: str) -> str:
             f"সঠিক বানান নিশ্চিত করুন বা অন্য তালের নাম দিন।"
         )
     all_results = await direct_query(
-        collection=FIRESTORE_COLLECTION,
+        collection=_collection_for(composer),
         filters={"taal": taal},
         limit=500,
     )
     count = len(all_results)
+    count_label = "নজরুলগীতিতে গান" if composer == "nazrul" else "গীতবিতানে গান"
     bols = meta.get("bols", "—")
     return (
         f"## {taal}\n\n"
@@ -162,7 +179,7 @@ async def describe_taal(taal: str) -> str:
         f"| গতি | {meta.get('tempo', '—')} |\n"
         f"| অনুভূতি | {meta.get('feel', '—')} |\n"
         f"| বোল | {bols} |\n"
-        f"| গীতবিতানে গান | {count}টি |\n\n"
+        f"| {count_label} | {count}টি |\n\n"
         f"{meta.get('description', '')}\n\n"
         f"_এই তালের গান দেখতে চাইলে বলুন।_"
     )
