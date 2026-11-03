@@ -15,14 +15,21 @@ from src.adar.db import direct_query, get_documents_by_field, get_db, vector_sea
 from domains.geetabitan.config import (
     FIRESTORE_COLLECTION,
     NAZRUL_FIRESTORE_COLLECTION,
+    RAJANIKANTA_FIRESTORE_COLLECTION,
 )
 from domains.geetabitan.data.raag_metadata import TAAL_DATA
 
-Composer = Literal["rabindra", "nazrul"]
+Composer = Literal["rabindra", "nazrul", "rajanikanta"]
+
+# Composers whose songs are organized by their own book/collection (সংকলন)
+# rather than Tagore's paryay scheme — used wherever code branches on that,
+# so adding a 4th such composer later only means adding it to this tuple.
+CATEGORY_ORGANIZED_COMPOSERS: tuple[Composer, ...] = ("nazrul", "rajanikanta")
 
 _COMPOSER_COLLECTIONS: dict[str, str] = {
     "rabindra": FIRESTORE_COLLECTION,
     "nazrul": NAZRUL_FIRESTORE_COLLECTION,
+    "rajanikanta": RAJANIKANTA_FIRESTORE_COLLECTION,
 }
 
 
@@ -32,8 +39,13 @@ def _collection_for(composer: Composer = "rabindra") -> str:
     return _COMPOSER_COLLECTIONS.get(composer, FIRESTORE_COLLECTION)
 
 
-def _other_composer(composer: Composer) -> Composer:
-    return "nazrul" if composer == "rabindra" else "rabindra"
+def _other_composers(composer: Composer) -> tuple[Composer, ...]:
+    """Other composers' collections to try as a fallback when a bare
+    song_id isn't found in `composer`'s own collection (a song_id alone
+    doesn't encode which catalog it came from). Rabindra stays first since
+    it's overwhelmingly the common case."""
+    order: tuple[Composer, ...] = ("rabindra", "nazrul", "rajanikanta")
+    return tuple(c for c in order if c != composer)
 
 
 # ── Taal lookup — case-insensitive fallback ───────────────────────────────────
@@ -117,12 +129,14 @@ async def _get_doc_by_id(doc_id: str, composer: Composer = "rabindra") -> dict |
         return None
     if not doc.exists:
         # song_id alone doesn't say which catalog it came from — fall back
-        # to the other composer's collection before giving up.
-        other = _other_composer(composer)
-        try:
-            doc = await db.collection(_collection_for(other)).document(doc_id).get()
-        except Exception:
-            return None
+        # through the other composers' collections before giving up.
+        for other in _other_composers(composer):
+            try:
+                doc = await db.collection(_collection_for(other)).document(doc_id).get()
+            except Exception:
+                continue
+            if doc.exists:
+                break
         if not doc.exists:
             return None
     data = doc.to_dict()
@@ -227,9 +241,10 @@ def _song_card(doc: dict) -> str:
     beats_str = f" | {beats} মাত্রা" if beats else ""
     song_id = _doc_id_from_doc(doc)
 
-    # Rabindra Sangeet is organized by পর্যায় (paryay); Nazrul Geeti docs
-    # carry সংকলন (category/book name) instead — show whichever applies.
-    if doc.get("source") == "nazrul":
+    # Rabindra Sangeet is organized by পর্যায় (paryay); Nazrul Geeti and
+    # Rajanikanta Sen docs carry সংকলন (category/book name) instead — show
+    # whichever applies.
+    if doc.get("source") in CATEGORY_ORGANIZED_COMPOSERS:
         group_label, group_value = "সংকলন", doc.get("category", "—")
     else:
         group_label, group_value = "পর্যায়", doc.get("paryay", "—")
@@ -291,11 +306,14 @@ async def get_songs_by_paryay(paryay: str) -> str:
     return f"**{paryay}** পর্যায়ের গানসমূহ:\n" + "\n".join(lines) + suffix
 
 
-async def get_songs_by_category(category: str) -> str:
-    """List all Nazrul Geeti songs in a given book/collection (সংকলন),
-    e.g. 'বুলবুল', 'সন্ধ্যা' — the Nazrul equivalent of get_songs_by_paryay."""
+async def get_songs_by_category(category: str, composer: Composer = "nazrul") -> str:
+    """List all songs in a given book/collection (সংকলন) for a composer
+    that organizes by category rather than paryay — Nazrul Geeti by
+    default (e.g. 'বুলবুল', 'সন্ধ্যা'), or Rajanikanta Sen's own books when
+    composer="rajanikanta" (e.g. 'বাণী', 'কল্যাণী'). The Rabindra Sangeet
+    equivalent is get_songs_by_paryay."""
     results = await direct_query(
-        collection=NAZRUL_FIRESTORE_COLLECTION,
+        collection=_collection_for(composer),
         filters={"category": category},
         limit=500,
     )
@@ -420,14 +438,17 @@ async def get_youtube_url(song_id: str, composer: Composer = "rabindra") -> str:
 
     # The doc itself says which catalog it's from — trust that over the
     # caller's composer guess (a bare song_id alone doesn't encode it).
-    is_nazrul = doc.get("source") == "nazrul"
+    source = doc.get("source", "rabindra")
 
     first_line = doc.get("first_line", doc.get("title", ""))
     title      = doc.get("title", "")
     display    = first_line or title
 
-    genre_bn = "নজরুলগীতি" if is_nazrul else "রবীন্দ্রসঙ্গীত"
-    genre_en = "Nazrul Geeti" if is_nazrul else "Rabindra Sangeet"
+    GENRE_NAMES = {
+        "nazrul":      ("নজরুলগীতি", "Nazrul Geeti"),
+        "rajanikanta": ("রজনীকান্তের গান", "Rajanikanta Sangeet"),
+    }
+    genre_bn, genre_en = GENRE_NAMES.get(source, ("রবীন্দ্রসঙ্গীত", "Rabindra Sangeet"))
 
     # ── Search YouTube for actual videos ──────────────────────────────────
     results_bn = await _search_youtube(f"{display} {genre_bn}", max_results=8)
@@ -485,7 +506,17 @@ async def get_youtube_url(song_id: str, composer: Composer = "rabindra") -> str:
         ("সুজিত মুস্তফা",         "Sujit Mustafa",              "সমসাময়িক"),
     ]
 
-    SINGERS = NAZRUL_SINGERS if is_nazrul else RABINDRA_SINGERS
+    RAJANIKANTA_SINGERS = [
+        ("সুমিত্রা সেন",            "Sumitra Sen",              "লেজেন্ডারি"),
+        ("শ্রাবণী সেন",             "Srabani Sen",               "সমসাময়িক"),
+        ("লোপামুদ্রা মিত্র",         "Lopamudra Mitra",           "সমসাময়িক"),
+        ("রেজওয়ানা চৌধুরী বন্যা",   "Rezwana Chowdhury Bonna",  "সমসাময়িক"),
+    ]
+
+    SINGERS = {
+        "nazrul":      NAZRUL_SINGERS,
+        "rajanikanta": RAJANIKANTA_SINGERS,
+    }.get(source, RABINDRA_SINGERS)
 
     lines.append("### 🎵 শিল্পী অনুযায়ী অনুসন্ধান\n")
     lines.append("| শিল্পী | ধরন | YouTube অনুসন্ধান |")
@@ -515,6 +546,12 @@ def _looks_like_generic_youtube_request(query: str) -> bool:
     return any(term in text for term in generic_terms) and len(text) <= 80
 
 
+DEFAULT_YOUTUBE_QUERY = {
+    "nazrul":      "জনপ্রিয় নজরুলগীতি",
+    "rajanikanta": "জনপ্রিয় রজনীকান্তের গান",
+}
+
+
 async def _find_song_for_youtube(query: str, composer: Composer = "rabindra") -> dict | None:
     query = (query or "").strip()
     collection = _collection_for(composer)
@@ -538,10 +575,12 @@ async def _find_song_for_youtube(query: str, composer: Composer = "rabindra") ->
         if matches:
             return matches[0]
 
-    fallback_titles = (
-        ("বাগিচায় বুলবুলি তুই", "কারার ঐ লৌহকপাট", "মোরা ঝঞ্জার মতো উদ্দাম")
-        if composer == "nazrul"
-        else ("আমার সোনার বাংলা", "যদি তোর ডাক শুনে কেউ না আসে", "আনন্দধারা বহিছে ভুবনে")
+    FALLBACK_TITLES = {
+        "nazrul":      ("বাগিচায় বুলবুলি তুই", "কারার ঐ লৌহকপাট", "মোরা ঝঞ্জার মতো উদ্দাম"),
+        "rajanikanta": ("বঙ্গমাতা", "মহাষ্টমীর ঊষা", "আশা"),
+    }
+    fallback_titles = FALLBACK_TITLES.get(
+        composer, ("আমার সোনার বাংলা", "যদি তোর ডাক শুনে কেউ না আসে", "আনন্দধারা বহিছে ভুবনে")
     )
     for title in fallback_titles:
         exact = await get_documents_by_field(
@@ -555,7 +594,7 @@ async def _find_song_for_youtube(query: str, composer: Composer = "rabindra") ->
 
     matches = await vector_search(
         collection=collection,
-        query=query or ("জনপ্রিয় নজরুলগীতি" if composer == "nazrul" else "জনপ্রিয় রবীন্দ্রসঙ্গীত"),
+        query=query or DEFAULT_YOUTUBE_QUERY.get(composer, "জনপ্রিয় রবীন্দ্রসঙ্গীত"),
         top_k=1,
     )
     return matches[0] if matches else None
@@ -636,9 +675,13 @@ async def summarize_aspect(song_id: str, aspect: str, composer: Composer = "rabi
         )
 
     # The doc's own 'source' decides which summarizer prompt applies, so a
-    # Nazrul doc gets the Nazrul-scholar prompt even without composer="nazrul".
-    if doc.get("source") == "nazrul":
+    # Nazrul/Rajanikanta doc gets its own scholar prompt even without the
+    # matching composer= argument.
+    doc_source = doc.get("source")
+    if doc_source == "nazrul":
         from domains.geetabitan.ingestion.nazrul_summarizer import generate_and_store_summary
+    elif doc_source == "rajanikanta":
+        from domains.geetabitan.ingestion.rajanikanta_summarizer import generate_and_store_summary
     else:
         from domains.geetabitan.ingestion.geetabitan_summarizer import generate_and_store_summary
     summary = await generate_and_store_summary(doc)

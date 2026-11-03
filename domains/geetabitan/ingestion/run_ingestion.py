@@ -22,6 +22,16 @@ Usage:
     PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only nazrul-summaries
     # ...or all three Nazrul stages in one go:
     PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only nazrul
+
+    # Rajanikanta Sen (additive, separate collection — never touches Rabindra
+    # or Nazrul data). rajanikanta_milansagar_raw.json is already in
+    # domains/geetabitan/data/ (a one-time browser-based scrape of
+    # milansagar.com — see rajanikanta_lyrics_loader.py's docstring):
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only rajanikanta-load
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only rajanikanta-embed
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only rajanikanta-summaries
+    # ...or all three Rajanikanta stages in one go:
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only rajanikanta
 """
 
 import argparse
@@ -31,6 +41,7 @@ from pathlib import Path
 
 SONGS_PATH = Path(__file__).parent.parent / "data" / "songs.json"
 NAZRUL_SONGS_PATH = Path(__file__).parent.parent / "data" / "nazrul_songs.json"
+RAJANIKANTA_SONGS_PATH = Path(__file__).parent.parent / "data" / "rajanikanta_songs.json"
 
 
 async def step_scrape():
@@ -132,6 +143,45 @@ async def step_nazrul_summarize(songs: list[dict] | None, force: bool):
     await summarize_all(songs, force=force, delay=0.5)
 
 
+async def step_rajanikanta_load():
+    from domains.geetabitan.ingestion.rajanikanta_lyrics_loader import load_and_normalize
+    print("=== Rajanikanta Step 1: Loading & normalizing rajanikanta_milansagar_raw.json ===")
+    load_and_normalize()
+
+
+async def step_rajanikanta_embed():
+    from domains.geetabitan.ingestion.rajanikanta_embedder import embed_all
+
+    if not RAJANIKANTA_SONGS_PATH.exists():
+        raise FileNotFoundError(
+            f"{RAJANIKANTA_SONGS_PATH} not found. Run --only rajanikanta-load first."
+        )
+    songs = json.loads(RAJANIKANTA_SONGS_PATH.read_text(encoding="utf-8"))
+    print(f"=== Rajanikanta Step 2: Embedding {len(songs)} songs into Firestore ===")
+    songs = await embed_all(songs)
+
+    RAJANIKANTA_SONGS_PATH.write_text(
+        json.dumps(songs, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print("Rajanikanta embedding complete. rajanikanta_songs.json updated with firestore_ids.")
+    return songs
+
+
+async def step_rajanikanta_summarize(songs: list[dict] | None, force: bool):
+    from domains.geetabitan.ingestion.rajanikanta_summarizer import summarize_all
+
+    if songs is None:
+        if not RAJANIKANTA_SONGS_PATH.exists():
+            raise FileNotFoundError(
+                f"{RAJANIKANTA_SONGS_PATH} not found. Run --only rajanikanta-embed first."
+            )
+        songs = json.loads(RAJANIKANTA_SONGS_PATH.read_text(encoding="utf-8"))
+
+    print(f"=== Rajanikanta Step 3: Generating summaries (force={force}) ===")
+    await summarize_all(songs, force=force, delay=0.5)
+
+
 async def main(only: str | None, force: bool):
     songs = None
 
@@ -164,6 +214,20 @@ async def main(only: str | None, force: bool):
         nazrul_songs = await step_nazrul_embed()
         await step_nazrul_summarize(songs=nazrul_songs, force=force)
 
+    elif only == "rajanikanta-load":
+        await step_rajanikanta_load()
+
+    elif only == "rajanikanta-embed":
+        await step_rajanikanta_embed()
+
+    elif only == "rajanikanta-summaries":
+        await step_rajanikanta_summarize(songs=None, force=force)
+
+    elif only == "rajanikanta":
+        await step_rajanikanta_load()
+        rajanikanta_songs = await step_rajanikanta_embed()
+        await step_rajanikanta_summarize(songs=rajanikanta_songs, force=force)
+
     else:
         # Full pipeline
         await step_scrape()
@@ -186,11 +250,13 @@ if __name__ == "__main__":
         choices=[
             "scrape", "bengali", "enrich", "songs", "summaries",
             "nazrul-load", "nazrul-embed", "nazrul-summaries", "nazrul",
+            "rajanikanta-load", "rajanikanta-embed", "rajanikanta-summaries", "rajanikanta",
         ],
         default=None,
         help=(
             "scrape | bengali | enrich | songs | summaries (Rabindra Sangeet, default: all) "
-            "| nazrul-load | nazrul-embed | nazrul-summaries | nazrul (Nazrul Geeti, additive)"
+            "| nazrul-load | nazrul-embed | nazrul-summaries | nazrul (Nazrul Geeti, additive) "
+            "| rajanikanta-load | rajanikanta-embed | rajanikanta-summaries | rajanikanta (Rajanikanta Sen, additive)"
         ),
     )
     parser.add_argument(

@@ -96,15 +96,15 @@ const TENANTS = {
   geetabitan: {
     // Tenant id/env var stays "geetabitan" (VITE_DOMAIN=geetabitan) so no
     // deployment config needs to change — only the DISPLAYED branding below
-    // is "Sursangam" now that the web assistant covers both Rabindra Sangeet
-    // and Nazrul Geeti. iOS is a separate native/RN app with its own
-    // hardcoded branding (see adar-mobile) and is NOT affected by this —
-    // it needs its own dedicated update later.
+    // is "আদর সুর সংকলন" now that the web assistant covers Rabindra
+    // Sangeet, Nazrul Geeti, and Rajanikanta Sangeet. iOS is a separate
+    // native/RN app with its own branding (see adar-mobile/apps/geetabitan)
+    // and is kept in sync by hand — update both when either changes.
     id:            'geetabitan',
-    appTitle:      'আদর · সুরসঙ্গম',
-    name:          'সুরসঙ্গম — রবীন্দ্রসঙ্গীত ও নজরুলগীতি',
-    shortName:     'Sursangam',
-    subtitle:      'রবীন্দ্রসঙ্গীত ও নজরুলগীতি সহায়ক',
+    appTitle:      'আদর · সুর সংকলন',
+    name:          'আদর সুর সংকলন — রবীন্দ্রসঙ্গীত, নজরুলগীতি ও রজনীকান্তের গান',
+    shortName:     'Sur Sankalan',
+    subtitle:      'রবীন্দ্রসঙ্গীত, নজরুলগীতি ও রজনীকান্তের গান সহায়ক',
     logoText:      'আদর',
 
     // Colors — deep red and gold for Tagore / Rabindra Sangeet
@@ -126,12 +126,12 @@ const TENANTS = {
 
     // Chat strings
     welcomeMessage:
-      'স্বাগতম! আমি আদর — সুরসঙ্গমের সহায়ক। রবীন্দ্রনাথ ঠাকুর বা কাজী নজরুল ইসলামের ' +
-      'যেকোনো গান, রাগ, তাল, পর্যায়/সংকলন, বা গানের অর্থ সম্পর্কে প্রশ্ন করুন।\n\nকী জানতে চান?',
+      'স্বাগতম! আমি আদর — সুর সংকলনের সহায়ক। রবীন্দ্রনাথ ঠাকুর, কাজী নজরুল ইসলাম বা ' +
+      'রজনীকান্ত সেনের যেকোনো গান, রাগ, তাল, পর্যায়/সংকলন, বা গানের অর্থ সম্পর্কে প্রশ্ন করুন।\n\nকী জানতে চান?',
     placeholder:    'বাংলায় গান খুঁজুন…',
     typingText:     'গান খোঁজা হচ্ছে…',
-    clearMessage:   'Session cleared. রবীন্দ্রসঙ্গীত বা নজরুলগীতি বিষয়ে কিছু জানতে চাইলে বলুন।',
-    footerText:     'Powered by Adar · সুরসঙ্গম',
+    clearMessage:   'Session cleared. রবীন্দ্রসঙ্গীত, নজরুলগীতি বা রজনীকান্তের গান বিষয়ে কিছু জানতে চাইলে বলুন।',
+    footerText:     'Powered by Adar · সুর সংকলন',
     evalLabels: {
       accuracy: 'যথার্থতা',
       completeness: 'সম্পূর্ণতা',
@@ -216,15 +216,40 @@ const TENANTS = {
       'বিদ্রোহের গান দেখাও',
     ],
 
+    // Rajanikanta Sen suggested questions — additive, same pattern as
+    // suggestedQuestionsNazrul above: a separate pool, surfaced only
+    // through the same composer toggle once that's wired into App.jsx.
+    suggestedQuestionsRajanikanta: [
+      // গান খোঁজা
+      'সূচনা গানটি খুঁজুন',
+      'আশা গানটি দেখাও',
+      'বঙ্গমাতা গানটি দেখাও',
+      'মহাষ্টমীর ঊষা গানটি দেখাও',
+      // সংকলন অনুযায়ী
+      'বাণী সংকলনের গানগুলো দেখাও',
+      'আনন্দময়ী সংকলনে কতটি গান আছে?',
+      'কল্যাণী সংকলনের গান দেখাও',
+      'শেষ দান সংকলনের গান কী কী?',
+      // রাগ ও তাল অনুযায়ী
+      'গৌরী রাগে রজনীকান্তের গান দেখাও',
+      'একতালা তালে রজনীকান্তের গান কী কী আছে?',
+      // অর্থ ও ব্যাখ্যা
+      'আশা গানের অর্থ কী?',
+      'বঙ্গমাতা গানের প্রেক্ষাপট বলো',
+      // বিশেষ অনুসন্ধান
+      'ভক্তিমূলক রজনীকান্তের গান দেখাও',
+      'দেশপ্রেমের রজনীকান্তের গান দেখাও',
+    ],
+
     // Register page
     registerSubtitle:    '14-day free trial · No credit card until trial ends',
-    showTeamDropdown:    false,     // no team list for Sursangam
+    showTeamDropdown:    false,     // no team list for Sur Sankalan
     teamDropdownLabel:   '',
     teamDropdownHelper:  '',
 
     // Login page
-    loginTitle:   'আদর · সুরসঙ্গম',
-    loginCaption: 'Powered by Adar · সুরসঙ্গম',
+    loginTitle:   'আদর · সুর সংকলন',
+    loginCaption: 'Powered by Adar · সুর সংকলন',
   },
 
   restaurants: {

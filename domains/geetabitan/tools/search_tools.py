@@ -8,7 +8,9 @@ import unicodedata
 from src.adar.db import vector_search, direct_query
 from domains.geetabitan.config import FIRESTORE_COLLECTION
 from domains.geetabitan.data.raag_metadata import RAAG_DATA, TAAL_DATA
-from domains.geetabitan.tools.song_tools import _song_card, _taal_meta, _collection_for, Composer
+from domains.geetabitan.tools.song_tools import (
+    _song_card, _taal_meta, _collection_for, Composer, CATEGORY_ORGANIZED_COMPOSERS,
+)
 
 
 def _normalize_bengali(text: str) -> str:
@@ -27,9 +29,13 @@ async def vector_search_songs(query: str, composer: Composer = "rabindra") -> st
         top_k=3,
     )
     if not results:
-        if composer == "nazrul":
-            return "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো নজরুলগীতি পাওয়া যায়নি।"
-        return "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো গান গীতবিতানে পাওয়া যায়নি।"
+        NO_RESULTS = {
+            "nazrul":      "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো নজরুলগীতি পাওয়া যায়নি।",
+            "rajanikanta": "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো রজনীকান্তের গান পাওয়া যায়নি।",
+        }
+        return NO_RESULTS.get(
+            composer, "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো গান গীতবিতানে পাওয়া যায়নি।"
+        )
 
     parts = [_song_card(r) for r in results]
     return "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n".join(parts)
@@ -37,12 +43,12 @@ async def vector_search_songs(query: str, composer: Composer = "rabindra") -> st
 
 async def get_songs_by_raag(raag: str, paryay: str = None, composer: Composer = "rabindra") -> str:
     """List all songs in a given raag (রাগ) — Rabindra Sangeet by default,
-    or Nazrul Geeti when composer="nazrul".
-    Optionally filter by paryay (or, for Nazrul, category). Shows song title
-    and taal for each result."""
+    or Nazrul Geeti / Rajanikanta Sen's songs when composer is set.
+    Optionally filter by paryay (or, for category-organized composers,
+    category). Shows song title and taal for each result."""
     filters: dict = {"raag": raag}
     if paryay:
-        filters["category" if composer == "nazrul" else "paryay"] = paryay
+        filters["category" if composer in CATEGORY_ORGANIZED_COMPOSERS else "paryay"] = paryay
 
     results = await direct_query(
         collection=_collection_for(composer),
@@ -68,12 +74,12 @@ async def get_songs_by_raag(raag: str, paryay: str = None, composer: Composer = 
 
 async def get_songs_by_taal(taal: str, paryay: str = None, composer: Composer = "rabindra") -> str:
     """List all songs in a given taal (তাল) — Rabindra Sangeet by default,
-    or Nazrul Geeti when composer="nazrul".
-    Optionally filter by paryay (or, for Nazrul, category). Shows song title
-    and raag for each result."""
+    or Nazrul Geeti / Rajanikanta Sen's songs when composer is set.
+    Optionally filter by paryay (or, for category-organized composers,
+    category). Shows song title and raag for each result."""
     filters: dict = {"taal": taal}
     if paryay:
-        filters["category" if composer == "nazrul" else "paryay"] = paryay
+        filters["category" if composer in CATEGORY_ORGANIZED_COMPOSERS else "paryay"] = paryay
 
     results = await direct_query(
         collection=_collection_for(composer),
@@ -118,10 +124,17 @@ async def describe_raag(raag: str, composer: Composer = "rabindra") -> str:
     komal   = meta.get("komal", "—") or "—"
     varjit  = meta.get("varjit", "—") or "—"
     taals   = ", ".join(meta.get("beats_common", [])) or "—"
-    if composer == "nazrul":
-        usage_label = "নজরুলগীতিতে ব্যবহার"
-        usage_note  = meta.get("nazrul_note", "") or "তথ্য এখনো সংযোজিত হয়নি।"
-        count_label = "নজরুলগীতিতে গান"
+    # Per-composer usage note/label — looked up generically as "<composer>_note"
+    # in raag_metadata.py, so a future composer only needs a new key there,
+    # no new branch here. Falls back to the placeholder when that key is
+    # absent, exactly like the Nazrul case already did.
+    USAGE_META = {
+        "nazrul":      ("নজরুলগীতিতে ব্যবহার",      "নজরুলগীতিতে গান"),
+        "rajanikanta": ("রজনীকান্তের গানে ব্যবহার", "রজনীকান্তের গানে"),
+    }
+    if composer in USAGE_META:
+        usage_label, count_label = USAGE_META[composer]
+        usage_note = meta.get(f"{composer}_note", "") or "তথ্য এখনো সংযোজিত হয়নি।"
     else:
         usage_label = "রবীন্দ্র ব্যবহার"
         usage_note  = meta.get("rabindra_note", "—") or "—"
@@ -168,7 +181,8 @@ async def describe_taal(taal: str, composer: Composer = "rabindra") -> str:
         limit=500,
     )
     count = len(all_results)
-    count_label = "নজরুলগীতিতে গান" if composer == "nazrul" else "গীতবিতানে গান"
+    COUNT_LABELS = {"nazrul": "নজরুলগীতিতে গান", "rajanikanta": "রজনীকান্তের গানে"}
+    count_label = COUNT_LABELS.get(composer, "গীতবিতানে গান")
     bols = meta.get("bols", "—")
     return (
         f"## {taal}\n\n"

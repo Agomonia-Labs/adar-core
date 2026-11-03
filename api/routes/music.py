@@ -45,37 +45,66 @@ NAZRUL_SINGERS = [
     ("সুজিত মুস্তফা",           "Sujit Mustafa"),
 ]
 
+# Rajanikanta Sen has its own singer canon too.
+RAJANIKANTA_SINGERS = [
+    # ── Legendary ──────────────────────────────────────────────────────────
+    ("সুমিত্রা সেন",            "Sumitra Sen"),
+    # ── Contemporary ───────────────────────────────────────────────────────
+    ("শ্রাবণী সেন",             "Srabani Sen"),
+    ("লোপামুদ্রা মিত্র",         "Lopamudra Mitra"),
+    ("রেজওয়ানা চৌধুরী বন্যা",   "Rezwana Chowdhury Bonna"),
+]
+
 
 @router.get("/youtube/{song_id}")
 async def get_youtube_links(song_id: str):
     """
     Return YouTube search links for a song — one per major singer.
     No API key required. Looks the song up in the Rabindra Sangeet
-    collection first (unchanged default), and only checks the Nazrul Geeti
-    collection if it isn't found there — a song_id alone doesn't say which
-    catalog it came from.
+    collection first (unchanged default), then Nazrul Geeti, then
+    Rajanikanta Sen — a song_id alone doesn't say which catalog it
+    came from.
     """
     from src.adar.db import get_db
-    from domains.geetabitan.config import FIRESTORE_COLLECTION, NAZRUL_FIRESTORE_COLLECTION
+    from domains.geetabitan.config import (
+        FIRESTORE_COLLECTION,
+        NAZRUL_FIRESTORE_COLLECTION,
+        RAJANIKANTA_FIRESTORE_COLLECTION,
+    )
 
-    db  = get_db()
-    doc = await db.collection(FIRESTORE_COLLECTION).document(song_id).get()
-    is_nazrul = False
-    if not doc.exists:
-        doc = await db.collection(NAZRUL_FIRESTORE_COLLECTION).document(song_id).get()
-        is_nazrul = True
-    if not doc.exists:
+    # A song_id alone doesn't say which catalog it came from — check Rabindra
+    # (unchanged default) first, then the other collections in turn.
+    db = get_db()
+    COLLECTIONS = [
+        ("rabindra",     FIRESTORE_COLLECTION),
+        ("nazrul",       NAZRUL_FIRESTORE_COLLECTION),
+        ("rajanikanta",  RAJANIKANTA_FIRESTORE_COLLECTION),
+    ]
+    doc = None
+    source = "rabindra"
+    for candidate_source, collection in COLLECTIONS:
+        doc = await db.collection(collection).document(song_id).get()
+        if doc.exists:
+            source = candidate_source
+            break
+    if doc is None or not doc.exists:
         raise HTTPException(status_code=404, detail="Song not found")
 
     d          = doc.to_dict()
-    is_nazrul  = is_nazrul or d.get("source") == "nazrul"
+    source     = d.get("source", source)
     first_line = d.get("first_line", d.get("title", ""))
     title_rom  = d.get("title", "")   # Roman title from Geetabitan
     raag       = d.get("raag", "")
 
-    genre_bn = "নজরুলগীতি" if is_nazrul else "রবীন্দ্রসঙ্গীত"
-    genre_en = "Nazrul Geeti" if is_nazrul else "Rabindra Sangeet"
-    singers  = NAZRUL_SINGERS if is_nazrul else SINGERS
+    GENRE_NAMES = {
+        "nazrul":      ("নজরুলগীতি",      "Nazrul Geeti"),
+        "rajanikanta": ("রজনীকান্তের গান", "Rajanikanta Sangeet"),
+    }
+    genre_bn, genre_en = GENRE_NAMES.get(source, ("রবীন্দ্রসঙ্গীত", "Rabindra Sangeet"))
+    singers = {
+        "nazrul":      NAZRUL_SINGERS,
+        "rajanikanta": RAJANIKANTA_SINGERS,
+    }.get(source, SINGERS)
 
     links = []
     for bn_name, en_name in singers:

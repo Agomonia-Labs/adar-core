@@ -67,3 +67,36 @@ NAZRUL_CATEGORY_LIST = [
     "সুরলিপি",
     "নজরুল স্বরলিপি",
 ]
+
+# ---------------------------------------------------------------------------
+# Rajanikanta Sen (রজনীকান্ত সেন, পঞ্চকবি) — additive only. Rabindra Sangeet
+# and Nazrul Geeti constants above are untouched.
+# ---------------------------------------------------------------------------
+
+# Firestore — separate collection, never mixed with Rabindra or Nazrul docs
+RAJANIKANTA_FIRESTORE_COLLECTION = "rajanikanta_songs"
+
+# Embedding text template — same shape as NAZRUL_EMBED_TEXT_TEMPLATE. Rajanikanta
+# Sen's songs are organized by his own books (সংকলন), not Tagore's paryay scheme,
+# and don't carry a documented "mood" per raag the way geetabitan.com's Rabindra
+# data does, so raag_mood is omitted here rather than guessed.
+RAJANIKANTA_EMBED_TEXT_TEMPLATE = (
+    "{title} "
+    "{first_line} "
+    "সংকলন: {category} "
+    "রাগ: {raag} "
+    "তাল: {taal}"
+)
+
+# Rajanikanta Sen's own song collections (his books, not paryay) — বাণী (1902),
+# কল্যাণী (1905), অভয়া (1910), আনন্দময়ী (1910, agomoni-bijoya), শেষ দান (1927,
+# posthumous, written in his final illness). বিশ্রাম / অমৃত / সদ্ভাব কুসুম are
+# pure poetry (কবিতা) collections with no raag/taal and are intentionally
+# excluded — this app is about songs, not his general poetry.
+RAJANIKANTA_CATEGORY_LIST = [
+    "বাণী",
+    "কল্যাণী",
+    "অভয়া",
+    "আনন্দময়ী",
+    "শেষ দান",
+]
