@@ -100,3 +100,61 @@ RAJANIKANTA_CATEGORY_LIST = [
     "আনন্দময়ী",
     "শেষ দান",
 ]
+
+# ---------------------------------------------------------------------------
+# Atulprasad Sen (অতুলপ্রসাদ সেন, পঞ্চকবি) — additive only. Rabindra Sangeet,
+# Nazrul Geeti and Rajanikanta Sen constants above are untouched.
+# ---------------------------------------------------------------------------
+
+# Firestore — separate collection, never mixed with the other composers' docs
+ATULPRASAD_FIRESTORE_COLLECTION = "atulprasad_songs"
+
+# Embedding text template. Unlike Nazrul/Rajanikanta, Atulprasad does NOT get
+# a category/সংকলন line here: his onushilon.org corpus only labels a
+# book/পর্যায় grouping on 4 of 205 songs (see atulprasad_lyrics_loader.py's
+# docstring) — too sparse to serve as a real grouping field, so he isn't
+# added to CATEGORY_ORGANIZED_COMPOSERS in song_tools.py and this template
+# stays shaped like RAJANIKANTA_EMBED_TEXT_TEMPLATE (no raag_mood either —
+# not a confirmed source for him).
+ATULPRASAD_EMBED_TEXT_TEMPLATE = (
+    "{title} "
+    "{first_line} "
+    "রাগ: {raag} "
+    "তাল: {taal}"
+)
+
+# ---------------------------------------------------------------------------
+# Dwijendralal Roy (দ্বিজেন্দ্রলাল রায়, পঞ্চকবি) — additive only. Rabindra
+# Sangeet, Nazrul Geeti, Rajanikanta Sen and Atulprasad Sen constants above
+# are untouched.
+# ---------------------------------------------------------------------------
+
+# Firestore — separate collection, never mixed with the other composers' docs
+DWIJENDRALAL_FIRESTORE_COLLECTION = "dwijendralal_songs"
+
+# Embedding text template — same shape as NAZRUL/RAJANIKANTA_EMBED_TEXT_TEMPLATE.
+# Dwijendralal's songs (mostly interpolated numbers inside his plays) are
+# organized by the play they were written for (category = play name), not
+# by Tagore's paryay scheme. raag_mood is omitted — not a confirmed source
+# for him, same reasoning as Rajanikanta.
+DWIJENDRALAL_EMBED_TEXT_TEMPLATE = (
+    "{title} "
+    "{first_line} "
+    "নাটক: {category} "
+    "রাগ: {raag} "
+    "তাল: {taal}"
+)
+
+# Dwijendralal Roy's plays that are confirmed (as of the first ingestion
+# pass) to contain songs in the primary-source 1965 anthology
+# (archive.org in.ernet.dli.2015.458180) — সীতা (continuous rhymed verse,
+# no song/prose boundary) and মন্ত্র (a philosophical poem, not a play)
+# contributed no songs and are intentionally excluded rather than padded
+# in. This list will grow only when a future ingestion pass confirms more
+# plays' songs — never guessed ahead of the data.
+DWIJENDRALAL_CATEGORY_LIST = [
+    "সাজাহান",
+    "চন্দ্রগুপ্ত",
+    "মেবার পতন",
+    "রাণা প্রতাপ সিংহ",
+]

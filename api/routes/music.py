@@ -55,6 +55,25 @@ RAJANIKANTA_SINGERS = [
     ("রেজওয়ানা চৌধুরী বন্যা",   "Rezwana Chowdhury Bonna"),
 ]
 
+# Atulprasad Sen's own singer canon — same Wikipedia-verified names used in
+# domains/geetabitan/tools/song_tools.py's ATULPRASAD_SINGERS (kept in sync
+# manually; not imported from there to avoid a tools->api import direction).
+ATULPRASAD_SINGERS = [
+    # ── Legendary ──────────────────────────────────────────────────────────
+    ("রেণুকা দাশগুপ্তা",         "Renuka Dasgupta"),
+    ("পাহাড়ী সান্যাল",          "Pahari Sanyal"),
+    # ── Contemporary ───────────────────────────────────────────────────────
+    ("কৃষ্ণা চট্টোপাধ্যায়",      "Krishna Chattopadhyay"),
+    ("মঞ্জু গুপ্তা",             "Manju Gupta"),
+]
+
+# Dwijendralal Roy has no dedicated singer list here on purpose — the same
+# Wikipedia check used to source ATULPRASAD_SINGERS above found no singer
+# explicitly documented as a known interpreter of দ্বিজেন্দ্রগীতি specifically.
+# Rather than guess names, he isn't added to the SINGERS lookup below, so
+# get_youtube_links() falls back to the general SINGERS (Rabindra) list for
+# him, same as any other unlisted composer.
+
 
 @router.get("/youtube/{song_id}")
 async def get_youtube_links(song_id: str):
@@ -62,14 +81,16 @@ async def get_youtube_links(song_id: str):
     Return YouTube search links for a song — one per major singer.
     No API key required. Looks the song up in the Rabindra Sangeet
     collection first (unchanged default), then Nazrul Geeti, then
-    Rajanikanta Sen — a song_id alone doesn't say which catalog it
-    came from.
+    Rajanikanta Sen, then Atulprasad Sen, then Dwijendralal Roy — a
+    song_id alone doesn't say which catalog it came from.
     """
     from src.adar.db import get_db
     from domains.geetabitan.config import (
         FIRESTORE_COLLECTION,
         NAZRUL_FIRESTORE_COLLECTION,
         RAJANIKANTA_FIRESTORE_COLLECTION,
+        ATULPRASAD_FIRESTORE_COLLECTION,
+        DWIJENDRALAL_FIRESTORE_COLLECTION,
     )
 
     # A song_id alone doesn't say which catalog it came from — check Rabindra
@@ -79,6 +100,8 @@ async def get_youtube_links(song_id: str):
         ("rabindra",     FIRESTORE_COLLECTION),
         ("nazrul",       NAZRUL_FIRESTORE_COLLECTION),
         ("rajanikanta",  RAJANIKANTA_FIRESTORE_COLLECTION),
+        ("atulprasad",   ATULPRASAD_FIRESTORE_COLLECTION),
+        ("dwijendralal", DWIJENDRALAL_FIRESTORE_COLLECTION),
     ]
     doc = None
     source = "rabindra"
@@ -99,11 +122,14 @@ async def get_youtube_links(song_id: str):
     GENRE_NAMES = {
         "nazrul":      ("নজরুলগীতি",      "Nazrul Geeti"),
         "rajanikanta": ("রজনীকান্তের গান", "Rajanikanta Sangeet"),
+        "atulprasad":  ("অতুলপ্রসাদের গান", "Atul Prasad Sangeet"),
+        "dwijendralal": ("দ্বিজেন্দ্রগীতি",  "Dwijendra Sangeet"),
     }
     genre_bn, genre_en = GENRE_NAMES.get(source, ("রবীন্দ্রসঙ্গীত", "Rabindra Sangeet"))
     singers = {
         "nazrul":      NAZRUL_SINGERS,
         "rajanikanta": RAJANIKANTA_SINGERS,
+        "atulprasad":  ATULPRASAD_SINGERS,
     }.get(source, SINGERS)
 
     links = []

@@ -16,20 +16,31 @@ from domains.geetabitan.config import (
     FIRESTORE_COLLECTION,
     NAZRUL_FIRESTORE_COLLECTION,
     RAJANIKANTA_FIRESTORE_COLLECTION,
+    ATULPRASAD_FIRESTORE_COLLECTION,
+    DWIJENDRALAL_FIRESTORE_COLLECTION,
 )
 from domains.geetabitan.data.raag_metadata import TAAL_DATA
 
-Composer = Literal["rabindra", "nazrul", "rajanikanta"]
+Composer = Literal["rabindra", "nazrul", "rajanikanta", "atulprasad", "dwijendralal"]
 
 # Composers whose songs are organized by their own book/collection (সংকলন)
 # rather than Tagore's paryay scheme — used wherever code branches on that,
 # so adding a 4th such composer later only means adding it to this tuple.
-CATEGORY_ORGANIZED_COMPOSERS: tuple[Composer, ...] = ("nazrul", "rajanikanta")
+# Atulprasad Sen is NOT included: his onushilon.org corpus only confirms a
+# book/পর্যায় grouping on 4 of 205 songs (see atulprasad_lyrics_loader.py's
+# docstring) — too sparse for a real category scheme, so get_songs_by_category
+# simply isn't offered for him, the same way notation isn't offered for
+# Nazrul/Rajanikanta.
+# Dwijendralal Roy IS included: his songs are reliably grouped by the play
+# (নাটক) they were written for (see dwijendralal_lyrics_loader.py's docstring).
+CATEGORY_ORGANIZED_COMPOSERS: tuple[Composer, ...] = ("nazrul", "rajanikanta", "dwijendralal")
 
 _COMPOSER_COLLECTIONS: dict[str, str] = {
     "rabindra": FIRESTORE_COLLECTION,
     "nazrul": NAZRUL_FIRESTORE_COLLECTION,
     "rajanikanta": RAJANIKANTA_FIRESTORE_COLLECTION,
+    "atulprasad": ATULPRASAD_FIRESTORE_COLLECTION,
+    "dwijendralal": DWIJENDRALAL_FIRESTORE_COLLECTION,
 }
 
 
@@ -44,7 +55,7 @@ def _other_composers(composer: Composer) -> tuple[Composer, ...]:
     song_id isn't found in `composer`'s own collection (a song_id alone
     doesn't encode which catalog it came from). Rabindra stays first since
     it's overwhelmingly the common case."""
-    order: tuple[Composer, ...] = ("rabindra", "nazrul", "rajanikanta")
+    order: tuple[Composer, ...] = ("rabindra", "nazrul", "rajanikanta", "atulprasad", "dwijendralal")
     return tuple(c for c in order if c != composer)
 
 
@@ -245,9 +256,14 @@ def _song_card(doc: dict) -> str:
     # Rajanikanta Sen docs carry সংকলন (category/book name) instead — show
     # whichever applies.
     if doc.get("source") in CATEGORY_ORGANIZED_COMPOSERS:
-        group_label, group_value = "সংকলন", doc.get("category", "—")
+        group_label, group_value = "সংকলন", doc.get("category", "") or "—"
     else:
-        group_label, group_value = "পর্যায়", doc.get("paryay", "—")
+        # doc.get(key, "—") only falls back when the key is ABSENT — every
+        # composer's docs always carry a "paryay" key, so a present-but-empty
+        # value (the common case for Atulprasad Sen, whose source confirms
+        # paryay on only 4/205 songs) silently rendered as blank instead of
+        # "—" until this `or` guard, matching how raag/taal are handled above.
+        group_label, group_value = "পর্যায়", doc.get("paryay", "") or "—"
 
     lines = [
         f"[song_id:{song_id}]" if song_id else "",
@@ -447,6 +463,8 @@ async def get_youtube_url(song_id: str, composer: Composer = "rabindra") -> str:
     GENRE_NAMES = {
         "nazrul":      ("নজরুলগীতি", "Nazrul Geeti"),
         "rajanikanta": ("রজনীকান্তের গান", "Rajanikanta Sangeet"),
+        "atulprasad":  ("অতুলপ্রসাদের গান", "Atul Prasad Sangeet"),
+        "dwijendralal": ("দ্বিজেন্দ্রগীতি", "Dwijendra Sangeet"),
     }
     genre_bn, genre_en = GENRE_NAMES.get(source, ("রবীন্দ্রসঙ্গীত", "Rabindra Sangeet"))
 
@@ -513,9 +531,31 @@ async def get_youtube_url(song_id: str, composer: Composer = "rabindra") -> str:
         ("রেজওয়ানা চৌধুরী বন্যা",   "Rezwana Chowdhury Bonna",  "সমসাময়িক"),
     ]
 
+    # Names confirmed by Wikipedia as known performers/interpreters of
+    # Atulprasad Sen's songs specifically (not borrowed from another
+    # composer's generic singer canon): Renuka Dasgupta was his direct
+    # disciple and "best known for the songs of Atulprasad Sen"; Pahari
+    # Sanyal was "one of the best exponents of Atul Prasad's song"; Krishna
+    # Chattopadhyay and Manju Gupta were, together, described as "the
+    # leading exponent[s] of the songs composed by Atulprasad Sen".
+    ATULPRASAD_SINGERS = [
+        ("রেণুকা দাশগুপ্তা",   "Renuka Dasgupta",      "লেজেন্ডারি"),
+        ("পাহাড়ী সান্যাল",     "Pahari Sanyal",         "লেজেন্ডারি"),
+        ("কৃষ্ণা চট্টোপাধ্যায়", "Krishna Chattopadhyay", "সমসাময়িক"),
+        ("মঞ্জু গুপ্তা",        "Manju Gupta",           "সমসাময়িক"),
+    ]
+
+    # Dwijendralal Roy has no entry here on purpose: a Wikipedia check (the
+    # same verification bar used for ATULPRASAD_SINGERS above) found no
+    # named singer explicitly documented as a known interpreter of
+    # দ্বিজেন্দ্রগীতি specifically — rather than guess names, this composer
+    # falls back to RABINDRA_SINGERS like any other unlisted composer would.
+    # Revisit if/when a confirmed source turns up (e.g. his son Dilip Kumar
+    # Roy's notation book credits, if that ever gets properly sourced).
     SINGERS = {
         "nazrul":      NAZRUL_SINGERS,
         "rajanikanta": RAJANIKANTA_SINGERS,
+        "atulprasad":  ATULPRASAD_SINGERS,
     }.get(source, RABINDRA_SINGERS)
 
     lines.append("### 🎵 শিল্পী অনুযায়ী অনুসন্ধান\n")
@@ -549,6 +589,8 @@ def _looks_like_generic_youtube_request(query: str) -> bool:
 DEFAULT_YOUTUBE_QUERY = {
     "nazrul":      "জনপ্রিয় নজরুলগীতি",
     "rajanikanta": "জনপ্রিয় রজনীকান্তের গান",
+    "atulprasad":  "জনপ্রিয় অতুলপ্রসাদের গান",
+    "dwijendralal": "জনপ্রিয় দ্বিজেন্দ্রগীতি",
 }
 
 
@@ -578,6 +620,8 @@ async def _find_song_for_youtube(query: str, composer: Composer = "rabindra") ->
     FALLBACK_TITLES = {
         "nazrul":      ("বাগিচায় বুলবুলি তুই", "কারার ঐ লৌহকপাট", "মোরা ঝঞ্জার মতো উদ্দাম"),
         "rajanikanta": ("বঙ্গমাতা", "মহাষ্টমীর ঊষা", "আশা"),
+        "atulprasad":  ("মোদের গরব, মোদের আশা", "বলো বলো বলো সবে, শত-বীণা-বেণু-রবে", "উঠ গো ভারত-লক্ষ্মী, উঠ"),
+        "dwijendralal": ("ধনধান্য পুষ্পভরা আমাদের এই বসুন্ধরা", "মেবার পাহাড় মেবার পাহাড়", "আমার কুটীররাণী সে যে গো"),
     }
     fallback_titles = FALLBACK_TITLES.get(
         composer, ("আমার সোনার বাংলা", "যদি তোর ডাক শুনে কেউ না আসে", "আনন্দধারা বহিছে ভুবনে")
@@ -675,13 +719,17 @@ async def summarize_aspect(song_id: str, aspect: str, composer: Composer = "rabi
         )
 
     # The doc's own 'source' decides which summarizer prompt applies, so a
-    # Nazrul/Rajanikanta doc gets its own scholar prompt even without the
-    # matching composer= argument.
+    # Nazrul/Rajanikanta/Atulprasad doc gets its own scholar prompt even
+    # without the matching composer= argument.
     doc_source = doc.get("source")
     if doc_source == "nazrul":
         from domains.geetabitan.ingestion.nazrul_summarizer import generate_and_store_summary
     elif doc_source == "rajanikanta":
         from domains.geetabitan.ingestion.rajanikanta_summarizer import generate_and_store_summary
+    elif doc_source == "atulprasad":
+        from domains.geetabitan.ingestion.atulprasad_summarizer import generate_and_store_summary
+    elif doc_source == "dwijendralal":
+        from domains.geetabitan.ingestion.dwijendralal_summarizer import generate_and_store_summary
     else:
         from domains.geetabitan.ingestion.geetabitan_summarizer import generate_and_store_summary
     summary = await generate_and_store_summary(doc)

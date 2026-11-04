@@ -32,6 +32,8 @@ async def vector_search_songs(query: str, composer: Composer = "rabindra") -> st
         NO_RESULTS = {
             "nazrul":      "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো নজরুলগীতি পাওয়া যায়নি।",
             "rajanikanta": "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো রজনীকান্তের গান পাওয়া যায়নি।",
+            "atulprasad":  "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো অতুলপ্রসাদের গান পাওয়া যায়নি।",
+            "dwijendralal": "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো দ্বিজেন্দ্রগীতি পাওয়া যায়নি।",
         }
         return NO_RESULTS.get(
             composer, "দুঃখিত, এই প্রশ্নের সাথে মেলে এমন কোনো গান গীতবিতানে পাওয়া যায়নি।"
@@ -65,7 +67,7 @@ async def get_songs_by_raag(raag: str, paryay: str = None, composer: Composer = 
         f"এই রাগে **{len(results)}টি** গান:\n"
     )
     lines = [
-        f"- **{r['title']}** ({r.get('paryay', '')}) | "
+        f"- **{r['title']}** ({r.get('paryay', '') or '—'}) | "
         f"তাল: {r.get('taal', '—')}"
         for r in results
     ]
@@ -96,7 +98,7 @@ async def get_songs_by_taal(taal: str, paryay: str = None, composer: Composer = 
         f"এই তালে **{len(results)}টি** গান:\n"
     )
     lines = [
-        f"- **{r['title']}** ({r.get('paryay', '')}) | "
+        f"- **{r['title']}** ({r.get('paryay', '') or '—'}) | "
         f"রাগ: {r.get('raag', '—')}"
         for r in results
     ]
@@ -131,6 +133,8 @@ async def describe_raag(raag: str, composer: Composer = "rabindra") -> str:
     USAGE_META = {
         "nazrul":      ("নজরুলগীতিতে ব্যবহার",      "নজরুলগীতিতে গান"),
         "rajanikanta": ("রজনীকান্তের গানে ব্যবহার", "রজনীকান্তের গানে"),
+        "atulprasad":  ("অতুলপ্রসাদের গানে ব্যবহার", "অতুলপ্রসাদের গানে"),
+        "dwijendralal": ("দ্বিজেন্দ্রগীতিতে ব্যবহার", "দ্বিজেন্দ্রগীতিতে"),
     }
     if composer in USAGE_META:
         usage_label, count_label = USAGE_META[composer]
@@ -181,7 +185,10 @@ async def describe_taal(taal: str, composer: Composer = "rabindra") -> str:
         limit=500,
     )
     count = len(all_results)
-    COUNT_LABELS = {"nazrul": "নজরুলগীতিতে গান", "rajanikanta": "রজনীকান্তের গানে"}
+    COUNT_LABELS = {
+        "nazrul": "নজরুলগীতিতে গান", "rajanikanta": "রজনীকান্তের গানে",
+        "atulprasad": "অতুলপ্রসাদের গানে", "dwijendralal": "দ্বিজেন্দ্রগীতিতে",
+    }
     count_label = COUNT_LABELS.get(composer, "গীতবিতানে গান")
     bols = meta.get("bols", "—")
     return (

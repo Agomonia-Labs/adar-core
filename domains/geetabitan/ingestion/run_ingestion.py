@@ -32,6 +32,27 @@ Usage:
     PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only rajanikanta-summaries
     # ...or all three Rajanikanta stages in one go:
     PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only rajanikanta
+
+    # Atulprasad Sen (additive, separate collection — never touches Rabindra,
+    # Nazrul or Rajanikanta data). atulprasad_onushilon_raw.json is already in
+    # domains/geetabitan/data/ (a one-time browser-based scrape of
+    # onushilon.org — see atulprasad_lyrics_loader.py's docstring):
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only atulprasad-load
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only atulprasad-embed
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only atulprasad-summaries
+    # ...or all three Atulprasad stages in one go:
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only atulprasad
+
+    # Dwijendralal Roy (additive, separate collection — never touches
+    # Rabindra, Nazrul, Rajanikanta or Atulprasad data).
+    # dwijendralal_songs_raw.json is already in domains/geetabitan/data/
+    # (manually transcribed from archive.org OCR of a 1965 anthology — see
+    # dwijendralal_lyrics_loader.py's docstring):
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only dwijendralal-load
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only dwijendralal-embed
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only dwijendralal-summaries
+    # ...or all three Dwijendralal stages in one go:
+    PYTHONPATH=$(pwd) python -m domains.geetabitan.ingestion.run_ingestion --only dwijendralal
 """
 
 import argparse
@@ -42,6 +63,8 @@ from pathlib import Path
 SONGS_PATH = Path(__file__).parent.parent / "data" / "songs.json"
 NAZRUL_SONGS_PATH = Path(__file__).parent.parent / "data" / "nazrul_songs.json"
 RAJANIKANTA_SONGS_PATH = Path(__file__).parent.parent / "data" / "rajanikanta_songs.json"
+ATULPRASAD_SONGS_PATH = Path(__file__).parent.parent / "data" / "atulprasad_songs.json"
+DWIJENDRALAL_SONGS_PATH = Path(__file__).parent.parent / "data" / "dwijendralal_songs.json"
 
 
 async def step_scrape():
@@ -182,6 +205,84 @@ async def step_rajanikanta_summarize(songs: list[dict] | None, force: bool):
     await summarize_all(songs, force=force, delay=0.5)
 
 
+async def step_atulprasad_load():
+    from domains.geetabitan.ingestion.atulprasad_lyrics_loader import load_and_normalize
+    print("=== Atulprasad Step 1: Loading & normalizing atulprasad_onushilon_raw.json ===")
+    load_and_normalize()
+
+
+async def step_atulprasad_embed():
+    from domains.geetabitan.ingestion.atulprasad_embedder import embed_all
+
+    if not ATULPRASAD_SONGS_PATH.exists():
+        raise FileNotFoundError(
+            f"{ATULPRASAD_SONGS_PATH} not found. Run --only atulprasad-load first."
+        )
+    songs = json.loads(ATULPRASAD_SONGS_PATH.read_text(encoding="utf-8"))
+    print(f"=== Atulprasad Step 2: Embedding {len(songs)} songs into Firestore ===")
+    songs = await embed_all(songs)
+
+    ATULPRASAD_SONGS_PATH.write_text(
+        json.dumps(songs, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print("Atulprasad embedding complete. atulprasad_songs.json updated with firestore_ids.")
+    return songs
+
+
+async def step_atulprasad_summarize(songs: list[dict] | None, force: bool):
+    from domains.geetabitan.ingestion.atulprasad_summarizer import summarize_all
+
+    if songs is None:
+        if not ATULPRASAD_SONGS_PATH.exists():
+            raise FileNotFoundError(
+                f"{ATULPRASAD_SONGS_PATH} not found. Run --only atulprasad-embed first."
+            )
+        songs = json.loads(ATULPRASAD_SONGS_PATH.read_text(encoding="utf-8"))
+
+    print(f"=== Atulprasad Step 3: Generating summaries (force={force}) ===")
+    await summarize_all(songs, force=force, delay=0.5)
+
+
+async def step_dwijendralal_load():
+    from domains.geetabitan.ingestion.dwijendralal_lyrics_loader import load_and_normalize
+    print("=== Dwijendralal Step 1: Loading & normalizing dwijendralal_songs_raw.json ===")
+    load_and_normalize()
+
+
+async def step_dwijendralal_embed():
+    from domains.geetabitan.ingestion.dwijendralal_embedder import embed_all
+
+    if not DWIJENDRALAL_SONGS_PATH.exists():
+        raise FileNotFoundError(
+            f"{DWIJENDRALAL_SONGS_PATH} not found. Run --only dwijendralal-load first."
+        )
+    songs = json.loads(DWIJENDRALAL_SONGS_PATH.read_text(encoding="utf-8"))
+    print(f"=== Dwijendralal Step 2: Embedding {len(songs)} songs into Firestore ===")
+    songs = await embed_all(songs)
+
+    DWIJENDRALAL_SONGS_PATH.write_text(
+        json.dumps(songs, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print("Dwijendralal embedding complete. dwijendralal_songs.json updated with firestore_ids.")
+    return songs
+
+
+async def step_dwijendralal_summarize(songs: list[dict] | None, force: bool):
+    from domains.geetabitan.ingestion.dwijendralal_summarizer import summarize_all
+
+    if songs is None:
+        if not DWIJENDRALAL_SONGS_PATH.exists():
+            raise FileNotFoundError(
+                f"{DWIJENDRALAL_SONGS_PATH} not found. Run --only dwijendralal-embed first."
+            )
+        songs = json.loads(DWIJENDRALAL_SONGS_PATH.read_text(encoding="utf-8"))
+
+    print(f"=== Dwijendralal Step 3: Generating summaries (force={force}) ===")
+    await summarize_all(songs, force=force, delay=0.5)
+
+
 async def main(only: str | None, force: bool):
     songs = None
 
@@ -228,6 +329,34 @@ async def main(only: str | None, force: bool):
         rajanikanta_songs = await step_rajanikanta_embed()
         await step_rajanikanta_summarize(songs=rajanikanta_songs, force=force)
 
+    elif only == "atulprasad-load":
+        await step_atulprasad_load()
+
+    elif only == "atulprasad-embed":
+        await step_atulprasad_embed()
+
+    elif only == "atulprasad-summaries":
+        await step_atulprasad_summarize(songs=None, force=force)
+
+    elif only == "atulprasad":
+        await step_atulprasad_load()
+        atulprasad_songs = await step_atulprasad_embed()
+        await step_atulprasad_summarize(songs=atulprasad_songs, force=force)
+
+    elif only == "dwijendralal-load":
+        await step_dwijendralal_load()
+
+    elif only == "dwijendralal-embed":
+        await step_dwijendralal_embed()
+
+    elif only == "dwijendralal-summaries":
+        await step_dwijendralal_summarize(songs=None, force=force)
+
+    elif only == "dwijendralal":
+        await step_dwijendralal_load()
+        dwijendralal_songs = await step_dwijendralal_embed()
+        await step_dwijendralal_summarize(songs=dwijendralal_songs, force=force)
+
     else:
         # Full pipeline
         await step_scrape()
@@ -251,12 +380,16 @@ if __name__ == "__main__":
             "scrape", "bengali", "enrich", "songs", "summaries",
             "nazrul-load", "nazrul-embed", "nazrul-summaries", "nazrul",
             "rajanikanta-load", "rajanikanta-embed", "rajanikanta-summaries", "rajanikanta",
+            "atulprasad-load", "atulprasad-embed", "atulprasad-summaries", "atulprasad",
+            "dwijendralal-load", "dwijendralal-embed", "dwijendralal-summaries", "dwijendralal",
         ],
         default=None,
         help=(
             "scrape | bengali | enrich | songs | summaries (Rabindra Sangeet, default: all) "
             "| nazrul-load | nazrul-embed | nazrul-summaries | nazrul (Nazrul Geeti, additive) "
-            "| rajanikanta-load | rajanikanta-embed | rajanikanta-summaries | rajanikanta (Rajanikanta Sen, additive)"
+            "| rajanikanta-load | rajanikanta-embed | rajanikanta-summaries | rajanikanta (Rajanikanta Sen, additive) "
+            "| atulprasad-load | atulprasad-embed | atulprasad-summaries | atulprasad (Atulprasad Sen, additive)"
+            "| dwijendralal-load | dwijendralal-embed | dwijendralal-summaries | dwijendralal (Dwijendralal Roy, additive)"
         ),
     )
     parser.add_argument(

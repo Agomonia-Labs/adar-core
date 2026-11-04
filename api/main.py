@@ -1860,7 +1860,20 @@ async def demo_tts(request: Request):
     body = await request.json()
     raw_text = (body.get("text") or "").strip()
     lang = (body.get("lang") or "en-US").strip()
-    text = raw_text[:1200].strip()
+    # chunk_index selects which ~5000-byte-safe slice of a long reply to
+    # synthesize and return -- see the chunking block below. Defaults to 0
+    # (the first/only chunk) so every existing caller that doesn't know
+    # about chunking keeps working unchanged.
+    try:
+        chunk_index = int(body.get("chunk_index") or 0)
+    except (TypeError, ValueError):
+        chunk_index = 0
+    # 20000 is a generous sanity cap against a pathological/abusive request,
+    # not a real truncation point -- the old 1200-char cutoff here used to
+    # silently cut off any longer reply's audio mid-sentence. Full replies
+    # now play in full via the chunk_index loop the mobile app (and any
+    # other caller that reads chunk_count) drives.
+    text = raw_text[:20000].strip()
     # Strip markdown formatting before synthesis -- otherwise Google's TTS
     # reads the literal symbols out loud (heard by the user as extra
     # "asterisk"/stray-character words that were never part of the intended
@@ -1929,9 +1942,41 @@ async def demo_tts(request: Request):
     rewrapped = []
     for sentence in sentences:
         rewrapped.extend(_rewrap(sentence))
-    text = " ".join(rewrapped)
-    if not text:
+    if not rewrapped:
         raise HTTPException(status_code=400, detail="text is required")
+
+    # Google's text:synthesize endpoint rejects any single request whose
+    # input.text exceeds 5,000 UTF-8 BYTES (not characters) -- a real
+    # ceiling the old 1200-CHARACTER cutoff above wasn't even trying to
+    # respect. Bengali text runs ~3 bytes/character, so a long reply can
+    # need several requests. Group the already-sentence-safe `rewrapped`
+    # pieces into byte-safe chunks (well under the 5,000-byte limit, to
+    # leave headroom for the rest of the JSON payload) and only synthesize
+    # the one chunk this call was asked for; the response's chunk_count
+    # tells the caller how many more there are so it can keep requesting
+    # (and playing) the rest to read the whole reply out loud.
+    CHUNK_BYTE_LIMIT = 3800
+
+    def _byte_len(s):
+        return len(s.encode("utf-8"))
+
+    chunks = []
+    current_chunk = ""
+    for piece in rewrapped:
+        candidate = f"{current_chunk} {piece}".strip()
+        if _byte_len(candidate) > CHUNK_BYTE_LIMIT and current_chunk:
+            chunks.append(current_chunk.strip())
+            current_chunk = piece
+        else:
+            current_chunk = candidate
+    if current_chunk:
+        chunks.append(current_chunk.strip())
+    if not chunks:
+        raise HTTPException(status_code=400, detail="text is required")
+    if chunk_index < 0 or chunk_index >= len(chunks):
+        raise HTTPException(status_code=400, detail=f"chunk_index out of range (0..{len(chunks) - 1})")
+    text = chunks[chunk_index]
+    chunk_count = len(chunks)
 
     if not hasattr(app.state, "tts_cache"):
         app.state.tts_cache = {}
@@ -1939,7 +1984,12 @@ async def demo_tts(request: Request):
     if cache_key in app.state.tts_cache:
         from fastapi.responses import JSONResponse as _JR
         return _JR(
-            content={"audio": app.state.tts_cache[cache_key], "cached": True},
+            content={
+                "audio": app.state.tts_cache[cache_key],
+                "cached": True,
+                "chunk_index": chunk_index,
+                "chunk_count": chunk_count,
+            },
             headers={"Access-Control-Allow-Origin": "*"},
         )
 
@@ -1998,7 +2048,12 @@ async def demo_tts(request: Request):
         app.state.tts_cache[cache_key] = audio
         from fastapi.responses import JSONResponse as _JR
         return _JR(
-            content={"audio": audio, "cached": False},
+            content={
+                "audio": audio,
+                "cached": False,
+                "chunk_index": chunk_index,
+                "chunk_count": chunk_count,
+            },
             headers={"Access-Control-Allow-Origin": "*"},
         )
 

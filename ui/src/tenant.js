@@ -97,14 +97,16 @@ const TENANTS = {
     // Tenant id/env var stays "geetabitan" (VITE_DOMAIN=geetabitan) so no
     // deployment config needs to change — only the DISPLAYED branding below
     // is "আদর সুর সংকলন" now that the web assistant covers Rabindra
-    // Sangeet, Nazrul Geeti, and Rajanikanta Sangeet. iOS is a separate
-    // native/RN app with its own branding (see adar-mobile/apps/geetabitan)
-    // and is kept in sync by hand — update both when either changes.
+    // Sangeet, Nazrul Geeti, Rajanikanta Sangeet, Atulprasad Sangeet, and
+    // Dwijendra Sangeet.
+    // iOS is a separate native/RN app with its own branding (see
+    // adar-mobile/apps/geetabitan) and is kept in sync by hand — update
+    // both when either changes.
     id:            'geetabitan',
     appTitle:      'আদর · সুর সংকলন',
-    name:          'আদর সুর সংকলন — রবীন্দ্রসঙ্গীত, নজরুলগীতি ও রজনীকান্তের গান',
+    name:          'আদর সুর সংকলন — রবীন্দ্রসঙ্গীত, নজরুলগীতি, রজনীকান্তের গান, অতুলপ্রসাদের গান ও দ্বিজেন্দ্রগীতি',
     shortName:     'Sur Sankalan',
-    subtitle:      'রবীন্দ্রসঙ্গীত, নজরুলগীতি ও রজনীকান্তের গান সহায়ক',
+    subtitle:      'রবীন্দ্রসঙ্গীত, নজরুলগীতি, রজনীকান্তের গান, অতুলপ্রসাদের গান ও দ্বিজেন্দ্রগীতি সহায়ক',
     logoText:      'আদর',
 
     // Colors — deep red and gold for Tagore / Rabindra Sangeet
@@ -126,11 +128,11 @@ const TENANTS = {
 
     // Chat strings
     welcomeMessage:
-      'স্বাগতম! আমি আদর — সুর সংকলনের সহায়ক। রবীন্দ্রনাথ ঠাকুর, কাজী নজরুল ইসলাম বা ' +
-      'রজনীকান্ত সেনের যেকোনো গান, রাগ, তাল, পর্যায়/সংকলন, বা গানের অর্থ সম্পর্কে প্রশ্ন করুন।\n\nকী জানতে চান?',
+      'স্বাগতম! আমি আদর — সুর সংকলনের সহায়ক। রবীন্দ্রনাথ ঠাকুর, কাজী নজরুল ইসলাম, ' +
+      'রজনীকান্ত সেন, অতুলপ্রসাদ সেন বা দ্বিজেন্দ্রলাল রায়ের যেকোনো গান, রাগ, তাল, পর্যায়/সংকলন, বা গানের অর্থ সম্পর্কে প্রশ্ন করুন।\n\nকী জানতে চান?',
     placeholder:    'বাংলায় গান খুঁজুন…',
     typingText:     'গান খোঁজা হচ্ছে…',
-    clearMessage:   'Session cleared. রবীন্দ্রসঙ্গীত, নজরুলগীতি বা রজনীকান্তের গান বিষয়ে কিছু জানতে চাইলে বলুন।',
+    clearMessage:   'Session cleared. রবীন্দ্রসঙ্গীত, নজরুলগীতি, রজনীকান্তের গান, অতুলপ্রসাদের গান বা দ্বিজেন্দ্রগীতি বিষয়ে কিছু জানতে চাইলে বলুন।',
     footerText:     'Powered by Adar · সুর সংকলন',
     evalLabels: {
       accuracy: 'যথার্থতা',
@@ -239,6 +241,59 @@ const TENANTS = {
       // বিশেষ অনুসন্ধান
       'ভক্তিমূলক রজনীকান্তের গান দেখাও',
       'দেশপ্রেমের রজনীকান্তের গান দেখাও',
+    ],
+
+    // Atulprasad Sen suggested questions — additive, same pattern as
+    // suggestedQuestionsNazrul/suggestedQuestionsRajanikanta above: a
+    // separate pool, surfaced only through the same composer toggle once
+    // that's wired into App.jsx. No "সংকলন/পর্যায় অনুযায়ী" section here —
+    // unlike Nazrul/Rajanikanta, Atulprasad's onushilon.org corpus confirms
+    // a paryay/book grouping on only 4 of his 205 songs (see
+    // atulprasad_lyrics_loader.py's docstring), too sparse to suggest as a
+    // real filter. Every title/raag/taal below is a verified value from
+    // that corpus, not a guess.
+    suggestedQuestionsAtulprasad: [
+      // গান খোঁজা
+      'মোদের গরব, মোদের আশা গানটি খুঁজুন',
+      'উঠ গো ভারত-লক্ষ্মী, উঠ গানটি দেখাও',
+      'বলো বলো বলো সবে, শত-বীণা-বেণু-রবে গানটি দেখাও',
+      // রাগ ও তাল অনুযায়ী
+      'খাম্বাজ রাগে অতুলপ্রসাদের গান দেখাও',
+      'একতাল তালে অতুলপ্রসাদের গান কী কী আছে?',
+      // অর্থ ও ব্যাখ্যা
+      'মোদের গরব, মোদের আশা গানের অর্থ কী?',
+      // বিশেষ অনুসন্ধান
+      'অতুলপ্রসাদের গান থেকে কিছু গান দেখাও',
+    ],
+
+    // Dwijendralal Roy (দ্বিজেন্দ্রগীতি) suggested questions — additive,
+    // same pattern as suggestedQuestionsNazrul/Rajanikanta above: a
+    // separate pool, surfaced only through the same composer toggle once
+    // that's wired into App.jsx. Uses "নাটক অনুযায়ী" (by play) rather than
+    // "সংকলন/পর্যায় অনুযায়ী" — Dwijendralal's songs are organized by the
+    // historical play they were written for (সাজাহান/চন্দ্রগুপ্ত/মেবার
+    // পতন/রাণা প্রতাপ সিংহ), per CATEGORY_ORGANIZED_COMPOSERS. Raag/taal is
+    // sparse (4 of 18 songs, straight from the 1965 anthology source text)
+    // — only those confirmed values are used below, never guessed.
+    suggestedQuestionsDwijendralal: [
+      // গান খোঁজা
+      'ধনধান্য পুষ্পভরা গানটি খুঁজুন',
+      'মেবার পাহাড় গানটি দেখাও',
+      'আমার কুটীররাণী সে যে গো গানটি দেখাও',
+      // নাটক অনুযায়ী
+      'সাজাহান নাটকের গান দেখাও',
+      'চন্দ্রগুপ্ত নাটকের গান দেখাও',
+      'মেবার পতন নাটকের গান কী কী আছে?',
+      'রাণা প্রতাপ সিংহ নাটকের গান দেখাও',
+      // রাগ ও তাল অনুযায়ী
+      'হাম্বির রাগে দ্বিজেন্দ্রগীতি দেখাও',
+      'ভীমপলশ্রী রাগে দ্বিজেন্দ্রগীতি কী কী আছে?',
+      // অর্থ ও প্রেক্ষাপট
+      'ধনধান্য পুষ্পভরা গানের প্রেক্ষাপট বলো',
+      'মেবার পাহাড় গানের অর্থ কী?',
+      // বিশেষ অনুসন্ধান
+      'দেশাত্মবোধক দ্বিজেন্দ্রগীতি দেখাও',
+      'ধনধান্য পুষ্পভরা দ্বিজেন্দ্রলালের গানটি খুঁজুন',
     ],
 
     // Register page

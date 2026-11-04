@@ -2,9 +2,10 @@
 # infra/create_geetabitan_indexes.sh
 # Creates the Firestore database and all composite + vector indexes
 # needed for Geetabitan — across all composer collections (Rabindra
-# Sangeet, Nazrul Geeti, Rajanikanta Sen). Run once before the first
-# ingestion of a given collection; safe to re-run (gcloud reports
-# ALREADY_EXISTS for indexes that were already created and continues).
+# Sangeet, Nazrul Geeti, Rajanikanta Sen, Atulprasad Sen). Run once
+# before the first ingestion of a given collection; safe to re-run
+# (gcloud reports ALREADY_EXISTS for indexes that were already created
+# and continues).
 
 set -uo pipefail
 PROJECT="bdas-493785"
@@ -15,10 +16,23 @@ REGION="us-central1"
 # Sen are grouped by "category" (see CATEGORY_ORGANIZED_COMPOSERS in
 # domains/geetabitan/tools/song_tools.py). Each entry is
 # "<collection>:<grouping-field>".
+#
+# Atulprasad Sen uses "paryay" too (same field name/shape as Rabindra's
+# grouping field, since he isn't in CATEGORY_ORGANIZED_COMPOSERS — see
+# atulprasad_lyrics_loader.py's docstring), but it's confirmed on only
+# 4 of his 205 songs. The paryay/raag and paryay/taal composite indexes
+# below are still created for consistency with every other composer and
+# because gcloud index creation is cheap and idempotent, but they'll see
+# little real use until/unless more Atulprasad paryay data turns up —
+# this is a known, accepted trade-off, not an oversight.
 COLLECTIONS=(
     "geetabitan_songs:paryay"
     "nazrulgeeti_songs:category"
     "rajanikanta_songs:category"
+    "atulprasad_songs:paryay"
+    # Dwijendralal Roy's songs are grouped by category too (the play each
+    # song was written for -- see DWIJENDRALAL_CATEGORY_LIST in config.py).
+    "dwijendralal_songs:category"
 )
 
 #echo "1. Creating Firestore database: ${DB} …"
